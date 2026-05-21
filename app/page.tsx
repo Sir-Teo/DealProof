@@ -6,33 +6,53 @@ import {
   ArrowDownToLine,
   Bot,
   CheckCircle2,
+  ChevronDown,
   CircleHelp,
-  ClipboardList,
   FileSearch,
   FileText,
   Gauge,
   Link,
   Loader2,
   MessageSquare,
+  PanelRightOpen,
+  Send,
   ShieldCheck,
   Upload,
   XCircle
 } from "lucide-react";
 import clsx from "clsx";
 import { evidenceForClaim, generateMemoMarkdown, scoreClaims } from "@/lib/scoring";
-import type { ChatAnswer, ClaimStatus, DealAnalysis, DealClaim, SourceMaterial } from "@/lib/types";
+import type { ChatAnswer, ClaimStatus, DealAnalysis, DealClaim, EvidenceItem } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const sampleQuestions = ["Can we trust the ROI claim?", "What should we ask before IC?", "Is the no competitor claim supported?"];
+const emptyCounts = { supported: 0, weak: 0, contradicted: 0, missing: 0 };
 
-const tabs = [
-  { id: "upload", label: "Upload", icon: Upload },
-  { id: "claims", label: "Claims", icon: ClipboardList },
-  { id: "evidence", label: "Evidence", icon: FileSearch },
-  { id: "memo", label: "Risk Memo", icon: FileText },
-  { id: "chat", label: "Q&A", icon: MessageSquare }
-] as const;
-
-type TabId = (typeof tabs)[number]["id"];
+type AgentEventStatus = "running" | "done" | "error";
+type AgentEvent = {
+  event: "run_start" | "step_start" | "tool_start" | "tool_complete" | "step_complete" | "run_complete" | "run_error";
+  step: string;
+  label: string;
+  status: AgentEventStatus;
+  toolName?: string;
+  input?: string;
+  output?: string;
+  materials?: number;
+  chunks?: number;
+  claims?: number;
+  evidence?: number;
+};
+type AgentToolRun = {
+  step: string;
+  label: string;
+  status: AgentEventStatus;
+  toolName?: string;
+  input?: string;
+  output?: string;
+  statsEvent: AgentEvent;
+};
+type ActiveArtifact = { type: "claims" } | { type: "memo" } | { type: "claim"; claimId: string } | null;
+type FeedNote = { id: string; role: "user" | "agent"; title: string; body?: string };
 
 const statusIcon: Record<ClaimStatus, typeof CheckCircle2> = {
   supported: CheckCircle2,
@@ -41,28 +61,39 @@ const statusIcon: Record<ClaimStatus, typeof CheckCircle2> = {
   missing: CircleHelp
 };
 
-const emptyCounts = { supported: 0, weak: 0, contradicted: 0, missing: 0 };
-const sampleQuestions = ["Can we trust the ROI claim?", "What should we ask before IC?", "Is the no competitor claim supported?"];
-
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<TabId>("upload");
   const [deal, setDeal] = useState<DealAnalysis | null>(null);
   const [company, setCompany] = useState("CaviClear AI");
   const [tagline, setTagline] = useState("AI billing automation for dental clinics");
   const [files, setFiles] = useState<FileList | null>(null);
   const [url, setUrl] = useState("");
-  const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
   const [question, setQuestion] = useState(sampleQuestions[0]);
   const [answer, setAnswer] = useState<ChatAnswer | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
+  const [activeArtifact, setActiveArtifact] = useState<ActiveArtifact>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [feedNotes, setFeedNotes] = useState<FeedNote[]>([
+    {
+      id: "welcome",
+      role: "agent",
+      title: "Drop in a deal packet or seed the demo.",
+      body: "DealProof will extract claims, check evidence, draft the memo, and keep the agent stream visible while it works."
+    }
+  ]);
 
   const claims = useMemo(() => deal?.claims ?? [], [deal?.claims]);
-  const selectedClaim = claims.find((claim) => claim.id === selectedClaimId) ?? claims[0] ?? null;
-  const selectedEvidence = selectedClaim && deal ? evidenceForClaim(selectedClaim.id, deal.evidence) : [];
   const scoring = useMemo(() => (claims.length ? scoreClaims(claims) : { overall: 0, grade: "red" as const, counts: emptyCounts }), [claims]);
+  const selectedClaim =
+    activeArtifact?.type === "claim" ? claims.find((claim) => claim.id === activeArtifact.claimId) ?? claims[0] ?? null : claims[0] ?? null;
+  const selectedEvidence = selectedClaim && deal ? evidenceForClaim(selectedClaim.id, deal.evidence) : [];
   const memoMarkdown = deal?.memo ? generateMemoMarkdown(deal.memo) : "";
   const exportUrl = deal ? `${API_BASE}/deals/${deal.id}/export-memo` : "#";
+  const isAnalyzing = busy === "analyze";
+  const canRunAgent = Boolean(deal?.materials.length) && !isAnalyzing;
+  const materialCount = deal?.materials.length ?? 0;
+  const evidenceCount = deal?.evidence.length ?? 0;
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${API_BASE}${path}`, init);
@@ -71,6 +102,45 @@ export default function Home() {
       throw new Error(payload?.detail ?? `Request failed: ${response.status}`);
     }
     return (await response.json()) as T;
+  }
+
+  async function readAgentStream(response: Response, onEvent: (event: AgentEvent) => void) {
+    if (!response.body) throw new Error("Streaming is not available in this browser.");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
+      for (const frame of frames) {
+        const line = frame.split("\n").find((item) => item.startsWith("data: "));
+        if (!line) continue;
+        const parsed = JSON.parse(line.slice(6)) as Omit<AgentEvent, "status">;
+        const status: AgentEventStatus = parsed.event === "run_error" ? "error" : parsed.event.endsWith("complete") ? "done" : "running";
+        onEvent({ ...parsed, status });
+      }
+      if (done) break;
+    }
+  }
+
+  function addFeedNote(note: Omit<FeedNote, "id">) {
+    setFeedNotes((notes) => [...notes, { ...note, id: `${Date.now()}-${notes.length}` }]);
+  }
+
+  async function ensureDeal() {
+    if (deal) return deal;
+    const created = await api<DealAnalysis>("/deals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company, tagline, stage: "Active diligence" })
+    });
+    setDeal(created);
+    setAgentEvents([]);
+    setAnswer(null);
+    addFeedNote({ role: "user", title: `Created ${created.company}`, body: created.tagline });
+    return created;
   }
 
   async function createDeal(event?: FormEvent) {
@@ -84,8 +154,11 @@ export default function Home() {
         body: JSON.stringify({ company, tagline, stage: "Active diligence" })
       });
       setDeal(created);
-      setSelectedClaimId(null);
       setAnswer(null);
+      setAgentEvents([]);
+      setActiveArtifact(null);
+      setSettingsOpen(false);
+      addFeedNote({ role: "user", title: `Created ${created.company}`, body: created.tagline });
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
     } finally {
@@ -101,8 +174,10 @@ export default function Home() {
       setDeal(created);
       setCompany(created.company);
       setTagline(created.tagline);
-      setSelectedClaimId(null);
       setAnswer(null);
+      setAgentEvents([]);
+      setActiveArtifact(null);
+      addFeedNote({ role: "user", title: "Seeded the CaviClear demo packet", body: `${created.materials.length} source materials loaded.` });
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
     } finally {
@@ -110,20 +185,23 @@ export default function Home() {
     }
   }
 
-  async function uploadMaterials(event: FormEvent) {
-    event.preventDefault();
-    if (!deal) {
-      await createDeal();
-      return;
-    }
+  async function uploadMaterials(event?: FormEvent) {
+    event?.preventDefault();
+    if (!files?.length && !url.trim()) return;
     setBusy("upload");
     setError(null);
     try {
+      const targetDeal = await ensureDeal();
       const form = new FormData();
       Array.from(files ?? []).forEach((file) => form.append("files", file));
       if (url.trim()) form.append("url", url.trim());
-      const updated = await api<DealAnalysis>(`/deals/${deal.id}/materials`, { method: "POST", body: form });
+      const updated = await api<DealAnalysis>(`/deals/${targetDeal.id}/materials`, { method: "POST", body: form });
       setDeal(updated);
+      addFeedNote({
+        role: "user",
+        title: "Added diligence material",
+        body: `${Array.from(files ?? []).map((file) => file.name).join(", ") || url.trim()}`
+      });
       setFiles(null);
       setUrl("");
     } catch (exc) {
@@ -138,11 +216,29 @@ export default function Home() {
     setBusy("analyze");
     setError(null);
     setAnswer(null);
+    setAgentEvents([]);
+    setActiveArtifact(null);
+    addFeedNote({ role: "user", title: "Run the diligence agent", body: `${deal.materials.length} materials queued for analysis.` });
     try {
-      const analyzed = await api<DealAnalysis>(`/deals/${deal.id}/analyze`, { method: "POST" });
+      const response = await fetch(`${API_BASE}/deals/${deal.id}/analyze-stream`, { method: "POST" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? `Request failed: ${response.status}`);
+      }
+      let streamError: string | null = null;
+      await readAgentStream(response, (event) => {
+        if (event.event === "run_error") streamError = event.label;
+        setAgentEvents((events) => [...events, event]);
+      });
+      if (streamError) throw new Error(streamError);
+      const analyzed = await api<DealAnalysis>(`/deals/${deal.id}`);
       setDeal(analyzed);
-      setSelectedClaimId(analyzed.claims[0]?.id ?? null);
-      setActiveTab("claims");
+      setActiveArtifact({ type: "claims" });
+      addFeedNote({
+        role: "agent",
+        title: "Analysis complete",
+        body: `${analyzed.claims.length} claims, ${analyzed.evidence.length} evidence items, ${scoreClaims(analyzed.claims).grade.toUpperCase()} risk.`
+      });
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
       const refreshed = await api<DealAnalysis>(`/deals/${deal.id}`).catch(() => null);
@@ -154,18 +250,20 @@ export default function Home() {
 
   async function askQuestion(nextQuestion = question) {
     if (!deal) return;
-    setQuestion(nextQuestion);
+    const trimmed = nextQuestion.trim();
+    if (!trimmed) return;
+    setQuestion(trimmed);
     setBusy("chat");
     setAnswer(null);
     setError(null);
+    addFeedNote({ role: "user", title: trimmed });
     try {
-      setAnswer(
-        await api<ChatAnswer>(`/deals/${deal.id}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: nextQuestion })
-        })
-      );
+      const nextAnswer = await api<ChatAnswer>(`/deals/${deal.id}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: trimmed })
+      });
+      setAnswer(nextAnswer);
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
     } finally {
@@ -174,79 +272,79 @@ export default function Home() {
   }
 
   return (
-    <main className="shell">
-      <aside className="sidebar" aria-label="Deal navigation">
-        <div className="brand">
-          <div className="brandMark">
-            <ShieldCheck size={22} />
-          </div>
+    <main className="chatShell">
+      <header className="appHeader">
+        <div className="brandLine">
+          <span className="brandMark">
+            <ShieldCheck size={18} />
+          </span>
           <div>
-            <p className="eyebrow">DealProof</p>
-            <h1>AI diligence red team</h1>
+            <strong>DealProof</strong>
+            <span>{deal?.company ?? "No deal loaded"}</span>
           </div>
         </div>
-
-        <div className="dealCard">
-          <p className="eyebrow">Active Deal</p>
-          <h2>{deal?.company ?? "No deal loaded"}</h2>
-          <p>{deal?.tagline ?? "Create a deal, upload materials, then run the agent."}</p>
-          <span>{deal ? `${deal.stage} · ${deal.status}` : "FastAPI backend required"}</span>
+        <div className="headerStats" aria-label="Deal status">
+          <span>{deal?.status.replace("_", " ") ?? "Backend required"}</span>
+          <span>{materialCount} materials</span>
+          <span>{claims.length ? `${scoring.grade.toUpperCase()} risk ${scoring.overall}` : "No analysis"}</span>
         </div>
+      </header>
 
-        <nav className="tabs">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                className={clsx("tabButton", activeTab === tab.id && "active")}
-                onClick={() => setActiveTab(tab.id)}
-                type="button"
-              >
-                <Icon size={18} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
+      <section className="feedWrap">
+        <div className="messageFeed" aria-live="polite">
+          {error && (
+            <article className="systemBanner errorBanner">
+              <XCircle size={16} />
+              <span>{error}</span>
+            </article>
+          )}
 
-      <section className="workspace">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">Python LangGraph + DeepSeek</p>
-            <h2>Pressure-test founder claims before IC</h2>
-          </div>
-          <div className="scorePanel">
-            <Gauge size={19} />
-            <span>{scoring.overall}</span>
-            <small>{claims.length ? `${scoring.grade.toUpperCase()} risk grade` : "No analysis yet"}</small>
-          </div>
-        </header>
+          {feedNotes.map((note) => (
+            <ChatBubble key={note.id} role={note.role} title={note.title} body={note.body} />
+          ))}
 
-        {error && <div className="errorBanner">{error}</div>}
+          {(isAnalyzing || agentEvents.length > 0) && <AgentActivity events={agentEvents} running={isAnalyzing} />}
 
-        <section className="metrics" aria-label="Claim status summary">
-          <Metric label="Supported" value={scoring.counts.supported} status="supported" />
-          <Metric label="Weak" value={scoring.counts.weak} status="weak" />
-          <Metric label="Contradicted" value={scoring.counts.contradicted} status="contradicted" />
-          <Metric label="Missing evidence" value={scoring.counts.missing} status="missing" />
-        </section>
+          {deal && (
+            <ResultArtifacts
+              deal={deal}
+              scoring={scoring}
+              activeArtifact={activeArtifact}
+              selectedClaim={selectedClaim}
+              selectedEvidence={selectedEvidence}
+              memoMarkdown={memoMarkdown}
+              exportUrl={exportUrl}
+              onOpenClaims={() => setActiveArtifact({ type: "claims" })}
+              onOpenMemo={() => setActiveArtifact({ type: "memo" })}
+              onSelectClaim={(claim) => setActiveArtifact({ type: "claim", claimId: claim.id })}
+            />
+          )}
 
-        {activeTab === "upload" && (
-          <section className="panel">
-            <div className="panelHeader">
-              <div>
-                <p className="eyebrow">Real ingestion</p>
-                <h3>Upload files or seed the demo packet</h3>
+          {busy === "chat" && (
+            <article className="message agentMessage">
+              <Avatar status="running" />
+              <div className="messageBody">
+                <div className="messageMeta">
+                  <strong>DealProof</strong>
+                  <span>Answering</span>
+                </div>
+                <p className="messageTitle">Checking stored claims and evidence.</p>
               </div>
-              <button className="primaryButton" type="button" onClick={() => void analyzeDeal()} disabled={!deal || !deal.materials.length || busy === "analyze"}>
-                {busy === "analyze" ? <Loader2 className="spin" size={17} /> : <Bot size={17} />}
-                Run LangGraph Agent
-              </button>
-            </div>
+            </article>
+          )}
 
-            <form className="dealForm" onSubmit={createDeal}>
+          {answer && <AnswerMessage answer={answer} />}
+        </div>
+      </section>
+
+      <form className="composer" onSubmit={(event) => { event.preventDefault(); void askQuestion(); }}>
+        <div className="composerInner">
+          <button className="ghostButton" type="button" onClick={() => setSettingsOpen((open) => !open)} aria-expanded={settingsOpen}>
+            Deal settings
+            <ChevronDown size={15} />
+          </button>
+          {settingsOpen && (
+            <div className="settingsPanel">
               <label>
                 Company
                 <input value={company} onChange={(event) => setCompany(event.target.value)} />
@@ -255,199 +353,343 @@ export default function Home() {
                 Tagline
                 <input value={tagline} onChange={(event) => setTagline(event.target.value)} />
               </label>
-              <button className="secondaryButton" type="submit" disabled={busy === "create"}>
+              <button className="secondaryButton" type="button" onClick={() => void createDeal()} disabled={busy === "create"}>
                 Create Deal
               </button>
-              <button className="primaryButton" type="button" onClick={() => void loadDemoPacket()} disabled={busy === "demo"}>
-                {busy === "demo" ? <Loader2 className="spin" size={17} /> : <Upload size={17} />}
-                Seed CaviClear Packet
+            </div>
+          )}
+
+          <div className="sourceRow">
+            <button className="secondaryButton" type="button" onClick={() => void loadDemoPacket()} disabled={busy === "demo"}>
+              {busy === "demo" ? <Loader2 className="spin" size={16} /> : <Upload size={16} />}
+              Seed demo
+            </button>
+            <label className="fileButton">
+              <Upload size={16} />
+              Upload
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.txt,.csv,.docx"
+                onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(event.target.files)}
+              />
+            </label>
+            <div className="urlField">
+              <Link size={15} />
+              <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="Add URL" />
+            </div>
+            <button className="secondaryButton" type="button" onClick={() => void uploadMaterials()} disabled={busy === "upload" || (!files?.length && !url.trim())}>
+              {busy === "upload" ? <Loader2 className="spin" size={16} /> : <FileText size={16} />}
+              Add
+            </button>
+            <button className="primaryButton" type="button" onClick={() => void analyzeDeal()} disabled={!canRunAgent}>
+              {isAnalyzing ? <Loader2 className="spin" size={16} /> : <Bot size={16} />}
+              Run agent
+            </button>
+          </div>
+
+          <div className="promptRow">
+            <MessageSquare size={17} />
+            <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about the deal evidence..." disabled={!deal} />
+            <button className="sendButton" type="submit" disabled={!deal || busy === "chat"}>
+              {busy === "chat" ? <Loader2 className="spin" size={16} /> : <Send size={16} />}
+              <span>Ask</span>
+            </button>
+          </div>
+          <div className="sampleQuestions">
+            {sampleQuestions.map((item) => (
+              <button key={item} type="button" onClick={() => void askQuestion(item)} disabled={!deal?.claims.length}>
+                {item}
               </button>
-            </form>
-
-            <form className="uploadZone realUpload" onSubmit={uploadMaterials}>
-              <Upload size={30} />
-              <div>
-                <strong>{deal ? "Add diligence materials" : "Create a deal first"}</strong>
-                <p>Supports PDF, TXT, CSV, DOCX, plus supplied URLs. Public verification is limited to supplied URLs until a search provider is added.</p>
-                <div className="uploadControls">
-                  <input
-                    type="file"
-                    multiple
-                    accept=".pdf,.txt,.csv,.docx"
-                    onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(event.target.files)}
-                    disabled={!deal}
-                  />
-                  <div className="urlInput">
-                    <Link size={16} />
-                    <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://company.com or source URL" disabled={!deal} />
-                  </div>
-                  <button className="secondaryButton" type="submit" disabled={!deal || busy === "upload"}>
-                    Add Materials
-                  </button>
-                </div>
-              </div>
-            </form>
-
-            <MaterialGrid materials={deal?.materials ?? []} />
-          </section>
-        )}
-
-        {activeTab === "claims" && (
-          claims.length ? (
-            <section className="split">
-              <ClaimTable claims={claims} selectedClaimId={selectedClaim?.id ?? ""} onSelect={(claim) => setSelectedClaimId(claim.id)} />
-              {selectedClaim && <ClaimInspector claim={selectedClaim} />}
-            </section>
-          ) : (
-            <EmptyPanel title="No claims yet" body="Upload materials and run the LangGraph agent to extract claim-level diligence." />
-          )
-        )}
-
-        {activeTab === "evidence" && (
-          claims.length && selectedClaim ? (
-            <section className="split">
-              <ClaimTable claims={claims} selectedClaimId={selectedClaim.id} onSelect={(claim) => setSelectedClaimId(claim.id)} />
-              <section className="panel detailPanel">
-                <div className="panelHeader">
-                  <div>
-                    <p className="eyebrow">Evidence drawer</p>
-                    <h3>{selectedClaim.text}</h3>
-                  </div>
-                  <StatusPill status={selectedClaim.status} />
-                </div>
-                <div className="evidenceList">
-                  {selectedEvidence.map((item) => (
-                    <article key={item.id} className="evidenceItem">
-                      <div>
-                        <strong>{item.title}</strong>
-                        <StatusDot label={item.stance.replaceAll("_", " ")} status={selectedClaim.status} />
-                      </div>
-                      <p>{item.snippet}</p>
-                      <footer>
-                        <span>{item.citation}</span>
-                        <span>{item.sourceType.replace("_", " ")}</span>
-                        <span>{item.reliability} reliability</span>
-                      </footer>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            </section>
-          ) : (
-            <EmptyPanel title="No evidence yet" body="Evidence is generated during the backend analysis run." />
-          )
-        )}
-
-        {activeTab === "memo" && (
-          deal?.memo ? (
-            <section className="panel memoPanel">
-              <div className="panelHeader">
-                <div>
-                  <p className="eyebrow">Partner-ready export</p>
-                  <h3>1-page IC red team memo</h3>
-                </div>
-                <a className="primaryButton" href={exportUrl}>
-                  <ArrowDownToLine size={17} />
-                  Export Markdown
-                </a>
-              </div>
-              <div className="memoLayout">
-                <article className="memoPreview">
-                  <div className="memoTitle">
-                    <span className={clsx("gradeBadge", deal.memo.overallGrade)}>{deal.memo.overallGrade}</span>
-                    <h2>{deal.memo.company}</h2>
-                  </div>
-                  <p className="memoQuestion">{deal.memo.investmentQuestion}</p>
-                  <MemoSection title="Key strengths" items={deal.memo.keyStrengths} />
-                  <MemoSection title="Material risks" items={deal.memo.materialRisks} danger />
-                  <MemoSection title="Questions before IC" items={deal.memo.followUpQuestions} />
-                  <div className="recommendation">{deal.memo.icRecommendation}</div>
-                </article>
-                <pre className="markdownBox">{memoMarkdown}</pre>
-              </div>
-            </section>
-          ) : (
-            <EmptyPanel title="No memo yet" body="Run analysis to generate the IC red-team memo from extracted claims and evidence." />
-          )
-        )}
-
-        {activeTab === "chat" && (
-          <section className="panel chatPanel">
-            <div className="panelHeader">
-              <div>
-                <p className="eyebrow">Diligence Q&A</p>
-                <h3>Ask against stored claims and evidence</h3>
-              </div>
-              <span className="modelBadge">DeepSeek via Python LangGraph backend</span>
-            </div>
-            <div className="promptRow">
-              <input value={question} onChange={(event) => setQuestion(event.target.value)} aria-label="Diligence question" disabled={!deal?.claims.length} />
-              <button className="primaryButton" type="button" onClick={() => void askQuestion()} disabled={!deal?.claims.length || busy === "chat"}>
-                {busy === "chat" ? <Loader2 className="spin" size={17} /> : <MessageSquare size={17} />}
-                {busy === "chat" ? "Asking" : "Ask"}
-              </button>
-            </div>
-            <div className="sampleQuestions">
-              {sampleQuestions.map((item) => (
-                <button key={item} type="button" onClick={() => void askQuestion(item)} disabled={!deal?.claims.length}>
-                  {item}
-                </button>
-              ))}
-            </div>
-            <article className="answerBox">
-              {answer ? (
-                <>
-                  <div>
-                    <Bot size={20} />
-                    <strong>DealProof answer</strong>
-                    <span>{answer.confidence} confidence</span>
-                  </div>
-                  <p>{answer.answer}</p>
-                  <footer>{answer.citations.map((citation) => <span key={citation}>{citation}</span>)}</footer>
-                </>
-              ) : (
-                <p>Run an analysis, then ask whether a claim is supported, what to ask next, or where the memo is most exposed.</p>
-              )}
-            </article>
-          </section>
-        )}
-      </section>
+            ))}
+          </div>
+        </div>
+      </form>
     </main>
   );
 }
 
-function MaterialGrid({ materials }: { materials: SourceMaterial[] }) {
-  if (!materials.length) return <EmptyPanel title="No materials loaded" body="Create a deal and add files, URLs, or the seeded CaviClear demo packet." compact />;
+function ChatBubble({ role, title, body }: Omit<FeedNote, "id">) {
   return (
-    <div className="materialGrid">
-      {materials.map((material) => (
-        <article key={material.id} className="material">
-          <div>
-            <FileText size={18} />
-            <strong>{material.name}</strong>
-          </div>
-          <p>{material.summary}</p>
-          <blockquote>{material.excerpt}</blockquote>
-        </article>
-      ))}
+    <article className={clsx("message", role === "user" ? "userMessage" : "agentMessage")}>
+      <Avatar status={role === "user" ? "user" : "done"} />
+      <div className="messageBody">
+        <div className="messageMeta">
+          <strong>{role === "user" ? "You" : "DealProof"}</strong>
+        </div>
+        <p className="messageTitle">{title}</p>
+        {body && <p className="messageCopy">{body}</p>}
+      </div>
+    </article>
+  );
+}
+
+function Avatar({ status }: { status: AgentEventStatus | "user" }) {
+  return (
+    <div className={clsx("avatar", status)}>
+      {status === "running" ? <Loader2 className="spin" size={15} /> : status === "error" ? <XCircle size={15} /> : status === "user" ? <MessageSquare size={15} /> : <Bot size={15} />}
     </div>
   );
 }
 
-function EmptyPanel({ title, body, compact = false }: { title: string; body: string; compact?: boolean }) {
+function AgentActivity({ events, running }: { events: AgentEvent[]; running: boolean }) {
+  const latest = events.at(-1);
+  const latestProgress =
+    [...events].reverse().find((event) => event.event === "step_start" || event.event === "run_start" || event.event === "run_complete" || event.event === "run_error") ?? latest;
+  const tools = groupAgentTools(events);
+  const visibleTools = tools.slice(running ? -4 : -7);
+  const activityStatus = latest?.status ?? (running ? "running" : "done");
+  const activityLabel = latestProgress?.label ?? "Preparing analysis";
+
   return (
-    <section className={clsx("panel emptyPanel", compact && "compact")}>
-      <h3>{title}</h3>
-      <p>{body}</p>
+    <article className="message agentMessage">
+      <Avatar status={activityStatus} />
+      <div className="messageBody agentStream">
+        <div className="messageMeta">
+          <strong>DealProof</strong>
+          <span>{activityStatus === "running" ? "Working" : activityStatus === "error" ? "Stopped" : "Finished"}</span>
+        </div>
+        <p className="messageTitle">{activityLabel}</p>
+        <small>{latestProgress ? formatAgentStats(latestProgress) : "Working"}</small>
+        {visibleTools.length > 0 && (
+          <div className="toolStack">
+            {visibleTools.map((tool) => (
+              <ToolCallRow key={tool.step} tool={tool} />
+            ))}
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function groupAgentTools(events: AgentEvent[]) {
+  const tools = new Map<string, AgentToolRun>();
+  for (const event of events) {
+    if (event.event !== "tool_start" && event.event !== "tool_complete") continue;
+    const existing = tools.get(event.step);
+    tools.set(event.step, {
+      step: event.step,
+      label: event.label,
+      status: event.status,
+      toolName: event.toolName ?? existing?.toolName,
+      input: event.input ?? existing?.input,
+      output: event.output ?? existing?.output,
+      statsEvent: event
+    });
+  }
+  return Array.from(tools.values());
+}
+
+function ToolCallRow({ tool }: { tool: AgentToolRun }) {
+  const toolName = tool.toolName ?? tool.step;
+  return (
+    <details className={clsx("toolCall", tool.status)}>
+      <summary>
+        {tool.status === "running" ? <Loader2 className="spin" size={13} /> : tool.status === "error" ? <XCircle size={13} /> : <CheckCircle2 size={13} />}
+        <strong>{formatToolName(toolName)}</strong>
+        <span>{formatAgentStats(tool.statsEvent)}</span>
+      </summary>
+      <dl>
+        <div>
+          <dt>Input</dt>
+          <dd>{tool.input ?? "state"}</dd>
+        </div>
+        <div>
+          <dt>Output</dt>
+          <dd>{tool.output ?? "Waiting for result"}</dd>
+        </div>
+      </dl>
+    </details>
+  );
+}
+
+function ResultArtifacts({
+  deal,
+  scoring,
+  activeArtifact,
+  selectedClaim,
+  selectedEvidence,
+  memoMarkdown,
+  exportUrl,
+  onOpenClaims,
+  onOpenMemo,
+  onSelectClaim
+}: {
+  deal: DealAnalysis;
+  scoring: ReturnType<typeof scoreClaims>;
+  activeArtifact: ActiveArtifact;
+  selectedClaim: DealClaim | null;
+  selectedEvidence: EvidenceItem[];
+  memoMarkdown: string;
+  exportUrl: string;
+  onOpenClaims: () => void;
+  onOpenMemo: () => void;
+  onSelectClaim: (claim: DealClaim) => void;
+}) {
+  const claims = deal.claims;
+  if (!deal.materials.length) {
+    return (
+      <article className="artifactCard">
+        <div className="artifactHeader">
+          <FileText size={17} />
+          <strong>No materials yet</strong>
+        </div>
+        <p>Add files, a URL, or seed the demo packet to start the diligence run.</p>
+      </article>
+    );
+  }
+
+  return (
+    <article className="message agentMessage">
+      <Avatar status="done" />
+      <div className="messageBody">
+        <div className="messageMeta">
+          <strong>Artifacts</strong>
+          <span>{deal.materials.length} materials / {claims.length} claims / {deal.evidence.length} evidence</span>
+        </div>
+        <div className="artifactGrid">
+          <button className="artifactCard artifactButton" type="button" onClick={onOpenClaims} disabled={!claims.length}>
+            <div className="artifactHeader">
+              <Gauge size={17} />
+              <strong>Claim ledger</strong>
+              <span>{claims.length || "Pending"}</span>
+            </div>
+            <p>{claims.length ? `${scoring.counts.weak + scoring.counts.contradicted + scoring.counts.missing} exceptions need review.` : "Run the agent to extract verifiable claims."}</p>
+          </button>
+          <button className="artifactCard artifactButton" type="button" onClick={onOpenMemo} disabled={!deal.memo}>
+            <div className="artifactHeader">
+              <FileText size={17} />
+              <strong>Risk memo</strong>
+              <span>{deal.memo?.overallGrade ?? "Pending"}</span>
+            </div>
+            <p>{deal.memo ? deal.memo.icRecommendation : "The memo appears after analysis completes."}</p>
+          </button>
+        </div>
+
+        {activeArtifact?.type === "claims" && <ClaimsArtifact claims={claims} evidence={deal.evidence} onSelectClaim={onSelectClaim} />}
+        {activeArtifact?.type === "claim" && selectedClaim && <EvidenceArtifact claim={selectedClaim} evidence={selectedEvidence} />}
+        {activeArtifact?.type === "memo" && deal.memo && <MemoArtifact deal={deal} memoMarkdown={memoMarkdown} exportUrl={exportUrl} />}
+      </div>
+    </article>
+  );
+}
+
+function ClaimsArtifact({ claims, evidence, onSelectClaim }: { claims: DealClaim[]; evidence: EvidenceItem[]; onSelectClaim: (claim: DealClaim) => void }) {
+  const groups: ClaimStatus[] = ["contradicted", "weak", "missing", "supported"];
+  return (
+    <section className="artifactPanel">
+      <div className="artifactPanelHeader">
+        <div>
+          <p className="eyebrow">Claim Ledger</p>
+          <h2>{claims.length} diligence claims</h2>
+        </div>
+      </div>
+      <div className="claimGroups">
+        {groups.map((status) => {
+          const items = claims.filter((claim) => claim.status === status);
+          if (!items.length) return null;
+          return (
+            <section key={status} className="claimGroup">
+              <h3>{status}</h3>
+              {items.map((claim) => {
+                const count = evidence.filter((item) => item.claimId === claim.id).length;
+                return (
+                  <button key={claim.id} type="button" className="claimRow" onClick={() => onSelectClaim(claim)}>
+                    <StatusPill status={claim.status} />
+                    <span>{claim.text}</span>
+                    <small>{claim.importance} / {count} evidence</small>
+                    <PanelRightOpen size={15} />
+                  </button>
+                );
+              })}
+            </section>
+          );
+        })}
+      </div>
     </section>
   );
 }
 
-function Metric({ label, value, status }: { label: string; value: number; status: ClaimStatus }) {
+function EvidenceArtifact({ claim, evidence }: { claim: DealClaim; evidence: EvidenceItem[] }) {
   return (
-    <article className={clsx("metric", status)}>
-      <span>{label}</span>
-      <strong>{value}</strong>
+    <section className="artifactPanel">
+      <div className="artifactPanelHeader">
+        <div>
+          <p className="eyebrow">Evidence Drawer</p>
+          <h2>{claim.text}</h2>
+        </div>
+        <StatusPill status={claim.status} />
+      </div>
+      <div className="rationale">
+        <AlertTriangle size={17} />
+        <p>{claim.riskRationale}</p>
+      </div>
+      <div className="evidenceList">
+        {evidence.map((item) => (
+          <article key={item.id} className="evidenceItem">
+            <div>
+              <strong>{item.title}</strong>
+              <span>{item.stance.replaceAll("_", " ")}</span>
+            </div>
+            <p>{item.snippet}</p>
+            <footer>
+              <span>{item.citation}</span>
+              <span>{item.sourceType.replace("_", " ")}</span>
+              <span>{item.reliability} reliability</span>
+            </footer>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MemoArtifact({ deal, memoMarkdown, exportUrl }: { deal: DealAnalysis; memoMarkdown: string; exportUrl: string }) {
+  if (!deal.memo) return null;
+  return (
+    <section className="artifactPanel memoArtifact">
+      <div className="artifactPanelHeader">
+        <div>
+          <p className="eyebrow">IC Artifact</p>
+          <h2>Partner-ready red team memo</h2>
+        </div>
+        <a className="primaryButton" href={exportUrl}>
+          <ArrowDownToLine size={16} />
+          Export Markdown
+        </a>
+      </div>
+      <p className="memoQuestion">{deal.memo.investmentQuestion}</p>
+      <div className="memoColumns">
+        <MemoSection title="Key strengths" items={deal.memo.keyStrengths} />
+        <MemoSection title="Material risks" items={deal.memo.materialRisks} danger />
+        <MemoSection title="Questions before IC" items={deal.memo.followUpQuestions} />
+      </div>
+      <div className="recommendation">{deal.memo.icRecommendation}</div>
+      <details className="markdownDetails">
+        <summary>Markdown preview</summary>
+        <pre>{memoMarkdown}</pre>
+      </details>
+    </section>
+  );
+}
+
+function AnswerMessage({ answer }: { answer: ChatAnswer }) {
+  return (
+    <article className="message agentMessage">
+      <Avatar status="done" />
+      <div className="messageBody answerBox">
+        <div className="messageMeta">
+          <strong>DealProof answer</strong>
+          <span>{answer.confidence} confidence</span>
+        </div>
+        <p className="messageCopy">{answer.answer}</p>
+        <footer>
+          {answer.citations.map((citation) => (
+            <span key={citation}>{citation}</span>
+          ))}
+        </footer>
+      </div>
     </article>
   );
 }
@@ -456,77 +698,34 @@ function StatusPill({ status }: { status: ClaimStatus }) {
   const Icon = statusIcon[status];
   return (
     <span className={clsx("statusPill", status)}>
-      <Icon size={15} />
+      <Icon size={14} />
       {status}
     </span>
-  );
-}
-
-function StatusDot({ label, status }: { label: string; status: ClaimStatus }) {
-  return <span className={clsx("statusDot", status)}>{label}</span>;
-}
-
-function ClaimTable({ claims, selectedClaimId, onSelect }: { claims: DealClaim[]; selectedClaimId: string; onSelect: (claim: DealClaim) => void }) {
-  return (
-    <section className="panel tablePanel">
-      <div className="panelHeader">
-        <div>
-          <p className="eyebrow">Extracted claims</p>
-          <h3>{claims.length} diligence claims</h3>
-        </div>
-      </div>
-      <div className="claimRows">
-        {claims.map((claim) => (
-          <button key={claim.id} className={clsx("claimRow", selectedClaimId === claim.id && "selected")} type="button" onClick={() => onSelect(claim)}>
-            <span>{claim.category.replace("_", " ")}</span>
-            <strong>{claim.text}</strong>
-            <StatusPill status={claim.status} />
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ClaimInspector({ claim }: { claim: DealClaim }) {
-  return (
-    <section className="panel detailPanel">
-      <div className="panelHeader">
-        <div>
-          <p className="eyebrow">Risk rationale</p>
-          <h3>{claim.text}</h3>
-        </div>
-        <StatusPill status={claim.status} />
-      </div>
-      <dl className="claimFacts">
-        <div>
-          <dt>Importance</dt>
-          <dd>{claim.importance}</dd>
-        </div>
-        <div>
-          <dt>Source</dt>
-          <dd>{claim.sourceMaterial}</dd>
-        </div>
-        <div>
-          <dt>Snippet</dt>
-          <dd>{claim.sourceSnippet}</dd>
-        </div>
-      </dl>
-      <div className="rationale">
-        <AlertTriangle size={18} />
-        <p>{claim.riskRationale}</p>
-      </div>
-    </section>
   );
 }
 
 function MemoSection({ title, items, danger = false }: { title: string; items: string[]; danger?: boolean }) {
   return (
     <section className={clsx("memoSection", danger && "danger")}>
-      <h4>{title}</h4>
+      <h3>{title}</h3>
       <ul>
         {items.map((item) => <li key={item}>{item}</li>)}
       </ul>
     </section>
   );
+}
+
+function formatToolName(toolName: string) {
+  return toolName.replaceAll("_", " ");
+}
+
+function formatAgentStats(event: AgentEvent) {
+  const stats = [
+    event.materials !== undefined && `${event.materials} materials`,
+    event.chunks !== undefined && `${event.chunks} chunks`,
+    event.claims !== undefined && `${event.claims} claims`,
+    event.evidence !== undefined && `${event.evidence} evidence`
+  ].filter(Boolean);
+  if (event.status === "error") return "Needs attention";
+  return stats.join(" / ") || (event.status === "done" ? "Complete" : "Working");
 }

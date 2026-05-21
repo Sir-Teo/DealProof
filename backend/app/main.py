@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import shutil
 import uuid
+import json
 from pathlib import Path
+from queue import Queue
+from threading import Thread
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import db
@@ -22,6 +25,7 @@ app = FastAPI(title="DealProof Backend")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],
+    allow_origin_regex=r"http://(127\.0\.0\.1|localhost):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -178,6 +182,48 @@ def analyze_deal(deal_id: str) -> DealAnalysis:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return db.get_deal(deal_id)
+
+
+@app.post("/deals/{deal_id}/analyze-stream")
+def analyze_deal_stream(deal_id: str) -> StreamingResponse:
+    ensure_deal(deal_id)
+
+    def stream():
+        done = object()
+        events: Queue[str | object] = Queue()
+
+        def emit(event: str, step: str, payload: dict[str, int | str] | None = None) -> None:
+            message = {"event": event, "step": step, **(payload or {})}
+            events.put(f"data: {json.dumps(message)}\n\n")
+
+        def run() -> None:
+            try:
+                emit("run_start", "agent", {"label": "Starting diligence agent"})
+                run_diligence(deal_id, on_progress=emit)
+                deal = db.get_deal(deal_id)
+                emit(
+                    "run_complete",
+                    "agent",
+                    {
+                        "label": "Analysis complete",
+                        "claims": len(deal.claims),
+                        "evidence": len(deal.evidence),
+                    },
+                )
+            except Exception as exc:
+                emit("run_error", "agent", {"label": str(exc)})
+            finally:
+                events.put(done)
+
+        Thread(target=run, daemon=True).start()
+
+        while True:
+            item = events.get()
+            if item is done:
+                break
+            yield item
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
 
 
 @app.post("/deals/{deal_id}/chat")

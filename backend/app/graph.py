@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import TypedDict
+from typing import Callable, TypedDict
 
 from langgraph.graph import END, StateGraph
 
@@ -33,6 +33,8 @@ class DiligenceState(TypedDict, total=False):
     generated_at: str
 
 
+ProgressCallback = Callable[[str, str, dict[str, int | str] | None], None]
+
 def build_graph():
     graph = StateGraph(DiligenceState)
     graph.add_node("load_materials", load_materials)
@@ -53,15 +55,99 @@ def build_graph():
     return graph.compile()
 
 
-def run_diligence(deal_id: str) -> DiligenceState:
+def run_diligence(deal_id: str, on_progress: ProgressCallback | None = None) -> DiligenceState:
     db.update_deal_status(deal_id, "running")
     try:
         deal = db.get_deal(deal_id)
-        result = build_graph().invoke({"deal_id": deal_id, "company": deal.company})
+        if on_progress:
+            result = run_diligence_with_progress(deal_id, deal.company, on_progress)
+        else:
+            result = build_graph().invoke({"deal_id": deal_id, "company": deal.company})
         return result
     except Exception as exc:
         db.update_deal_status(deal_id, "failed", error=str(exc))
         raise
+
+
+def run_diligence_with_progress(deal_id: str, company: str, on_progress: ProgressCallback) -> DiligenceState:
+    state: DiligenceState = {"deal_id": deal_id, "company": company}
+    steps = [
+        ("load_materials", "Read supplied materials", "Loading source packets from the deal workspace", load_materials),
+        ("chunk_materials", "Split source text", "Creating retrievable evidence chunks", chunk_materials),
+        ("extract_claims", "Extract diligence claims", "Identifying concrete founder claims to verify", extract_claims),
+        ("retrieve_evidence", "Retrieve evidence", "Searching supplied materials for support and contradictions", retrieve_evidence),
+        ("score_claims", "Score claim support", "Applying support and risk scoring rules", score_claim_statuses),
+        ("generate_memo", "Draft red-team memo", "Writing the partner-ready diligence memo", generate_memo),
+        ("persist_results", "Save analysis results", "Persisting claims, evidence, memo, and run metadata", persist_results),
+    ]
+    for step_id, label, description, step in steps:
+        before = progress_payload(state, label)
+        on_progress("step_start", step_id, {**before, "label": description})
+        on_progress(
+            "tool_start",
+            step_id,
+            {
+                **before,
+                "label": label,
+                "toolName": step_id,
+                "input": tool_input_summary(state, step_id),
+            },
+        )
+        state = step(state)
+        after = progress_payload(state, label)
+        on_progress(
+            "tool_complete",
+            step_id,
+            {
+                **after,
+                "label": label,
+                "toolName": step_id,
+                "output": tool_output_summary(state, step_id),
+            },
+        )
+        on_progress("step_complete", step_id, {**after, "label": description})
+    return state
+
+
+def progress_payload(state: DiligenceState, label: str) -> dict[str, int | str]:
+    payload: dict[str, int | str] = {"label": label}
+    if "materials" in state:
+        payload["materials"] = len(state["materials"])
+    if "chunks" in state:
+        payload["chunks"] = len(state["chunks"])
+    if "claims" in state:
+        payload["claims"] = len(state["claims"])
+    if "evidence" in state:
+        payload["evidence"] = len(state["evidence"])
+    if "generated_at" in state:
+        payload["generatedAt"] = state["generated_at"]
+    return payload
+
+
+def tool_input_summary(state: DiligenceState, step_id: str) -> str:
+    summaries = {
+        "load_materials": f"deal_id={state['deal_id']}",
+        "chunk_materials": f"materials={len(state.get('materials', []))}",
+        "extract_claims": f"company={state['company']}; materials={len(state.get('materials', []))}",
+        "retrieve_evidence": f"claims={len(state.get('claims', []))}; chunks={len(state.get('chunks', []))}",
+        "score_claims": f"claims={len(state.get('claims', []))}; evidence={len(state.get('evidence', []))}",
+        "generate_memo": f"company={state['company']}; claims={len(state.get('claims', []))}",
+        "persist_results": f"deal_id={state['deal_id']}; claims={len(state.get('claims', []))}; evidence={len(state.get('evidence', []))}",
+    }
+    return summaries.get(step_id, "state")
+
+
+def tool_output_summary(state: DiligenceState, step_id: str) -> str:
+    summaries = {
+        "load_materials": f"Loaded {len(state.get('materials', []))} materials.",
+        "chunk_materials": f"Created {len(state.get('chunks', []))} chunks.",
+        "extract_claims": f"Extracted {len(state.get('claims', []))} claims.",
+        "retrieve_evidence": f"Retrieved {len(state.get('evidence', []))} evidence items.",
+        "score_claims": f"Scored {len(state.get('claims', []))} claims.",
+        "generate_memo": "Generated red-team memo.",
+        "persist_results": "Saved analysis results.",
+    }
+    return summaries.get(step_id, "Complete.")
 
 
 def load_materials(state: DiligenceState) -> DiligenceState:
