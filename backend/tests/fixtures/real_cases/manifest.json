@@ -1,0 +1,65 @@
+{
+  "snapshotDate": "2026-05-21",
+  "cases": [
+    {
+      "id": "dm_revenue_flow",
+      "company": "DMs Revenue Flow",
+      "sourceUrl": "https://dmrevenueflow.com/",
+      "fixtures": [
+        "dm_revenue_flow_pitch.txt",
+        "dm_revenue_flow_public_evidence.txt",
+        "real_case_claim_packet.txt"
+      ],
+      "expected": {
+        "minClaims": 6,
+        "requiresStatuses": ["supported", "weak", "contradicted"],
+        "chatQuestion": "Can we trust the ROI and no-competitor claims?"
+      }
+    },
+    {
+      "id": "apple_2025_10k",
+      "company": "Apple Inc.",
+      "sourceUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
+      "filingIndexUrl": "https://www.sec.gov/Archives/edgar/data/320193/0000320193-25-000079-index.htm",
+      "fixtures": ["apple_2025_10k_evidence.txt"],
+      "expected": {
+        "supportsClaimsAbout": ["services gross margin", "cash and marketable securities", "manufacturing purchase obligations"],
+        "contradictsOverbroadClaimsAbout": ["no direct competitors"]
+      }
+    },
+    {
+      "id": "large_public_data_room",
+      "company": "DMs Revenue Flow",
+      "sourceUrl": "https://dmrevenueflow.com/",
+      "secondarySources": [
+        "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
+        "https://corporate.target.com/investors/annual/2025-annual-report/download"
+      ],
+      "fixtures": [
+        "large_data_room/01_company_overview.txt",
+        "large_data_room/02_raise_terms.txt",
+        "large_data_room/03_traction_observed.txt",
+        "large_data_room/04_financial_model.txt",
+        "large_data_room/05_roi_unit_economics.txt",
+        "large_data_room/06_market_and_competition.txt",
+        "large_data_room/07_founder_call_notes.txt",
+        "large_data_room/08_customer_reference_notes.txt",
+        "large_data_room/09_risk_and_validation_notes.txt",
+        "large_data_room/10_apple_10k_financials.txt",
+        "large_data_room/11_apple_10k_supply_chain.txt",
+        "large_data_room/12_target_annual_report_retail.txt",
+        "large_data_room/13_public_source_index.txt",
+        "large_data_room/14_analyst_claim_packet.txt"
+      ],
+      "expected": {
+        "minMaterials": 14,
+        "minClaims": 12,
+        "requiresStatuses": ["supported", "weak", "contradicted"],
+        "chatQuestions": [
+          "Which public materials support the ARR and ROI claims?",
+          "What are the biggest unsupported or contradicted claims?"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+Source snapshot: DMs Revenue Flow public investor page, https://dmrevenueflow.com/
+Snapshot date: 2026-05-21
+
+The market section says DMs Revenue Flow is pursuing 6 validated verticals.
+
+The market section says total TAM is $500B+ in global digital marketing.
+
+The pitch names adjacent AI video and multimodal tools including HeyGen, Runway, Kling, Sora, GPT-4o, and Claude 3.5 Sonnet.
+
+The public source names these products as examples of mainstream AI video or multimodal-model tools.
+
+Public evidence therefore does not support the overbroad claim that there are no direct or adjacent competitors in AI video, multimodal content, or DM automation.
+
+The pitch does not include a bottom-up calculation proving the $500B+ TAM from customer counts, ACV, penetration, or conversion rates.

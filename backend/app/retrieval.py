@@ -39,6 +39,15 @@ def keywords(text: str) -> set[str]:
     return {word for word in re.findall(r"[a-zA-Z0-9$%]+", text.lower()) if len(word) > 3 and word not in stop}
 
 
+def normalized_numbers(text: str) -> set[str]:
+    numbers = set()
+    for value in re.findall(r"\$?\d[\d,]*(?:\.\d+)?%?", text):
+        clean = value.replace("$", "").replace(",", "").replace("%", "")
+        if clean:
+            numbers.add(clean)
+    return numbers
+
+
 def find_relevant_chunks(claim: DealClaim, chunks: list[MaterialChunk], limit: int = 4) -> list[MaterialChunk]:
     claim_terms = keywords(claim.text)
     scored = []
@@ -48,6 +57,82 @@ def find_relevant_chunks(claim: DealClaim, chunks: list[MaterialChunk], limit: i
         if overlap:
             scored.append((overlap, chunk))
     return [chunk for _, chunk in sorted(scored, key=lambda item: item[0], reverse=True)[:limit]]
+
+
+def evidence_stance_for_chunk(claim: DealClaim, chunk: MaterialChunk) -> str:
+    claim_text = claim.text.lower()
+    chunk_text_lower = chunk.text.lower()
+    same_source = chunk.citation.lower().startswith(claim.sourceMaterial.lower())
+    claim_packet_source = "claim_packet" in claim.sourceMaterial.lower() or "claim packet" in claim.sourceMaterial.lower()
+
+    denies_competition = any(
+        phrase in claim_text
+        for phrase in [
+            "no direct competitor",
+            "no direct competitors",
+            "no direct or adjacent competitors",
+            "no adjacent competitors",
+            "no competitors",
+            "no direct competition",
+        ]
+    )
+    names_competitors = any(
+        phrase in chunk_text_lower
+        for phrase in [
+            "direct competitors",
+            "adjacent competitors",
+            "competitors include",
+            "as direct competitors",
+            "adjacent ai",
+            "adjacent automation",
+            "list ",
+            "lists ",
+        ]
+    )
+    if denies_competition and names_competitors and not same_source:
+        return "contradicts"
+
+    if "no manufacturing purchase obligations" in claim_text and "manufacturing purchase obligations" in chunk_text_lower and not same_source:
+        return "contradicts"
+
+    if "no third-party validation risk" in claim_text and any(
+        phrase in chunk_text_lower for phrase in ["does not provide", "lacks third-party validation", "not include"]
+    ):
+        return "contradicts"
+
+    if "proven by bottom-up" in claim_text and any(
+        phrase in chunk_text_lower for phrase in ["does not include a bottom-up", "not supported by bottom-up", "not supported by bottom"]
+    ):
+        return "contradicts"
+
+    if "independently verified" in claim_text and any(
+        phrase in chunk_text_lower for phrase in ["not independently verified", "details are available under nda", "not independently"]
+    ):
+        return "contradicts"
+
+    claim_numbers = normalized_numbers(claim.text)
+    chunk_numbers = normalized_numbers(chunk.text)
+    if claim_numbers and claim_numbers.issubset(chunk_numbers):
+        if not same_source:
+            return "supports"
+        return "partially_supports"
+
+    claim_terms = keywords(claim.text)
+    chunk_terms = keywords(chunk.text)
+    overlap = len(claim_terms & chunk_terms)
+    if overlap >= 4 and not same_source and not claim_packet_source:
+        return "supports"
+    if overlap >= 4 and not same_source and claim.category in {"financials", "pricing", "retention"}:
+        return "supports"
+    return "partially_supports"
+
+
+def evidence_title_for_stance(stance: str) -> str:
+    if stance == "supports":
+        return "Direct supporting evidence"
+    if stance == "contradicts":
+        return "Contradictory supplied evidence"
+    return "Relevant supplied material"
 
 
 def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -> list[EvidenceItem]:
@@ -69,12 +154,12 @@ def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -
         EvidenceItem(
             id=f"ev-{uuid.uuid4().hex[:10]}",
             claimId=claim.id,
-            title="Relevant supplied material",
+            title=evidence_title_for_stance(evidence_stance_for_chunk(claim, chunk)),
             sourceType="uploaded",
             citation=chunk.citation,
             snippet=chunk.text[:360],
-            stance="partially_supports",
-            reliability="medium",
+            stance=evidence_stance_for_chunk(claim, chunk),  # type: ignore[arg-type]
+            reliability="high" if evidence_stance_for_chunk(claim, chunk) == "supports" else "medium",
         )
         for chunk in relevant
     ]

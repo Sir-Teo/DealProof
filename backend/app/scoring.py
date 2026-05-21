@@ -24,9 +24,9 @@ def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> D
     stances = {item.stance for item in evidence}
     if "contradicts" in stances:
         status = "contradicted"
-    elif "supports" in stances and "partially_supports" not in stances:
+    elif "supports" in stances:
         status = "supported"
-    elif "supports" in stances or "partially_supports" in stances:
+    elif "partially_supports" in stances:
         status = "weak"
     else:
         status = "missing"

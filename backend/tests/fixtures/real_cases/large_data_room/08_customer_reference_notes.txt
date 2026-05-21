@@ -1,0 +1,12 @@
+Source snapshot: synthetic customer-reference notes for real-world workflow coverage.
+Snapshot date: 2026-05-21
+
+Customer reference note: one pilot user reports faster response times in DMs but did not provide raw CRM exports.
+
+Customer reference note: the pilot user says response times improved toward the less-than-30-second target during staffed test windows.
+
+Customer reference note: the pilot user did not validate the 100-500x ROI claim.
+
+Customer reference note: the pilot user did not validate the $120-240k annual savings estimate because they did not previously run a 15-25 person content team.
+
+Customer reference note: the pilot user says human review was still needed for high-value conversations and compliance-sensitive responses.

@@ -1,0 +1,14 @@
+Source snapshot: analyst risk notes based on public materials.
+Snapshot date: 2026-05-21
+
+Risk note: the 95.3% gross margin is modeled and should be validated against actual AI infrastructure spend, human review cost, support cost, and platform fees.
+
+Risk note: the $500B+ TAM is not supported by bottom-up evidence in the supplied public materials.
+
+Risk note: the $2.56M ARR by month 24 target depends on reaching 1,200 accounts and $213k MRR.
+
+Risk note: the 100-500x ROI claim lacks third-party validation in the supplied public materials.
+
+Risk note: the public source includes adjacent AI and automation products, so a claim of no direct or adjacent competitors is high risk.
+
+Risk note: the strategic investor commitment is described as $200k committed, but details are available under NDA and are not independently verified in this packet.

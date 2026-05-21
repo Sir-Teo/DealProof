@@ -1,0 +1,12 @@
+Source snapshot: synthetic analyst notes based on DMs Revenue Flow public materials.
+Snapshot date: 2026-05-21
+
+Founder call note: the founder says the current operation is positive cash flow, but detailed bank statements and monthly P&L files are not included in this packet.
+
+Founder call note: the founder says the model assumes 1,200 accounts by month 24 and $213k MRR at maturity.
+
+Founder call note: the founder says the company expects to launch across 7 verticals, but public materials identify 6 validated target verticals.
+
+Founder call note: the founder says the AI DM agent still uses human escalation for high-value deals.
+
+Founder call note: the founder says the $200k lead investor commitment is real but details are available only under NDA.

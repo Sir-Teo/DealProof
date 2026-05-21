@@ -1,6 +1,7 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import {
   AlertTriangle,
   ArrowDownToLine,

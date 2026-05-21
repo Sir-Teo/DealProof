@@ -1,0 +1,16 @@
+Source snapshot: DMs Revenue Flow public investor page, https://dmrevenueflow.com/
+Snapshot date: 2026-05-21
+
+The public model summary says projected results include $3.18M in 24-month total revenue.
+
+The public model summary says DMs Revenue Flow can reach $2.56M ARR by month 24.
+
+The public model summary says gross margin is modeled at 95.3%.
+
+The public model summary says the company can become cash-flow positive in month 4.
+
+The milestone section says months 1-3 target 200 active accounts and $35k MRR.
+
+The milestone section says months 7-12 target 600 accounts across 7 verticals, $120-160k MRR, LTV/CAC ratio of 3.1x, EBITDA positive, and 60% net margin.
+
+The milestone section says months 13-24 target 1,200 accounts, $213k MRR, $2.56M ARR, and $2.26M cumulative net income.

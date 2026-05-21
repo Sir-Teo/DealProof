@@ -1,0 +1,10 @@
+Source snapshot: Target 2025 annual report download page, https://corporate.target.com/investors/annual/2025-annual-report/download
+Snapshot date: 2026-05-21
+
+Target's public annual report page exposes a 2025 annual report download and includes financial highlights, a five-year financial summary, 10-K sections, directors and management, and shareholder information.
+
+The page structure includes a 10-K report with business, strategy, financial highlights, seasonality, merchandise, distribution, human capital management, competition, intellectual property, and risk-factor sections.
+
+The Target annual report source is useful as an example of public issuer evidence, but the current DealProof packet does not use Target as a primary company under diligence.
+
+Analyst note: Target is included to increase real-world fixture breadth and to verify that the larger E2E packet can carry more than one public company evidence source without confusing the main DMs Revenue Flow memo.

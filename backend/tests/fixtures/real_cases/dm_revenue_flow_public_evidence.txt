@@ -1,0 +1,14 @@
+Source snapshot: DMs Revenue Flow public investor page, https://dmrevenueflow.com/
+Snapshot date: 2026-05-21
+
+Public evidence excerpt: the investor page labels several operating claims as observed, including 1,000+ influencers managed, 3 creator houses, 10+ brand campaigns, and positive cash flow in current operations.
+
+Public evidence excerpt: the investor page labels several finance claims as modeled, including $3.18M 24-month total revenue, $2.56M ARR by month 24, 95.3% gross margin, and month 4 cash-flow positive.
+
+Public evidence excerpt: the investor page labels +40% DM conversion and 2.3x LTV increase as pilot observations.
+
+Public evidence excerpt: the investor page says HeyGen, Runway, Kling, Sora, GPT-4o, and Claude 3.5 Sonnet are examples of mainstream AI video and multimodal-model tools.
+
+Public evidence excerpt: the investor page does not provide audited financial statements, customer-level cohort files, or third-party validation for the $500B+ TAM, 100-500x ROI, $2.26M cumulative net income, or $50-100M Series A valuation claims.
+
+Public evidence excerpt: adjacent competitors include HeyGen, Runway, Kling, Sora, GPT-4o, and Claude 3.5 Sonnet in AI video or multimodal content workflows, so the overbroad claim that there are no direct or adjacent competitors is not supported by the supplied public materials.

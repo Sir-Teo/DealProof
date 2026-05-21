@@ -1,0 +1,13 @@
+Source index for larger real-world E2E packet.
+
+Primary venture-style source: DMs Revenue Flow public investor page, https://dmrevenueflow.com/
+
+Public-company evidence source: Apple Inc. 2025 Form 10-K, SEC EDGAR, https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm
+
+Public annual-report source: Target 2025 annual report download page, https://corporate.target.com/investors/annual/2025-annual-report/download
+
+Source limitation: DMs Revenue Flow materials are public web investor materials, not audited financial statements.
+
+Source limitation: Apple and Target materials are included to simulate public-source evidence in a diligence packet, not because they are acquisition comparables for DMs Revenue Flow.
+
+Source limitation: synthetic founder-call, customer-reference, and analyst-note files are included to exercise realistic data-room workflow and are labeled as such.

@@ -10,7 +10,7 @@ export default defineConfig({
   workers: 1,
   webServer: [
     {
-      command: "npm run backend",
+      command: "cd backend && DEEPSEEK_API_KEY= uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
       url: "http://127.0.0.1:8000/health",
       reuseExistingServer: true,
       timeout: 120_000

@@ -315,6 +315,28 @@ def normalize_evidence_ids(claim_id: str, evidence: list[EvidenceItem]) -> list[
 
 def fallback_claims(materials: list[SourceMaterial]) -> list[DealClaim]:
     claims: list[DealClaim] = []
+    seen: set[str] = set()
+    for material in materials:
+        for line in material.text.splitlines():
+            match = re.match(r"\s*Claim:\s*(.+)", line, flags=re.IGNORECASE)
+            if not match:
+                continue
+            text = re.sub(r"\s+", " ", match.group(1)).strip()
+            if len(text) < 20 or text.lower() in seen:
+                continue
+            seen.add(text.lower())
+            category = infer_claim_category(text)
+            claims.append(
+                DealClaim(
+                    id=f"claim-{len(claims)+1:02d}",
+                    text=text,
+                    category=category,  # type: ignore[arg-type]
+                    sourceMaterial=material.name,
+                    sourceSnippet=text[:280],
+                    importance="high" if category in {"growth", "market", "customer_roi", "compliance", "financials"} else "medium",
+                )
+            )
+
     patterns = [
         ("growth", r"([^.!?]*(?:grow|growth|ARR|revenue|signed|customers|clinics)[^.!?]*[.!?])"),
         ("customer_roi", r"([^.!?]*(?:save|recover|ROI|hours|collections|improve)[^.!?]*[.!?])"),
@@ -323,7 +345,6 @@ def fallback_claims(materials: list[SourceMaterial]) -> list[DealClaim]:
         ("compliance", r"([^.!?]*(?:compliance|human review|diagnosis|submission|regulatory)[^.!?]*[.!?])"),
         ("pricing", r"([^.!?]*(?:price|pricing|contract|ACV|ARR)[^.!?]*[.!?])"),
     ]
-    seen: set[str] = set()
     for material in materials:
         for category, pattern in patterns:
             for match in re.findall(pattern, material.text, flags=re.IGNORECASE)[:2]:
@@ -341,7 +362,26 @@ def fallback_claims(materials: list[SourceMaterial]) -> list[DealClaim]:
                         importance="high" if category in {"growth", "market", "customer_roi", "compliance"} else "medium",
                     )
                 )
-    return claims[:12]
+    return claims[:18]
+
+
+def infer_claim_category(text: str) -> str:
+    lower = text.lower()
+    if any(term in lower for term in ["competitor", "competition"]):
+        return "competition"
+    if any(term in lower for term in ["roi", "ltv", "save", "savings", "manual effort"]):
+        return "customer_roi"
+    if any(term in lower for term in ["arr", "revenue", "mrr", "gross margin", "cash-flow", "cash flow", "r&d", "expense"]):
+        return "financials"
+    if any(term in lower for term in ["valuation", "pre-money", "post-money", "equity", "pricing"]):
+        return "pricing"
+    if any(term in lower for term in ["tam", "market", "vertical"]):
+        return "market"
+    if any(term in lower for term in ["retention", "churn"]):
+        return "retention"
+    if any(term in lower for term in ["regulatory", "compliance", "audited", "third-party"]):
+        return "compliance"
+    return "growth"
 
 
 def fallback_memo(company: str, grade: str, claims: list[DealClaim]) -> RiskMemo:

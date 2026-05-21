@@ -1,0 +1,16 @@
+Source snapshot: DMs Revenue Flow public investor page, https://dmrevenueflow.com/
+Snapshot date: 2026-05-21
+
+The ROI section says manual content teams cost $180-300k per year.
+
+The ROI section says the AI engine costs $36-84k per year.
+
+The ROI section says the AI engine can create annual savings of $120-240k per year while producing 2x more content.
+
+The producer comparison says producer output is 10-20 posts per month, while DMs Flow output is 1,000+ posts per month.
+
+The producer comparison says production speed changes from 2-4 days per post to 5-30 minutes per post.
+
+The pitch says ROI is 100-500x modeled, but the public source does not include audited customer-level cohorts proving the modeled ROI.
+
+The exit scenarios say a conservative 10x case implies $30M ROI, a base 20x case implies $60M ROI, and an optimistic 50x case implies $150M ROI.

@@ -1,0 +1,26 @@
+Source snapshot: DMs Revenue Flow public investor page, https://dmrevenueflow.com/
+Snapshot date: 2026-05-21
+
+DMs Revenue Flow says it is raising a $3M pre-seed round for 15% equity to scale across 7 verticals to 1,200 accounts and $2.56M ARR in 24 months.
+
+The company says the pre-money valuation is $17M, the post-money valuation is $20M, and the planned runway is 24 months.
+
+The page says the current operation has 1,000+ influencers managed, 3 creator houses observed, 10+ brand campaigns delivered, and positive cash flow in current operations.
+
+The pitch says AI video generation and multimodal models went mainstream, citing HeyGen, Runway, Kling, Sora, GPT-4o, and Claude 3.5 Sonnet as examples.
+
+The company says the AI DM agent can qualify leads, score readiness to buy, personalize offers, and escalate high-value deals with human-in-the-loop review.
+
+The company says the pilot target is less than 30 seconds response time, +40% DM conversion, and 2.3x LTV increase.
+
+The company says the AI engine can reduce manual effort by 70-80%.
+
+The company says manual teams cost $180-300k per year while the AI engine costs $36-84k per year, producing annual savings of $120-240k per year.
+
+The financial model says projected results include $3.18M in 24-month total revenue, $2.56M ARR by month 24, 95.3% gross margin, and month 4 cash-flow positive.
+
+The target niches section says the company is pursuing 6 validated verticals with total TAM of $500B+ in global digital marketing.
+
+The milestones say months 13-24 target 1,200 accounts, $213k MRR, $2.56M ARR, Series A readiness at $50-100M valuation, and $2.26M cumulative net income.
+
+The exit scenarios say a conservative 10x case implies $30M ROI, a base 20x case implies $60M ROI, and an optimistic 50x case implies $150M ROI.
