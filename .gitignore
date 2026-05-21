@@ -6,3 +6,9 @@ test-results/
 .env*.local
 *.tsbuildinfo
 dist/
+backend/.venv/
+backend/data/*.db
+backend/storage/deals/*
+backend/.pytest_cache/
+__pycache__/
+*.pyc

@@ -254,8 +254,109 @@ button {
   white-space: nowrap;
 }
 
-.primaryButton:disabled {
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.sampleQuestions button:disabled {
   opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.secondaryButton {
+  border: 1px solid var(--line);
+  background: white;
+  color: #263241;
+  padding: 10px 12px;
+  min-height: 40px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.errorBanner {
+  background: var(--red-bg);
+  border: 1px solid #f2a8a1;
+  color: var(--red);
+  padding: 12px 14px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
+.dealForm {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.75fr) minmax(220px, 1fr) auto auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.dealForm label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.dealForm input,
+.urlInput input {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: white;
+  text-transform: none;
+  font-weight: 400;
+}
+
+.realUpload {
+  align-items: flex-start;
+}
+
+.uploadControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.urlInput {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 280px;
+  flex: 1;
+}
+
+.urlInput input {
+  width: 100%;
+}
+
+.emptyPanel {
+  color: var(--muted);
+}
+
+.emptyPanel h3 {
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+
+.emptyPanel.compact {
+  margin-top: 14px;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .uploadZone {
@@ -618,5 +719,14 @@ blockquote {
 
   .promptRow {
     grid-template-columns: 1fr;
+  }
+
+  .dealForm {
+    grid-template-columns: 1fr;
+  }
+
+  .uploadControls,
+  .urlInput {
+    width: 100%;
   }
 }

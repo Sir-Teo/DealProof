@@ -6,25 +6,18 @@ exports[`DealProof scoring > generates a partner-ready markdown memo 1`] = `
 **Overall grade:** YELLOW
 
 ## Investment Question
-Is CaviClear an early but real wedge into dental revenue-cycle automation, or a services-heavy billing tool with overstated category novelty?
+Is this credible enough for IC?
 
 ## Key Strengths
-- ARR growth from $82k to $235k in four months is internally supported by the uploaded financial snapshot.
-- The product focuses on a painful administrative workflow with measurable time-savings potential.
-- Compliance posture is more credible because materials consistently state billing-only scope and human review before submission.
+- ARR support exists.
 
 ## Material Risks
-- Fastest-growing and $6B market-size claims are not supported by external benchmarks or a bottom-up model.
-- ROI claims need customer-level proof, named references, and methodology before they should influence valuation.
-- No-competitor language is likely overstated given existing dental RCM and denial-management vendors.
+- ROI methodology is missing.
 
 ## Questions Before IC
-- Provide the customer-level ROI workbook behind the 18 hours/week and 11% collections claims.
-- Show a bottom-up TAM model by US dental clinics, biller spend, and realistic attach rate.
-- List competitors by workflow coverage and explain why dental denial appeals are technically differentiated.
-- Break out signed, active, onboarding, churned, and expansion ARR by cohort month.
+- Show customer cohort data.
 
 ## Recommendation
-Proceed to partner diligence only if customer references validate ROI and the team replaces unsupported market/competition claims with evidence-backed sizing. Current grade: yellow, promising workflow with material claim-risk.
+Proceed only after validating weak claims.
 "
 `;

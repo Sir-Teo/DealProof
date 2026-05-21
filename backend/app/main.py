@@ -1,0 +1,224 @@
+from __future__ import annotations
+
+import shutil
+import uuid
+from pathlib import Path
+
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
+
+from . import db
+from .graph import answer_question, run_diligence
+from .models import ChatAnswer, DealAnalysis, SourceMaterial
+from .parsers import fetch_url_text, infer_kind, parse_file, summarize
+from .scoring import memo_to_markdown
+
+ROOT = Path(__file__).resolve().parents[1]
+STORAGE = ROOT / "storage" / "deals"
+
+app = FastAPI(title="DealProof Backend")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class DealCreate(BaseModel):
+    company: str = "Untitled Deal"
+    tagline: str = "AI diligence target"
+    stage: str = "Active diligence"
+
+
+class UrlCreate(BaseModel):
+    url: str
+    name: str | None = None
+
+
+class ChatRequest(BaseModel):
+    question: str
+
+
+@app.on_event("startup")
+def startup() -> None:
+    db.init_db()
+    STORAGE.mkdir(parents=True, exist_ok=True)
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/deals")
+def create_deal(payload: DealCreate) -> DealAnalysis:
+    deal_id = f"deal-{uuid.uuid4().hex[:10]}"
+    db.create_deal(deal_id, payload.company, payload.tagline, payload.stage)
+    return db.get_deal(deal_id)
+
+
+@app.post("/deals/demo")
+def create_demo_deal() -> DealAnalysis:
+    deal_id = f"deal-{uuid.uuid4().hex[:10]}"
+    db.create_deal(deal_id, "CaviClear AI", "AI billing automation for dental clinics", "Seed, generated demo packet")
+    demo_materials = {
+        "CaviClear Seed Deck.txt": (
+            "Slide 4: We are the fastest-growing AI billing platform for dental clinics, growing 42% month over month. "
+            "Slide 5: Dental billing automation is a $6B annual opportunity across the US. "
+            "Slide 7: Clinics recover 18 hours per week and improve collections by 11%. "
+            "Slide 10: No direct competitor offers automated denial appeals for dental."
+        ),
+        "Founder Call Transcript.txt": (
+            "Founder: We have 37 signed clinics, 24 active, and 13 onboarding. "
+            "NRR is above 140%, but it is early because most customers signed in the last four months. "
+            "We do not touch diagnosis, only claims and billing workflows."
+        ),
+        "April Financial Snapshot.csv": (
+            "metric,jan,feb,mar,apr\nARR,82000,118000,167000,235000\nGross margin,71%,71%,70%,71%\n"
+            "Logo churn,0,0,1,0\nAverage contract value,9400,9400,9400,9400"
+        ),
+        "Website Capture.txt": (
+            "CaviClear automates eligibility checks, claim scrubbing, payment posting, and denial appeal drafting for dental practices. "
+            "Human review remains required before payer submission."
+        ),
+    }
+    for name, text in demo_materials.items():
+        add_text_material(deal_id, name, text, "seed")
+    return db.get_deal(deal_id)
+
+
+@app.get("/deals/{deal_id}")
+def get_deal(deal_id: str) -> DealAnalysis:
+    try:
+        return db.get_deal(deal_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Deal not found")
+
+
+@app.post("/deals/{deal_id}/materials")
+async def add_materials(
+    deal_id: str,
+    files: list[UploadFile] | None = File(default=None),
+    url: str | None = Form(default=None),
+) -> DealAnalysis:
+    ensure_deal(deal_id)
+    deal_dir = STORAGE / deal_id
+    deal_dir.mkdir(parents=True, exist_ok=True)
+    for upload in files or []:
+        if not upload.filename:
+            continue
+        safe_name = Path(upload.filename).name
+        path = deal_dir / f"{uuid.uuid4().hex[:8]}-{safe_name}"
+        with path.open("wb") as output:
+            shutil.copyfileobj(upload.file, output)
+        text = parse_file(path)
+        summary, excerpt = summarize(text)
+        db.add_material(
+            SourceMaterial(
+                id=f"mat-{uuid.uuid4().hex[:10]}",
+                deal_id=deal_id,
+                name=safe_name,
+                kind=infer_kind(safe_name),  # type: ignore[arg-type]
+                source_type="file",
+                path=str(path),
+                summary=summary,
+                excerpt=excerpt,
+                text=text,
+            )
+        )
+    if url:
+        text = await fetch_url_text(url)
+        summary, excerpt = summarize(text)
+        db.add_material(
+            SourceMaterial(
+                id=f"mat-{uuid.uuid4().hex[:10]}",
+                deal_id=deal_id,
+                name=url,
+                kind="url",
+                source_type="url",
+                url=url,
+                summary=summary,
+                excerpt=excerpt,
+                text=text,
+            )
+        )
+    return db.get_deal(deal_id)
+
+
+@app.post("/deals/{deal_id}/urls")
+async def add_url(deal_id: str, payload: UrlCreate) -> DealAnalysis:
+    ensure_deal(deal_id)
+    text = await fetch_url_text(payload.url)
+    summary, excerpt = summarize(text)
+    db.add_material(
+        SourceMaterial(
+            id=f"mat-{uuid.uuid4().hex[:10]}",
+            deal_id=deal_id,
+            name=payload.name or payload.url,
+            kind="url",
+            source_type="url",
+            url=payload.url,
+            summary=summary,
+            excerpt=excerpt,
+            text=text,
+        )
+    )
+    return db.get_deal(deal_id)
+
+
+@app.post("/deals/{deal_id}/analyze")
+def analyze_deal(deal_id: str) -> DealAnalysis:
+    ensure_deal(deal_id)
+    try:
+        run_diligence(deal_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return db.get_deal(deal_id)
+
+
+@app.post("/deals/{deal_id}/chat")
+def chat(deal_id: str, payload: ChatRequest) -> ChatAnswer:
+    ensure_deal(deal_id)
+    if not payload.question.strip():
+        raise HTTPException(status_code=400, detail="Question is required")
+    answer = answer_question(deal_id, payload.question.strip())
+    db.save_chat(f"chat-{uuid.uuid4().hex[:10]}", deal_id, payload.question.strip(), answer.model_dump())
+    return answer
+
+
+@app.get("/deals/{deal_id}/export-memo")
+def export_memo(deal_id: str) -> PlainTextResponse:
+    deal = ensure_deal(deal_id)
+    if not deal.memo:
+        raise HTTPException(status_code=404, detail="Memo has not been generated")
+    return PlainTextResponse(
+        memo_to_markdown(deal.memo),
+        headers={"Content-Disposition": 'attachment; filename="dealproof-red-team-memo.md"'},
+    )
+
+
+def add_text_material(deal_id: str, name: str, text: str, source_type: str) -> None:
+    summary, excerpt = summarize(text)
+    db.add_material(
+        SourceMaterial(
+            id=f"mat-{uuid.uuid4().hex[:10]}",
+            deal_id=deal_id,
+            name=name,
+            kind=infer_kind(name),  # type: ignore[arg-type]
+            source_type=source_type,  # type: ignore[arg-type]
+            summary=summary,
+            excerpt=excerpt,
+            text=text,
+        )
+    )
+
+
+def ensure_deal(deal_id: str) -> DealAnalysis:
+    try:
+        return db.get_deal(deal_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Deal not found")

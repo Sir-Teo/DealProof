@@ -42,22 +42,28 @@ export type RiskMemo = {
 
 export type SourceMaterial = {
   id: string;
+  deal_id?: string;
   name: string;
-  kind: "deck" | "transcript" | "financials" | "url";
+  kind: "deck" | "transcript" | "financials" | "url" | "document";
+  source_type?: "file" | "url" | "seed";
   pages?: number;
   summary: string;
   excerpt: string;
+  text?: string;
 };
 
 export type DealAnalysis = {
+  id: string;
   company: string;
   tagline: string;
   stage: string;
+  status: "draft" | "materials_loaded" | "running" | "completed" | "failed";
+  error?: string | null;
   materials: SourceMaterial[];
   claims: DealClaim[];
   evidence: EvidenceItem[];
-  memo: RiskMemo;
-  generatedAt: string;
+  memo: RiskMemo | null;
+  generatedAt: string | null;
 };
 
 export type ChatAnswer = {
