@@ -1,1 +1,1 @@
-"""DealProof Python backend."""
+"""Python backend package."""

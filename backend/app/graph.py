@@ -8,6 +8,7 @@ from typing import Callable, TypedDict
 from langgraph.graph import END, StateGraph
 
 from . import db
+from .config import AGENT_ROLE, APP_NAME
 from .llm import DeepSeekClient
 from .models import (
     ClaimExtraction,
@@ -260,7 +261,7 @@ def answer_question(deal_id: str, question: str):
     llm = DeepSeekClient()
     if llm.enabled:
         system = (
-            "You are DealProof, a VC diligence red-team analyst. Answer only from stored claims and evidence. "
+            f"You are {APP_NAME}, a {AGENT_ROLE}. Answer only from stored claims and evidence. "
             "If evidence is insufficient, say so directly. Return JSON only with answer, citations, confidence."
         )
         user = (

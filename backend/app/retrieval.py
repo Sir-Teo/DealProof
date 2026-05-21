@@ -4,6 +4,7 @@ import re
 import uuid
 
 from .models import DealClaim, EvidenceItem, MaterialChunk, SourceMaterial
+from .config import LOCAL_RETRIEVAL_CITATION
 
 
 def chunk_text(material: SourceMaterial, max_chars: int = 950) -> list[MaterialChunk]:
@@ -58,7 +59,7 @@ def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -
                 claimId=claim.id,
                 title="No matching supplied evidence found",
                 sourceType="derived",
-                citation="DealProof local retrieval",
+                citation=LOCAL_RETRIEVAL_CITATION,
                 snippet="No uploaded material or supplied URL chunk matched this claim closely enough to support it.",
                 stance="not_found",
                 reliability="medium",

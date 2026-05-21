@@ -1,0 +1,23 @@
+{
+  "company": "CaviClear AI",
+  "tagline": "AI billing automation for dental clinics",
+  "stage": "Seed, generated demo packet",
+  "materials": [
+    {
+      "name": "CaviClear Seed Deck.txt",
+      "text": "Slide 4: We are the fastest-growing AI billing platform for dental clinics, growing 42% month over month. Slide 5: Dental billing automation is a $6B annual opportunity across the US. Slide 7: Clinics recover 18 hours per week and improve collections by 11%. Slide 10: No direct competitor offers automated denial appeals for dental."
+    },
+    {
+      "name": "Founder Call Transcript.txt",
+      "text": "Founder: We have 37 signed clinics, 24 active, and 13 onboarding. NRR is above 140%, but it is early because most customers signed in the last four months. We do not touch diagnosis, only claims and billing workflows."
+    },
+    {
+      "name": "April Financial Snapshot.csv",
+      "text": "metric,jan,feb,mar,apr\nARR,82000,118000,167000,235000\nGross margin,71%,71%,70%,71%\nLogo churn,0,0,1,0\nAverage contract value,9400,9400,9400,9400"
+    },
+    {
+      "name": "Website Capture.txt",
+      "text": "CaviClear automates eligibility checks, claim scrubbing, payment posting, and denial appeal drafting for dental practices. Human review remains required before payer submission."
+    }
+  ]
+}

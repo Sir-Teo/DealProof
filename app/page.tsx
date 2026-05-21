@@ -6,14 +6,11 @@ import {
   ArrowDownToLine,
   Bot,
   CheckCircle2,
-  ChevronDown,
   CircleHelp,
-  FileSearch,
   FileText,
   Gauge,
   Link,
   Loader2,
-  MessageSquare,
   PanelRightOpen,
   Send,
   ShieldCheck,
@@ -21,11 +18,10 @@ import {
   XCircle
 } from "lucide-react";
 import clsx from "clsx";
+import { API_BASE_URL, DEFAULT_DEAL, UI_COPY } from "@/lib/app-config";
 import { evidenceForClaim, generateMemoMarkdown, scoreClaims } from "@/lib/scoring";
 import type { ChatAnswer, ClaimStatus, DealAnalysis, DealClaim, EvidenceItem } from "@/lib/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
-const sampleQuestions = ["Can we trust the ROI claim?", "What should we ask before IC?", "Is the no competitor claim supported?"];
 const emptyCounts = { supported: 0, weak: 0, contradicted: 0, missing: 0 };
 
 type AgentEventStatus = "running" | "done" | "error";
@@ -63,23 +59,20 @@ const statusIcon: Record<ClaimStatus, typeof CheckCircle2> = {
 
 export default function Home() {
   const [deal, setDeal] = useState<DealAnalysis | null>(null);
-  const [company, setCompany] = useState("CaviClear AI");
-  const [tagline, setTagline] = useState("AI billing automation for dental clinics");
   const [files, setFiles] = useState<FileList | null>(null);
   const [url, setUrl] = useState("");
-  const [question, setQuestion] = useState(sampleQuestions[0]);
+  const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<ChatAnswer | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
   const [activeArtifact, setActiveArtifact] = useState<ActiveArtifact>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [feedNotes, setFeedNotes] = useState<FeedNote[]>([
     {
       id: "welcome",
       role: "agent",
-      title: "Drop in a deal packet or seed the demo.",
-      body: "DealProof will extract claims, check evidence, draft the memo, and keep the agent stream visible while it works."
+      title: UI_COPY.welcomeTitle,
+      body: UI_COPY.welcomeBody
     }
   ]);
 
@@ -89,14 +82,13 @@ export default function Home() {
     activeArtifact?.type === "claim" ? claims.find((claim) => claim.id === activeArtifact.claimId) ?? claims[0] ?? null : claims[0] ?? null;
   const selectedEvidence = selectedClaim && deal ? evidenceForClaim(selectedClaim.id, deal.evidence) : [];
   const memoMarkdown = deal?.memo ? generateMemoMarkdown(deal.memo) : "";
-  const exportUrl = deal ? `${API_BASE}/deals/${deal.id}/export-memo` : "#";
+  const exportUrl = deal ? `${API_BASE_URL}/deals/${deal.id}/export-memo` : "#";
+  const suggestedQuestions = useMemo(() => buildSuggestedQuestions(claims), [claims]);
   const isAnalyzing = busy === "analyze";
   const canRunAgent = Boolean(deal?.materials.length) && !isAnalyzing;
-  const materialCount = deal?.materials.length ?? 0;
-  const evidenceCount = deal?.evidence.length ?? 0;
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${API_BASE}${path}`, init);
+    const response = await fetch(`${API_BASE_URL}${path}`, init);
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
       throw new Error(payload?.detail ?? `Request failed: ${response.status}`);
@@ -105,7 +97,7 @@ export default function Home() {
   }
 
   async function readAgentStream(response: Response, onEvent: (event: AgentEvent) => void) {
-    if (!response.body) throw new Error("Streaming is not available in this browser.");
+    if (!response.body) throw new Error(UI_COPY.streamingUnavailable);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -126,7 +118,7 @@ export default function Home() {
   }
 
   function addFeedNote(note: Omit<FeedNote, "id">) {
-    setFeedNotes((notes) => [...notes, { ...note, id: `${Date.now()}-${notes.length}` }]);
+    setFeedNotes((notes) => [...notes.filter((item) => item.id !== "welcome"), { ...note, id: `${Date.now()}-${notes.length}` }]);
   }
 
   async function ensureDeal() {
@@ -134,36 +126,13 @@ export default function Home() {
     const created = await api<DealAnalysis>("/deals", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ company, tagline, stage: "Active diligence" })
+      body: JSON.stringify({ company: DEFAULT_DEAL.fallbackCompany, tagline: DEFAULT_DEAL.tagline, stage: DEFAULT_DEAL.stage })
     });
     setDeal(created);
     setAgentEvents([]);
     setAnswer(null);
-    addFeedNote({ role: "user", title: `Created ${created.company}`, body: created.tagline });
+    addFeedNote({ role: "user", title: `${UI_COPY.createdDealPrefix} ${created.company}`, body: created.tagline });
     return created;
-  }
-
-  async function createDeal(event?: FormEvent) {
-    event?.preventDefault();
-    setBusy("create");
-    setError(null);
-    try {
-      const created = await api<DealAnalysis>("/deals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company, tagline, stage: "Active diligence" })
-      });
-      setDeal(created);
-      setAnswer(null);
-      setAgentEvents([]);
-      setActiveArtifact(null);
-      setSettingsOpen(false);
-      addFeedNote({ role: "user", title: `Created ${created.company}`, body: created.tagline });
-    } catch (exc) {
-      setError(String(exc instanceof Error ? exc.message : exc));
-    } finally {
-      setBusy(null);
-    }
   }
 
   async function loadDemoPacket() {
@@ -172,12 +141,10 @@ export default function Home() {
     try {
       const created = await api<DealAnalysis>("/deals/demo", { method: "POST" });
       setDeal(created);
-      setCompany(created.company);
-      setTagline(created.tagline);
       setAnswer(null);
       setAgentEvents([]);
       setActiveArtifact(null);
-      addFeedNote({ role: "user", title: "Seeded the CaviClear demo packet", body: `${created.materials.length} source materials loaded.` });
+      addFeedNote({ role: "user", title: `${UI_COPY.seededDealPrefix} ${created.company}`, body: `${created.materials.length} ${UI_COPY.sourceMaterialsLoaded}` });
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
     } finally {
@@ -199,7 +166,7 @@ export default function Home() {
       setDeal(updated);
       addFeedNote({
         role: "user",
-        title: "Added diligence material",
+        title: UI_COPY.addedMaterialTitle,
         body: `${Array.from(files ?? []).map((file) => file.name).join(", ") || url.trim()}`
       });
       setFiles(null);
@@ -218,9 +185,9 @@ export default function Home() {
     setAnswer(null);
     setAgentEvents([]);
     setActiveArtifact(null);
-    addFeedNote({ role: "user", title: "Run the diligence agent", body: `${deal.materials.length} materials queued for analysis.` });
+    addFeedNote({ role: "user", title: UI_COPY.runAgentTitle, body: `${deal.materials.length} ${UI_COPY.materialsQueued}` });
     try {
-      const response = await fetch(`${API_BASE}/deals/${deal.id}/analyze-stream`, { method: "POST" });
+      const response = await fetch(`${API_BASE_URL}/deals/${deal.id}/analyze-stream`, { method: "POST" });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         throw new Error(payload?.detail ?? `Request failed: ${response.status}`);
@@ -236,7 +203,7 @@ export default function Home() {
       setActiveArtifact({ type: "claims" });
       addFeedNote({
         role: "agent",
-        title: "Analysis complete",
+        title: UI_COPY.analysisCompleteTitle,
         body: `${analyzed.claims.length} claims, ${analyzed.evidence.length} evidence items, ${scoreClaims(analyzed.claims).grade.toUpperCase()} risk.`
       });
     } catch (exc) {
@@ -276,17 +243,12 @@ export default function Home() {
       <header className="appHeader">
         <div className="brandLine">
           <span className="brandMark">
-            <ShieldCheck size={18} />
+            <ShieldCheck size={16} />
           </span>
           <div>
-            <strong>DealProof</strong>
-            <span>{deal?.company ?? "No deal loaded"}</span>
+            <strong>{UI_COPY.appName}</strong>
+            <span>{deal?.company ?? UI_COPY.emptyDeal}</span>
           </div>
-        </div>
-        <div className="headerStats" aria-label="Deal status">
-          <span>{deal?.status.replace("_", " ") ?? "Backend required"}</span>
-          <span>{materialCount} materials</span>
-          <span>{claims.length ? `${scoring.grade.toUpperCase()} risk ${scoring.overall}` : "No analysis"}</span>
         </div>
       </header>
 
@@ -294,7 +256,7 @@ export default function Home() {
         <div className="messageFeed" aria-live="polite">
           {error && (
             <article className="systemBanner errorBanner">
-              <XCircle size={16} />
+              <XCircle size={15} />
               <span>{error}</span>
             </article>
           )}
@@ -304,6 +266,21 @@ export default function Home() {
           ))}
 
           {(isAnalyzing || agentEvents.length > 0) && <AgentActivity events={agentEvents} running={isAnalyzing} />}
+
+          {busy === "chat" && (
+            <article className="message agentMessage">
+              <Avatar status="running" />
+              <div className="messageBody">
+                <div className="messageMeta">
+                  <strong>{UI_COPY.appName}</strong>
+                  <span>{UI_COPY.answeringStatus}</span>
+                </div>
+                <p className="messageTitle">{UI_COPY.answeringTitle}</p>
+              </div>
+            </article>
+          )}
+
+          {answer && <AnswerMessage answer={answer} />}
 
           {deal && (
             <ResultArtifacts
@@ -319,89 +296,63 @@ export default function Home() {
               onSelectClaim={(claim) => setActiveArtifact({ type: "claim", claimId: claim.id })}
             />
           )}
-
-          {busy === "chat" && (
-            <article className="message agentMessage">
-              <Avatar status="running" />
-              <div className="messageBody">
-                <div className="messageMeta">
-                  <strong>DealProof</strong>
-                  <span>Answering</span>
-                </div>
-                <p className="messageTitle">Checking stored claims and evidence.</p>
-              </div>
-            </article>
-          )}
-
-          {answer && <AnswerMessage answer={answer} />}
         </div>
       </section>
 
       <form className="composer" onSubmit={(event) => { event.preventDefault(); void askQuestion(); }}>
         <div className="composerInner">
-          <button className="ghostButton" type="button" onClick={() => setSettingsOpen((open) => !open)} aria-expanded={settingsOpen}>
-            Deal settings
-            <ChevronDown size={15} />
-          </button>
-          {settingsOpen && (
-            <div className="settingsPanel">
-              <label>
-                Company
-                <input value={company} onChange={(event) => setCompany(event.target.value)} />
-              </label>
-              <label>
-                Tagline
-                <input value={tagline} onChange={(event) => setTagline(event.target.value)} />
-              </label>
-              <button className="secondaryButton" type="button" onClick={() => void createDeal()} disabled={busy === "create"}>
-                Create Deal
-              </button>
+          {suggestedQuestions.length > 0 && (
+            <div className="sampleQuestions">
+              {suggestedQuestions.map((item) => (
+                <button key={item} type="button" onClick={() => void askQuestion(item)} disabled={!deal?.claims.length}>
+                  {item}
+                </button>
+              ))}
             </div>
           )}
-
-          <div className="sourceRow">
-            <button className="secondaryButton" type="button" onClick={() => void loadDemoPacket()} disabled={busy === "demo"}>
-              {busy === "demo" ? <Loader2 className="spin" size={16} /> : <Upload size={16} />}
-              Seed demo
-            </button>
-            <label className="fileButton">
-              <Upload size={16} />
-              Upload
+          <div className="composerCard">
+            <div className="promptArea">
               <input
-                type="file"
-                multiple
-                accept=".pdf,.txt,.csv,.docx"
-                onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(event.target.files)}
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                placeholder={UI_COPY.questionPlaceholder}
+                disabled={!deal}
               />
-            </label>
-            <div className="urlField">
-              <Link size={15} />
-              <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="Add URL" />
-            </div>
-            <button className="secondaryButton" type="button" onClick={() => void uploadMaterials()} disabled={busy === "upload" || (!files?.length && !url.trim())}>
-              {busy === "upload" ? <Loader2 className="spin" size={16} /> : <FileText size={16} />}
-              Add
-            </button>
-            <button className="primaryButton" type="button" onClick={() => void analyzeDeal()} disabled={!canRunAgent}>
-              {isAnalyzing ? <Loader2 className="spin" size={16} /> : <Bot size={16} />}
-              Run agent
-            </button>
-          </div>
-
-          <div className="promptRow">
-            <MessageSquare size={17} />
-            <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about the deal evidence..." disabled={!deal} />
-            <button className="sendButton" type="submit" disabled={!deal || busy === "chat"}>
-              {busy === "chat" ? <Loader2 className="spin" size={16} /> : <Send size={16} />}
-              <span>Ask</span>
-            </button>
-          </div>
-          <div className="sampleQuestions">
-            {sampleQuestions.map((item) => (
-              <button key={item} type="button" onClick={() => void askQuestion(item)} disabled={!deal?.claims.length}>
-                {item}
+              <button className="sendButton" type="submit" disabled={!deal || busy === "chat"}>
+                {busy === "chat" ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
+                {UI_COPY.askButton}
               </button>
-            ))}
+            </div>
+            <div className="composerDivider" />
+            <div className="composerActions">
+              <label className="secondaryButton fileButton">
+                <Upload size={14} />
+                {UI_COPY.uploadButton}
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.txt,.csv,.docx"
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(event.target.files)}
+                />
+              </label>
+              <div className="urlField">
+                <Link size={13} />
+                <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={UI_COPY.addUrlPlaceholder} />
+              </div>
+              <button className="secondaryButton" type="button" onClick={() => void uploadMaterials()} disabled={busy === "upload" || (!files?.length && !url.trim())}>
+                {busy === "upload" ? <Loader2 className="spin" size={14} /> : <FileText size={14} />}
+                {UI_COPY.addMaterialButton}
+              </button>
+              <div className="spacer" />
+              <button className="secondaryButton" type="button" onClick={() => void loadDemoPacket()} disabled={busy === "demo"}>
+                {busy === "demo" ? <Loader2 className="spin" size={14} /> : null}
+                {UI_COPY.seedDemoButton}
+              </button>
+              <button className="primaryButton" type="button" onClick={() => void analyzeDeal()} disabled={!canRunAgent}>
+                {isAnalyzing ? <Loader2 className="spin" size={14} /> : <Bot size={14} />}
+                {UI_COPY.runAgentButton}
+              </button>
+            </div>
           </div>
         </div>
       </form>
@@ -412,11 +363,13 @@ export default function Home() {
 function ChatBubble({ role, title, body }: Omit<FeedNote, "id">) {
   return (
     <article className={clsx("message", role === "user" ? "userMessage" : "agentMessage")}>
-      <Avatar status={role === "user" ? "user" : "done"} />
+      {role === "agent" && <Avatar status="done" />}
       <div className="messageBody">
-        <div className="messageMeta">
-          <strong>{role === "user" ? "You" : "DealProof"}</strong>
-        </div>
+        {role === "agent" && (
+          <div className="messageMeta">
+            <strong>{UI_COPY.appName}</strong>
+          </div>
+        )}
         <p className="messageTitle">{title}</p>
         {body && <p className="messageCopy">{body}</p>}
       </div>
@@ -427,7 +380,7 @@ function ChatBubble({ role, title, body }: Omit<FeedNote, "id">) {
 function Avatar({ status }: { status: AgentEventStatus | "user" }) {
   return (
     <div className={clsx("avatar", status)}>
-      {status === "running" ? <Loader2 className="spin" size={15} /> : status === "error" ? <XCircle size={15} /> : status === "user" ? <MessageSquare size={15} /> : <Bot size={15} />}
+      {status === "running" ? <Loader2 className="spin" size={14} /> : status === "error" ? <XCircle size={14} /> : status === "user" ? null : <Bot size={14} />}
     </div>
   );
 }
@@ -439,18 +392,18 @@ function AgentActivity({ events, running }: { events: AgentEvent[]; running: boo
   const tools = groupAgentTools(events);
   const visibleTools = tools.slice(running ? -4 : -7);
   const activityStatus = latest?.status ?? (running ? "running" : "done");
-  const activityLabel = latestProgress?.label ?? "Preparing analysis";
+  const activityLabel = latestProgress?.label ?? UI_COPY.preparingAnalysis;
 
   return (
     <article className="message agentMessage">
       <Avatar status={activityStatus} />
       <div className="messageBody agentStream">
         <div className="messageMeta">
-          <strong>DealProof</strong>
-          <span>{activityStatus === "running" ? "Working" : activityStatus === "error" ? "Stopped" : "Finished"}</span>
+          <strong>{UI_COPY.appName}</strong>
+          <span>{activityStatus === "running" ? UI_COPY.workingStatus : activityStatus === "error" ? UI_COPY.stoppedStatus : UI_COPY.finishedStatus}</span>
         </div>
         <p className="messageTitle">{activityLabel}</p>
-        <small>{latestProgress ? formatAgentStats(latestProgress) : "Working"}</small>
+        <small>{latestProgress ? formatAgentStats(latestProgress) : UI_COPY.working}</small>
         {visibleTools.length > 0 && (
           <div className="toolStack">
             {visibleTools.map((tool) => (
@@ -492,12 +445,12 @@ function ToolCallRow({ tool }: { tool: AgentToolRun }) {
       </summary>
       <dl>
         <div>
-          <dt>Input</dt>
-          <dd>{tool.input ?? "state"}</dd>
+          <dt>{UI_COPY.inputLabel}</dt>
+          <dd>{tool.input ?? UI_COPY.defaultToolInput}</dd>
         </div>
         <div>
-          <dt>Output</dt>
-          <dd>{tool.output ?? "Waiting for result"}</dd>
+          <dt>{UI_COPY.outputLabel}</dt>
+          <dd>{tool.output ?? UI_COPY.waitingForResult}</dd>
         </div>
       </dl>
     </details>
@@ -528,50 +481,33 @@ function ResultArtifacts({
   onSelectClaim: (claim: DealClaim) => void;
 }) {
   const claims = deal.claims;
-  if (!deal.materials.length) {
-    return (
-      <article className="artifactCard">
-        <div className="artifactHeader">
-          <FileText size={17} />
-          <strong>No materials yet</strong>
-        </div>
-        <p>Add files, a URL, or seed the demo packet to start the diligence run.</p>
-      </article>
-    );
-  }
+  if (!deal.materials.length) return null;
 
   return (
-    <article className="message agentMessage">
-      <Avatar status="done" />
-      <div className="messageBody">
-        <div className="messageMeta">
-          <strong>Artifacts</strong>
-          <span>{deal.materials.length} materials / {claims.length} claims / {deal.evidence.length} evidence</span>
-        </div>
-        <div className="artifactGrid">
-          <button className="artifactCard artifactButton" type="button" onClick={onOpenClaims} disabled={!claims.length}>
-            <div className="artifactHeader">
-              <Gauge size={17} />
-              <strong>Claim ledger</strong>
-              <span>{claims.length || "Pending"}</span>
-            </div>
-            <p>{claims.length ? `${scoring.counts.weak + scoring.counts.contradicted + scoring.counts.missing} exceptions need review.` : "Run the agent to extract verifiable claims."}</p>
-          </button>
-          <button className="artifactCard artifactButton" type="button" onClick={onOpenMemo} disabled={!deal.memo}>
-            <div className="artifactHeader">
-              <FileText size={17} />
-              <strong>Risk memo</strong>
-              <span>{deal.memo?.overallGrade ?? "Pending"}</span>
-            </div>
-            <p>{deal.memo ? deal.memo.icRecommendation : "The memo appears after analysis completes."}</p>
-          </button>
-        </div>
-
-        {activeArtifact?.type === "claims" && <ClaimsArtifact claims={claims} evidence={deal.evidence} onSelectClaim={onSelectClaim} />}
-        {activeArtifact?.type === "claim" && selectedClaim && <EvidenceArtifact claim={selectedClaim} evidence={selectedEvidence} />}
-        {activeArtifact?.type === "memo" && deal.memo && <MemoArtifact deal={deal} memoMarkdown={memoMarkdown} exportUrl={exportUrl} />}
+    <div>
+      <div className="artifactGrid">
+        <button className="artifactCard artifactButton" type="button" onClick={onOpenClaims} disabled={!claims.length}>
+          <div className="artifactHeader">
+            <Gauge size={16} />
+            <strong>{UI_COPY.claimLedgerTitle}</strong>
+            <span>{claims.length || UI_COPY.pending}</span>
+          </div>
+          <p>{claims.length ? `${scoring.counts.weak + scoring.counts.contradicted + scoring.counts.missing} ${UI_COPY.exceptionsNeedReview}` : UI_COPY.claimLedgerPending}</p>
+        </button>
+        <button className="artifactCard artifactButton" type="button" onClick={onOpenMemo} disabled={!deal.memo}>
+          <div className="artifactHeader">
+            <FileText size={16} />
+            <strong>{UI_COPY.riskMemoTitle}</strong>
+            <span>{deal.memo?.overallGrade ?? UI_COPY.pending}</span>
+          </div>
+          <p>{deal.memo ? deal.memo.icRecommendation : UI_COPY.riskMemoPending}</p>
+        </button>
       </div>
-    </article>
+
+      {activeArtifact?.type === "claims" && <ClaimsArtifact claims={claims} evidence={deal.evidence} onSelectClaim={onSelectClaim} />}
+      {activeArtifact?.type === "claim" && selectedClaim && <EvidenceArtifact claim={selectedClaim} evidence={selectedEvidence} />}
+      {activeArtifact?.type === "memo" && deal.memo && <MemoArtifact deal={deal} memoMarkdown={memoMarkdown} exportUrl={exportUrl} />}
+    </div>
   );
 }
 
@@ -581,7 +517,7 @@ function ClaimsArtifact({ claims, evidence, onSelectClaim }: { claims: DealClaim
     <section className="artifactPanel">
       <div className="artifactPanelHeader">
         <div>
-          <p className="eyebrow">Claim Ledger</p>
+          <p className="eyebrow">{UI_COPY.claimsEyebrow}</p>
           <h2>{claims.length} diligence claims</h2>
         </div>
       </div>
@@ -598,8 +534,8 @@ function ClaimsArtifact({ claims, evidence, onSelectClaim }: { claims: DealClaim
                   <button key={claim.id} type="button" className="claimRow" onClick={() => onSelectClaim(claim)}>
                     <StatusPill status={claim.status} />
                     <span>{claim.text}</span>
-                    <small>{claim.importance} / {count} evidence</small>
-                    <PanelRightOpen size={15} />
+                    <small>{claim.importance} / {count} {UI_COPY.evidenceLabel}</small>
+                    <PanelRightOpen size={14} />
                   </button>
                 );
               })}
@@ -616,13 +552,13 @@ function EvidenceArtifact({ claim, evidence }: { claim: DealClaim; evidence: Evi
     <section className="artifactPanel">
       <div className="artifactPanelHeader">
         <div>
-          <p className="eyebrow">Evidence Drawer</p>
+          <p className="eyebrow">{UI_COPY.evidenceEyebrow}</p>
           <h2>{claim.text}</h2>
         </div>
         <StatusPill status={claim.status} />
       </div>
       <div className="rationale">
-        <AlertTriangle size={17} />
+        <AlertTriangle size={16} />
         <p>{claim.riskRationale}</p>
       </div>
       <div className="evidenceList">
@@ -651,23 +587,23 @@ function MemoArtifact({ deal, memoMarkdown, exportUrl }: { deal: DealAnalysis; m
     <section className="artifactPanel memoArtifact">
       <div className="artifactPanelHeader">
         <div>
-          <p className="eyebrow">IC Artifact</p>
-          <h2>Partner-ready red team memo</h2>
+          <p className="eyebrow">{UI_COPY.memoEyebrow}</p>
+          <h2>{UI_COPY.memoTitle}</h2>
         </div>
         <a className="primaryButton" href={exportUrl}>
-          <ArrowDownToLine size={16} />
-          Export Markdown
+          <ArrowDownToLine size={14} />
+          {UI_COPY.exportMarkdownButton}
         </a>
       </div>
       <p className="memoQuestion">{deal.memo.investmentQuestion}</p>
       <div className="memoColumns">
-        <MemoSection title="Key strengths" items={deal.memo.keyStrengths} />
-        <MemoSection title="Material risks" items={deal.memo.materialRisks} danger />
-        <MemoSection title="Questions before IC" items={deal.memo.followUpQuestions} />
+        <MemoSection title={UI_COPY.keyStrengthsTitle} items={deal.memo.keyStrengths} />
+        <MemoSection title={UI_COPY.materialRisksTitle} items={deal.memo.materialRisks} danger />
+        <MemoSection title={UI_COPY.followUpQuestionsTitle} items={deal.memo.followUpQuestions} />
       </div>
       <div className="recommendation">{deal.memo.icRecommendation}</div>
       <details className="markdownDetails">
-        <summary>Markdown preview</summary>
+        <summary>{UI_COPY.markdownPreviewTitle}</summary>
         <pre>{memoMarkdown}</pre>
       </details>
     </section>
@@ -680,7 +616,7 @@ function AnswerMessage({ answer }: { answer: ChatAnswer }) {
       <Avatar status="done" />
       <div className="messageBody answerBox">
         <div className="messageMeta">
-          <strong>DealProof answer</strong>
+          <strong>{UI_COPY.answerTitle}</strong>
           <span>{answer.confidence} confidence</span>
         </div>
         <p className="messageCopy">{answer.answer}</p>
@@ -698,7 +634,7 @@ function StatusPill({ status }: { status: ClaimStatus }) {
   const Icon = statusIcon[status];
   return (
     <span className={clsx("statusPill", status)}>
-      <Icon size={14} />
+      <Icon size={12} />
       {status}
     </span>
   );
@@ -726,6 +662,16 @@ function formatAgentStats(event: AgentEvent) {
     event.claims !== undefined && `${event.claims} claims`,
     event.evidence !== undefined && `${event.evidence} evidence`
   ].filter(Boolean);
-  if (event.status === "error") return "Needs attention";
-  return stats.join(" / ") || (event.status === "done" ? "Complete" : "Working");
+  if (event.status === "error") return UI_COPY.needsAttention;
+  return stats.join(" / ") || (event.status === "done" ? UI_COPY.complete : UI_COPY.working);
+}
+
+function buildSuggestedQuestions(claims: DealClaim[]) {
+  const riskyClaims = claims.filter((claim) => claim.status !== "supported");
+  const candidates = riskyClaims.length ? riskyClaims : claims;
+  return Array.from(new Set(candidates.map((claim) => `What evidence supports the ${formatClaimCategory(claim.category)} claim?`))).slice(0, 3);
+}
+
+function formatClaimCategory(category: DealClaim["category"]) {
+  return category.replaceAll("_", " ");
 }

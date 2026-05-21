@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 
 from .models import DealClaim, EvidenceItem, RiskMemo
+from .config import MEMO_TITLE
 
 STATUS_SCORE = {"supported": 100, "weak": 62, "missing": 38, "contradicted": 18}
 IMPORTANCE_WEIGHT = {"high": 1.4, "medium": 1.0, "low": 0.7}
@@ -40,7 +41,7 @@ def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> D
 
 
 def memo_to_markdown(memo: RiskMemo) -> str:
-    return f"""# DealProof Red Team Memo: {memo.company}
+    return f"""# {MEMO_TITLE}: {memo.company}
 
 **Overall grade:** {memo.overallGrade.upper()}
 

@@ -13,6 +13,17 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import db
+from .config import (
+    API_TITLE,
+    ANALYSIS_COMPLETE_LABEL,
+    DEFAULT_COMPANY,
+    DEFAULT_STAGE,
+    DEFAULT_TAGLINE,
+    DEMO_PACKET_PATH,
+    EXPORT_MEMO_FILENAME,
+    LOCAL_FRONTEND_ORIGIN_REGEX,
+    LOCAL_FRONTEND_ORIGINS,
+)
 from .graph import answer_question, run_diligence
 from .models import ChatAnswer, DealAnalysis, SourceMaterial
 from .parsers import fetch_url_text, infer_kind, parse_file, summarize
@@ -21,11 +32,11 @@ from .scoring import memo_to_markdown
 ROOT = Path(__file__).resolve().parents[1]
 STORAGE = ROOT / "storage" / "deals"
 
-app = FastAPI(title="DealProof Backend")
+app = FastAPI(title=API_TITLE)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],
-    allow_origin_regex=r"http://(127\.0\.0\.1|localhost):\d+",
+    allow_origins=list(LOCAL_FRONTEND_ORIGINS),
+    allow_origin_regex=LOCAL_FRONTEND_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,9 +44,9 @@ app.add_middleware(
 
 
 class DealCreate(BaseModel):
-    company: str = "Untitled Deal"
-    tagline: str = "AI diligence target"
-    stage: str = "Active diligence"
+    company: str = DEFAULT_COMPANY
+    tagline: str = DEFAULT_TAGLINE
+    stage: str = DEFAULT_STAGE
 
 
 class UrlCreate(BaseModel):
@@ -68,31 +79,15 @@ def create_deal(payload: DealCreate) -> DealAnalysis:
 @app.post("/deals/demo")
 def create_demo_deal() -> DealAnalysis:
     deal_id = f"deal-{uuid.uuid4().hex[:10]}"
-    db.create_deal(deal_id, "CaviClear AI", "AI billing automation for dental clinics", "Seed, generated demo packet")
-    demo_materials = {
-        "CaviClear Seed Deck.txt": (
-            "Slide 4: We are the fastest-growing AI billing platform for dental clinics, growing 42% month over month. "
-            "Slide 5: Dental billing automation is a $6B annual opportunity across the US. "
-            "Slide 7: Clinics recover 18 hours per week and improve collections by 11%. "
-            "Slide 10: No direct competitor offers automated denial appeals for dental."
-        ),
-        "Founder Call Transcript.txt": (
-            "Founder: We have 37 signed clinics, 24 active, and 13 onboarding. "
-            "NRR is above 140%, but it is early because most customers signed in the last four months. "
-            "We do not touch diagnosis, only claims and billing workflows."
-        ),
-        "April Financial Snapshot.csv": (
-            "metric,jan,feb,mar,apr\nARR,82000,118000,167000,235000\nGross margin,71%,71%,70%,71%\n"
-            "Logo churn,0,0,1,0\nAverage contract value,9400,9400,9400,9400"
-        ),
-        "Website Capture.txt": (
-            "CaviClear automates eligibility checks, claim scrubbing, payment posting, and denial appeal drafting for dental practices. "
-            "Human review remains required before payer submission."
-        ),
-    }
-    for name, text in demo_materials.items():
-        add_text_material(deal_id, name, text, "seed")
+    packet = load_demo_packet()
+    db.create_deal(deal_id, packet["company"], packet["tagline"], packet["stage"])
+    for material in packet["materials"]:
+        add_text_material(deal_id, material["name"], material["text"], "seed")
     return db.get_deal(deal_id)
+
+
+def load_demo_packet() -> dict:
+    return json.loads(DEMO_PACKET_PATH.read_text())
 
 
 @app.get("/deals/{deal_id}")
@@ -205,7 +200,7 @@ def analyze_deal_stream(deal_id: str) -> StreamingResponse:
                     "run_complete",
                     "agent",
                     {
-                        "label": "Analysis complete",
+                        "label": ANALYSIS_COMPLETE_LABEL,
                         "claims": len(deal.claims),
                         "evidence": len(deal.evidence),
                     },
@@ -243,7 +238,7 @@ def export_memo(deal_id: str) -> PlainTextResponse:
         raise HTTPException(status_code=404, detail="Memo has not been generated")
     return PlainTextResponse(
         memo_to_markdown(deal.memo),
-        headers={"Content-Disposition": 'attachment; filename="dealproof-red-team-memo.md"'},
+        headers={"Content-Disposition": f'attachment; filename="{EXPORT_MEMO_FILENAME}"'},
     )
 
 

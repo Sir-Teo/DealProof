@@ -1,4 +1,5 @@
 import type { ClaimStatus, DealClaim, EvidenceItem, RiskMemo } from "@/lib/types";
+import { UI_COPY } from "@/lib/app-config";
 
 const statusWeights: Record<ClaimStatus, number> = {
   supported: 100,
@@ -46,7 +47,7 @@ export function evidenceForClaim(claimId: string, evidence: EvidenceItem[]) {
 }
 
 export function generateMemoMarkdown(memo: RiskMemo) {
-  return `# DealProof Red Team Memo: ${memo.company}
+  return `# ${UI_COPY.appName} Red Team Memo: ${memo.company}
 
 **Overall grade:** ${memo.overallGrade.toUpperCase()}
 

@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .config import DEFAULT_STAGE, DEFAULT_TAGLINE
+
 ClaimStatus = Literal["supported", "weak", "contradicted", "missing"]
 ClaimCategory = Literal[
     "market",
@@ -74,8 +76,8 @@ class RiskMemo(BaseModel):
 class DealAnalysis(BaseModel):
     id: str
     company: str
-    tagline: str = "AI diligence target"
-    stage: str = "Active diligence"
+    tagline: str = DEFAULT_TAGLINE
+    stage: str = DEFAULT_STAGE
     status: Literal["draft", "materials_loaded", "running", "completed", "failed"]
     error: str | None = None
     generatedAt: str | None = None

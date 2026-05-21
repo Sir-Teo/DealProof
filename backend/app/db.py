@@ -5,11 +5,12 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from .config import DATABASE_FILENAME, DEFAULT_STAGE, DEFAULT_TAGLINE
 from .models import DealAnalysis, DealClaim, EvidenceItem, RiskMemo, SourceMaterial
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
-DB_PATH = DATA_DIR / "dealproof.db"
+DB_PATH = DATA_DIR / DATABASE_FILENAME
 
 
 def connect() -> sqlite3.Connection:
@@ -22,12 +23,12 @@ def connect() -> sqlite3.Connection:
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(
-            """
+            f"""
             create table if not exists deals (
               id text primary key,
               company text not null,
-              tagline text not null default 'AI diligence target',
-              stage text not null default 'Active diligence',
+              tagline text not null default '{DEFAULT_TAGLINE}',
+              stage text not null default '{DEFAULT_STAGE}',
               status text not null default 'draft',
               error text,
               generated_at text,
@@ -91,7 +92,7 @@ def init_db() -> None:
         )
 
 
-def create_deal(deal_id: str, company: str, tagline: str = "AI diligence target", stage: str = "Active diligence") -> None:
+def create_deal(deal_id: str, company: str, tagline: str = DEFAULT_TAGLINE, stage: str = DEFAULT_STAGE) -> None:
     with connect() as conn:
         conn.execute(
             "insert into deals (id, company, tagline, stage, status) values (?, ?, ?, ?, 'draft')",
