@@ -12,6 +12,7 @@ import {
   Link,
   Loader2,
   PanelRightOpen,
+  Paperclip,
   Send,
   ShieldCheck,
   Upload,
@@ -67,6 +68,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
   const [activeArtifact, setActiveArtifact] = useState<ActiveArtifact>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
   const [feedNotes, setFeedNotes] = useState<FeedNote[]>([
     {
       id: "welcome",
@@ -245,10 +247,7 @@ export default function Home() {
           <span className="brandMark">
             <ShieldCheck size={16} />
           </span>
-          <div>
-            <strong>{UI_COPY.appName}</strong>
-            <span>{deal?.company ?? UI_COPY.emptyDeal}</span>
-          </div>
+          <strong>{UI_COPY.appName}</strong>
         </div>
       </header>
 
@@ -273,7 +272,6 @@ export default function Home() {
               <div className="messageBody">
                 <div className="messageMeta">
                   <strong>{UI_COPY.appName}</strong>
-                  <span>{UI_COPY.answeringStatus}</span>
                 </div>
                 <p className="messageTitle">{UI_COPY.answeringTitle}</p>
               </div>
@@ -320,36 +318,47 @@ export default function Home() {
               />
               <button className="sendButton" type="submit" disabled={!deal || busy === "chat"}>
                 {busy === "chat" ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
-                {UI_COPY.askButton}
               </button>
             </div>
             <div className="composerDivider" />
-            <div className="composerActions">
-              <label className="secondaryButton fileButton">
-                <Upload size={14} />
-                {UI_COPY.uploadButton}
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,.txt,.csv,.docx"
-                  onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(event.target.files)}
-                />
-              </label>
-              <div className="urlField">
-                <Link size={13} />
-                <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={UI_COPY.addUrlPlaceholder} />
+            {attachOpen && (
+              <div className="attachDrawer">
+                <label className="secondaryButton fileButton">
+                  <Upload size={13} />
+                  {UI_COPY.uploadButton}
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.txt,.csv,.docx"
+                    onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(event.target.files)}
+                  />
+                </label>
+                <div className="urlField">
+                  <Link size={12} />
+                  <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={UI_COPY.addUrlPlaceholder} />
+                </div>
+                <button className="secondaryButton" type="button" onClick={() => void uploadMaterials()} disabled={busy === "upload" || (!files?.length && !url.trim())}>
+                  {busy === "upload" ? <Loader2 className="spin" size={13} /> : <FileText size={13} />}
+                  {UI_COPY.addMaterialButton}
+                </button>
               </div>
-              <button className="secondaryButton" type="button" onClick={() => void uploadMaterials()} disabled={busy === "upload" || (!files?.length && !url.trim())}>
-                {busy === "upload" ? <Loader2 className="spin" size={14} /> : <FileText size={14} />}
-                {UI_COPY.addMaterialButton}
+            )}
+            <div className="composerActions">
+              <button
+                className={clsx("iconButton", (files?.length || url) && "iconButton--active")}
+                type="button"
+                onClick={() => setAttachOpen((o) => !o)}
+                title="Attach files or URL"
+              >
+                <Paperclip size={15} />
               </button>
-              <div className="spacer" />
               <button className="secondaryButton" type="button" onClick={() => void loadDemoPacket()} disabled={busy === "demo"}>
-                {busy === "demo" ? <Loader2 className="spin" size={14} /> : null}
+                {busy === "demo" ? <Loader2 className="spin" size={13} /> : null}
                 {UI_COPY.seedDemoButton}
               </button>
+              <div className="spacer" />
               <button className="primaryButton" type="button" onClick={() => void analyzeDeal()} disabled={!canRunAgent}>
-                {isAnalyzing ? <Loader2 className="spin" size={14} /> : <Bot size={14} />}
+                {isAnalyzing ? <Loader2 className="spin" size={13} /> : <Bot size={13} />}
                 {UI_COPY.runAgentButton}
               </button>
             </div>
@@ -400,7 +409,6 @@ function AgentActivity({ events, running }: { events: AgentEvent[]; running: boo
       <div className="messageBody agentStream">
         <div className="messageMeta">
           <strong>{UI_COPY.appName}</strong>
-          <span>{activityStatus === "running" ? UI_COPY.workingStatus : activityStatus === "error" ? UI_COPY.stoppedStatus : UI_COPY.finishedStatus}</span>
         </div>
         <p className="messageTitle">{activityLabel}</p>
         <small>{latestProgress ? formatAgentStats(latestProgress) : UI_COPY.working}</small>
@@ -516,10 +524,7 @@ function ClaimsArtifact({ claims, evidence, onSelectClaim }: { claims: DealClaim
   return (
     <section className="artifactPanel">
       <div className="artifactPanelHeader">
-        <div>
-          <p className="eyebrow">{UI_COPY.claimsEyebrow}</p>
-          <h2>{claims.length} diligence claims</h2>
-        </div>
+        <h2>{claims.length} diligence claims</h2>
       </div>
       <div className="claimGroups">
         {groups.map((status) => {
@@ -551,10 +556,7 @@ function EvidenceArtifact({ claim, evidence }: { claim: DealClaim; evidence: Evi
   return (
     <section className="artifactPanel">
       <div className="artifactPanelHeader">
-        <div>
-          <p className="eyebrow">{UI_COPY.evidenceEyebrow}</p>
-          <h2>{claim.text}</h2>
-        </div>
+        <h2>{claim.text}</h2>
         <StatusPill status={claim.status} />
       </div>
       <div className="rationale">
@@ -586,10 +588,7 @@ function MemoArtifact({ deal, memoMarkdown, exportUrl }: { deal: DealAnalysis; m
   return (
     <section className="artifactPanel memoArtifact">
       <div className="artifactPanelHeader">
-        <div>
-          <p className="eyebrow">{UI_COPY.memoEyebrow}</p>
-          <h2>{UI_COPY.memoTitle}</h2>
-        </div>
+        <h2>{UI_COPY.memoTitle}</h2>
         <a className="primaryButton" href={exportUrl}>
           <ArrowDownToLine size={14} />
           {UI_COPY.exportMarkdownButton}
@@ -616,8 +615,7 @@ function AnswerMessage({ answer }: { answer: ChatAnswer }) {
       <Avatar status="done" />
       <div className="messageBody answerBox">
         <div className="messageMeta">
-          <strong>{UI_COPY.answerTitle}</strong>
-          <span>{answer.confidence} confidence</span>
+          <strong>{UI_COPY.appName}</strong>
         </div>
         <p className="messageCopy">{answer.answer}</p>
         <footer>
