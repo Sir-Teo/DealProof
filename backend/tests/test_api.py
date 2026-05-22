@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import DealClaim
+from app.models import DealClaim, RiskMemo
 from app.scoring import score_claims
 
 
@@ -18,6 +18,32 @@ def test_demo_deal_can_be_created_and_loaded():
         loaded = client.get(f"/deals/{deal['id']}")
         assert loaded.status_code == 200
         assert len(loaded.json()["materials"]) >= 3
+
+
+def test_risk_memo_accepts_structured_evidence_map_items():
+    memo = RiskMemo.model_validate(
+        {
+            "company": "CaviClear AI",
+            "overallGrade": "yellow",
+            "investmentQuestion": "Should we invest?",
+            "keyStrengths": ["Initial traction"],
+            "materialRisks": ["Founder-supplied metrics"],
+            "followUpQuestions": ["Can ARR be verified?"],
+            "icRecommendation": "Continue only with validation.",
+            "evidenceMap": [
+                {
+                    "claim": "ARR reached $235k in April.",
+                    "strength": "weak",
+                    "confidence": "low",
+                    "status": "Needs independent verification",
+                }
+            ],
+        }
+    )
+
+    assert memo.evidenceMap == [
+        "claim: ARR reached $235k in April.; strength: weak; confidence: low; status: Needs independent verification"
+    ]
 
 
 def test_analysis_stream_emits_progress_events(monkeypatch):

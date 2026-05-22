@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .config import DEFAULT_STAGE, DEFAULT_TAGLINE
 
@@ -114,6 +114,33 @@ class RiskMemo(BaseModel):
     keyRisks: list[str] = Field(default_factory=list)
     nextDiligenceRequests: list[str] = Field(default_factory=list)
     decisionDrivers: list[str] = Field(default_factory=list)
+
+    @field_validator(
+        "keyStrengths",
+        "materialRisks",
+        "followUpQuestions",
+        "evidenceMap",
+        "keyRisks",
+        "nextDiligenceRequests",
+        "decisionDrivers",
+        mode="before",
+    )
+    @classmethod
+    def normalize_string_list(cls, value):
+        if value is None:
+            return []
+        items = value if isinstance(value, list) else [value]
+        return [stringify_memo_item(item) for item in items]
+
+
+def stringify_memo_item(item) -> str:
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        return "; ".join(f"{key}: {stringify_memo_item(value)}" for key, value in item.items() if value not in (None, "", []))
+    if isinstance(item, list):
+        return ", ".join(stringify_memo_item(value) for value in item)
+    return str(item)
 
 
 class QualityReview(BaseModel):
