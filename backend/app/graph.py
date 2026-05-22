@@ -559,13 +559,15 @@ def answer_question(deal_id: str, question: str, chat_history=None):
             pass
     weak = [claim for claim in claims if claim.status != "supported"]
     if weak:
-        answer = "The evidence is not strong enough to fully trust this yet. " + " ".join(
-            f"{claim.text} is {claim.status}: {claim.riskRationale}" for claim in weak
-        )
+        lines = ["The evidence is not strong enough to fully trust this yet.\n"]
+        for claim in weak:
+            lines.append(f"• {claim.text} — {claim.status}: {claim.riskRationale}")
+        answer = "\n".join(lines)
     else:
-        answer = "The stored evidence supports this directionally. " + " ".join(
-            f"{claim.text}: {claim.riskRationale}" for claim in claims
-        )
+        lines = ["The stored evidence supports this directionally.\n"]
+        for claim in claims:
+            lines.append(f"• {claim.text}: {claim.riskRationale}")
+        answer = "\n".join(lines)
     return ChatAnswer(answer=answer, citations=citations, confidence="medium" if weak else "high")
 
 

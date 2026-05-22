@@ -575,7 +575,7 @@ summary:focus-visible {
 
 .claimGroups {
   display: grid;
-  gap: 18px;
+  gap: 10px;
 }
 
 .claimGroup h3 {
@@ -589,16 +589,16 @@ summary:focus-visible {
 
 .claimRow {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   border-top: 1px solid var(--line);
-  padding: 12px 4px;
+  min-height: 34px;
+  padding: 4px;
 }
 
 .claimEvidence {
-  grid-column: 1 / -1;
-  padding: 0 0 4px 0;
+  display: contents;
 }
 
 .claimEvidence summary {
@@ -606,26 +606,37 @@ summary:focus-visible {
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  padding: 4px 0 8px;
+  padding: 3px 0;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   list-style: none;
+  white-space: nowrap;
 }
 
 .claimEvidence summary::before {
-  content: "+ ";
+  content: "";
 }
 
 .claimEvidence[open] summary::before {
-  content: "− ";
+  content: "";
 }
 
-.claimRow > span:not(.statusPill) {
+.claimEvidencePanel {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+  padding: 4px 0 6px;
+}
+
+.claimText {
   color: var(--ink);
   font-size: 13px;
   font-weight: 500;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
+  line-height: 1.25;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .claimRow small {
@@ -944,6 +955,7 @@ summary:focus-visible {
   color: var(--ink);
   font-size: 15px;
   line-height: 1.65;
+  white-space: pre-line;
 }
 
 .answerBox footer {
@@ -1194,13 +1206,12 @@ summary:focus-visible {
   }
 
   .claimRow {
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
   }
 
   .claimRow small {
-    grid-column: 2;
-    white-space: normal;
+    grid-column: auto;
+    white-space: nowrap;
   }
 
   .toolCall summary {
