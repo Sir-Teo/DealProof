@@ -56,6 +56,14 @@ type DealAnalysis = {
   evidence: EvidenceItem[];
   memo: RiskMemo | null;
   qualityReview: QualityReview | null;
+  chatHistory?: ChatTurn[];
+};
+
+type ChatTurn = {
+  question: string;
+  answer: string;
+  citations: string[];
+  confidence: "high" | "medium" | "low";
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -100,6 +108,32 @@ const importanceWeights: Record<Importance, number> = {
 };
 
 test.describe("deterministic report-quality gates", () => {
+  test("seed demo real run produces a decision-grade memo and grounded follow-up answers", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Report-quality E2E runs on desktop Chromium only.");
+
+    const dealId = await seedDemoAndRunThroughUi(page);
+    const deal = await fetchDeal(page, dealId);
+
+    assertReportQuality(deal);
+    assertDemoOutputQuality(deal);
+    await assertExportedMarkdownParity(page, deal);
+
+    const firstTurn = await askQuestionThroughApi(page, dealId, "Can we trust the ROI and retention claims?");
+    expect(firstTurn.answer).toMatch(/evidence|claim|support|trust|insufficient|weak/i);
+    expect(firstTurn.citations.length).toBeGreaterThan(0);
+    expect(firstTurn.confidence).not.toBe("low");
+
+    const followUp = await askQuestionThroughApi(page, dealId, "What about competition?");
+    expect(followUp.answer).toMatch(/compet/i);
+    expect(followUp.citations.length).toBeGreaterThan(0);
+
+    const reloaded = await fetchDeal(page, dealId);
+    expect(reloaded.chatHistory?.map((turn) => turn.question).slice(-2)).toEqual([
+      "Can we trust the ROI and retention claims?",
+      "What about competition?"
+    ]);
+  });
+
   test("real public-material packet produces a cited, risk-aware memo", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Report-quality E2E runs on desktop Chromium only.");
 
@@ -187,6 +221,24 @@ test.describe("deterministic report-quality gates", () => {
   });
 });
 
+async function seedDemoAndRunThroughUi(page: Page) {
+  const seedResponsePromise = page.waitForResponse((response) => response.url().endsWith("/deals/demo") && response.request().method() === "POST");
+  const analyzeResponsePromise = page.waitForResponse((response) => response.url().includes("/analyze-stream") && response.request().method() === "POST");
+
+  await page.goto("/");
+  await page.getByRole("button", { name: /Seed demo/i }).click();
+
+  const seedResponse = await seedResponsePromise;
+  const analyzeResponse = await analyzeResponsePromise;
+  await expect(seedResponse.ok()).toBe(true);
+  await expect(analyzeResponse.ok()).toBe(true);
+  await expect(await analyzeResponse.text()).not.toContain('"event": "run_error"');
+  await expect(page.getByText("Analysis complete", { exact: true }).first()).toBeVisible({ timeout: 90_000 });
+  await expect(page.locator(".errorBanner")).toHaveCount(0);
+
+  return ((await seedResponse.json()) as DealAnalysis).id;
+}
+
 async function uploadFixturePacketThroughUi(page: Page, files: string[]) {
   await page.goto("/");
   await page.getByRole("button", { name: "Attach files or URL" }).click();
@@ -219,6 +271,14 @@ async function fetchDeal(page: Page, dealId: string) {
   const response = await page.request.get(`${API_BASE_URL}/deals/${dealId}`);
   await expect(response.ok()).toBe(true);
   return (await response.json()) as DealAnalysis;
+}
+
+async function askQuestionThroughApi(page: Page, dealId: string, question: string) {
+  const response = await page.request.post(`${API_BASE_URL}/deals/${dealId}/chat`, {
+    data: { question }
+  });
+  await expect(response.ok()).toBe(true);
+  return (await response.json()) as ChatTurn;
 }
 
 async function assertExportedMarkdownParity(page: Page, deal: DealAnalysis) {
@@ -265,6 +325,38 @@ function assertReportQuality(deal: DealAnalysis) {
   assertRiskClaimsLeadRiskSections(deal.claims, memo);
   assertEvidenceMapQuality(memo, deal.evidence);
   assertQualityReviewReflectsLedger(deal);
+}
+
+function assertDemoOutputQuality(deal: DealAnalysis) {
+  const memo = requireMemo(deal);
+  const qualityReview = requireQualityReview(deal);
+  const claimText = deal.claims.map((claim) => claim.text).join("\n");
+  const riskText = memoRisks(memo).join("\n");
+  const strengthText = memo.keyStrengths.join("\n");
+  const diligenceText = memoDiligenceRequests(memo).join("\n");
+
+  expect(deal.materials.length).toBeGreaterThanOrEqual(3);
+  expect(deal.claims.length).toBeGreaterThanOrEqual(8);
+  expect(deal.evidence.length).toBeGreaterThanOrEqual(deal.claims.length);
+  expect(new Set(deal.claims.map((claim) => claim.text)).size).toBe(deal.claims.length);
+  expect(new Set(deal.evidence.map((item) => item.citation)).size).toBeGreaterThanOrEqual(3);
+  expect(deal.evidence.some((item) => item.quoteSpan && item.stance !== "not_found")).toBe(true);
+
+  expect(Array.from(new Set(deal.claims.map((claim) => claim.status)))).toContain("weak");
+  expect(claimText).toMatch(/ROI|retention|NRR|compliance|compet/i);
+  expect(deal.claims.some((claim) => claim.status !== "supported" && /compet/i.test(claim.text))).toBe(true);
+  expect(deal.claims.every((claim) => claim.status !== "supported")).toBe(true);
+  expect(deal.claims.every((claim) => claim.verificationNeed.trim() && claim.riskRationale.trim())).toBe(true);
+
+  expect(memo.overallGrade).toBe(scoreClaims(deal.claims).grade);
+  expect(memo.investmentQuestion).toMatch(/CaviClear|investment|IC|trust|ready|scale/i);
+  expect(riskText).toMatch(/compet|compliance|ROI|retention|unsupported|contradict/i);
+  expect(diligenceText).toMatch(/customer|evidence|reference|compliance|cohort|retention|ROI/i);
+  expect(strengthText).not.toMatch(/no direct competitors/i);
+
+  expect(qualityReview.memoReadinessScore).toBeLessThan(90);
+  expect(qualityReview.globalWarnings.length).toBeGreaterThan(0);
+  expect(qualityReview.recommendedFollowUpEvidence.length).toBeGreaterThan(0);
 }
 
 function assertRiskClaimsLeadRiskSections(claims: DealClaim[], memo: RiskMemo) {

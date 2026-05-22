@@ -25,7 +25,7 @@ from .config import (
     LOCAL_FRONTEND_ORIGINS,
 )
 from .graph import answer_question, refresh_review_artifacts, run_diligence
-from .models import ChatAnswer, ClaimStatus, DealAnalysis, ReviewerStatus, SourceMaterial
+from .models import ChatTurn, ClaimStatus, DealAnalysis, ReviewerStatus, SourceMaterial
 from .parsers import fetch_url_text, infer_kind, parse_file, summarize
 from .scoring import memo_to_markdown
 
@@ -228,13 +228,13 @@ def analyze_deal_stream(deal_id: str) -> StreamingResponse:
 
 
 @app.post("/deals/{deal_id}/chat")
-def chat(deal_id: str, payload: ChatRequest) -> ChatAnswer:
+def chat(deal_id: str, payload: ChatRequest) -> ChatTurn:
     ensure_deal(deal_id)
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question is required")
-    answer = answer_question(deal_id, payload.question.strip())
-    db.save_chat(f"chat-{uuid.uuid4().hex[:10]}", deal_id, payload.question.strip(), answer.model_dump())
-    return answer
+    question = payload.question.strip()
+    answer = answer_question(deal_id, question, db.get_chats(deal_id, limit=6))
+    return db.save_chat(f"chat-{uuid.uuid4().hex[:10]}", deal_id, question, answer.model_dump())
 
 
 @app.patch("/deals/{deal_id}/claims/{claim_id}/review")

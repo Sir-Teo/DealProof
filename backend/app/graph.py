@@ -42,6 +42,20 @@ class DiligenceState(TypedDict, total=False):
 
 
 ProgressCallback = Callable[[str, str, dict[str, int | str] | None], None]
+GraphStep = tuple[str, str, str]
+
+GRAPH_STEPS: list[GraphStep] = [
+    ("load_materials", "Read supplied materials", "Loading source packets from the deal workspace"),
+    ("chunk_materials", "Split source text", "Creating retrievable evidence chunks"),
+    ("profile_deal", "Profile deal context", "Inferring sector, buyer, model, stage, and material mix"),
+    ("extract_claims", "Extract diligence claims", "Identifying concrete founder claims to verify"),
+    ("retrieve_evidence", "Retrieve evidence", "Searching supplied materials for support and contradictions"),
+    ("score_claims", "Score claim support", "Applying support and risk scoring rules"),
+    ("review_quality", "Review output quality", "Checking confidence, citations, and memo readiness"),
+    ("generate_memo", "Draft red-team memo", "Writing the partner-ready diligence memo"),
+    ("persist_results", "Save analysis results", "Persisting claims, evidence, memo, and run metadata"),
+]
+
 
 def build_graph():
     graph = StateGraph(DiligenceState)
@@ -83,18 +97,8 @@ def run_diligence(deal_id: str, on_progress: ProgressCallback | None = None) -> 
 
 def run_diligence_with_progress(deal_id: str, company: str, stage: str, on_progress: ProgressCallback) -> DiligenceState:
     state: DiligenceState = {"deal_id": deal_id, "company": company, "stage": stage}
-    steps = [
-        ("load_materials", "Read supplied materials", "Loading source packets from the deal workspace", load_materials),
-        ("chunk_materials", "Split source text", "Creating retrievable evidence chunks", chunk_materials),
-        ("profile_deal", "Profile deal context", "Inferring sector, buyer, model, stage, and material mix", profile_deal),
-        ("extract_claims", "Extract diligence claims", "Identifying concrete founder claims to verify", extract_claims),
-        ("retrieve_evidence", "Retrieve evidence", "Searching supplied materials for support and contradictions", retrieve_evidence),
-        ("score_claims", "Score claim support", "Applying support and risk scoring rules", score_claim_statuses),
-        ("review_quality", "Review output quality", "Checking confidence, citations, and memo readiness", review_quality),
-        ("generate_memo", "Draft red-team memo", "Writing the partner-ready diligence memo", generate_memo),
-        ("persist_results", "Save analysis results", "Persisting claims, evidence, memo, and run metadata", persist_results),
-    ]
-    for step_id, label, description, step in steps:
+    graph_updates = iter(build_graph().stream(state, stream_mode="updates"))
+    for step_id, label, description in GRAPH_STEPS:
         before = progress_payload(state, label)
         on_progress("step_start", step_id, {**before, "label": description})
         on_progress(
@@ -107,7 +111,14 @@ def run_diligence_with_progress(deal_id: str, company: str, stage: str, on_progr
                 "input": tool_input_summary(state, step_id),
             },
         )
-        state = step(state)
+        update = next(graph_updates)
+        if step_id not in update:
+            emitted = ", ".join(update.keys())
+            raise RuntimeError(f"LangGraph emitted {emitted or 'no step'} while waiting for {step_id}.")
+        next_state = update[step_id]
+        if not isinstance(next_state, dict):
+            raise RuntimeError(f"LangGraph step {step_id} did not return state.")
+        state = next_state
         after = progress_payload(state, label)
         on_progress(
             "tool_complete",
@@ -203,8 +214,8 @@ def profile_deal(state: DiligenceState) -> DiligenceState:
         try:
             profile = llm.complete_json(system, user, DealProfileGeneration).profile
             return {**state, "profile": normalize_profile(profile, state)}
-        except Exception:
-            pass
+        except Exception as exc:
+            raise RuntimeError("DeepSeek profile step failed.") from exc
     return {**state, "profile": fallback_deal_profile(state)}
 
 
@@ -329,8 +340,8 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
         try:
             memo = llm.complete_json(system, user, MemoGeneration).memo
             memo = memo.model_copy(update={"overallGrade": grade})
-        except Exception:
-            memo = fallback_memo(state["company"], grade, state["claims"], state.get("evidence", []), profile, state.get("quality_review"))
+        except Exception as exc:
+            raise RuntimeError("DeepSeek memo step failed.") from exc
     else:
         memo = fallback_memo(state["company"], grade, state["claims"], state.get("evidence", []), profile, state.get("quality_review"))
     return {**state, "memo": memo}
@@ -368,33 +379,44 @@ def refresh_review_artifacts(deal_id: str) -> None:
     db.save_review_artifacts(deal_id, memo, reviewed["quality_review"])
 
 
-def answer_question(deal_id: str, question: str):
+def answer_question(deal_id: str, question: str, chat_history=None):
     from .models import ChatAnswer
 
     deal = db.get_deal(deal_id)
     if not deal.claims:
         return ChatAnswer(answer="Run analysis before asking diligence questions.", citations=[], confidence="low")
-    terms = set(re.findall(r"[a-zA-Z0-9$%]+", question.lower()))
+    chat_history = chat_history or []
+    recent_questions = " ".join(turn.question for turn in chat_history[-3:])
+    question_terms = set(re.findall(r"[a-zA-Z0-9$%]+", question.lower()))
+    context_query = f"{recent_questions} {question}" if len(question_terms) <= 4 and recent_questions else question
+    current_terms = expand_question_terms(question_terms)
+    terms = expand_question_terms(set(re.findall(r"[a-zA-Z0-9$%]+", context_query.lower())))
     relevant = []
     for claim in deal.claims:
         claim_terms = set(re.findall(r"[a-zA-Z0-9$%]+", claim.text.lower()))
+        current_overlap = len(current_terms & claim_terms)
         overlap = len(terms & claim_terms)
         if overlap:
-            relevant.append((overlap, claim))
-    claims = [claim for _, claim in sorted(relevant, key=lambda item: item[0], reverse=True)[:4]] or deal.claims[:4]
+            relevant.append((current_overlap, overlap, claim))
+    claims = [claim for _, __, claim in sorted(relevant, key=lambda item: (item[0], item[1]), reverse=True)[:4]] or deal.claims[:4]
     evidence = [item for item in deal.evidence if item.claimId in {claim.id for claim in claims}]
     citations = list(dict.fromkeys(item.citation for item in evidence))[:5]
     llm = DeepSeekClient()
     if llm.enabled:
         system = (
             f"You are {APP_NAME}, a {AGENT_ROLE}. Answer only from stored claims and evidence. "
+            "Use recent chat turns only to resolve follow-up references, not as evidence. "
             "If evidence is insufficient, say so directly. Return JSON only with answer, citations, confidence."
+        )
+        history_context = "\n".join(
+            f"Q: {turn.question}\nA: {turn.answer}\nCitations: {', '.join(turn.citations)}" for turn in chat_history[-6:]
         )
         user = (
             f"Question: {question}\n\nClaims:\n"
             + "\n".join(claim.model_dump_json() for claim in claims)
             + "\n\nEvidence:\n"
             + "\n".join(item.model_dump_json() for item in evidence)
+            + (f"\n\nRecent chat turns:\n{history_context}" if history_context else "")
         )
         try:
             answer = llm.complete_json(system, user, ChatAnswer)
@@ -414,6 +436,22 @@ def answer_question(deal_id: str, question: str):
             f"{claim.text}: {claim.riskRationale}" for claim in claims
         )
     return ChatAnswer(answer=answer, citations=citations, confidence="medium" if weak else "high")
+
+
+def expand_question_terms(terms: set[str]) -> set[str]:
+    expanded = set(terms)
+    expansions = {
+        "competition": {"competitor", "competitors", "competitive", "landscape", "vendor", "alternative"},
+        "competitor": {"competition", "competitors", "competitive", "landscape", "vendor", "alternative"},
+        "competitors": {"competition", "competitor", "competitive", "landscape", "vendor", "alternative"},
+        "retention": {"nrr", "churn", "renewal", "renewals", "retained"},
+        "roi": {"return", "recover", "collections", "savings", "hours", "efficiency"},
+        "compliance": {"hipaa", "diagnosis", "billing", "claims", "regulatory"},
+        "growth": {"growing", "signed", "active", "onboarding", "arr"},
+    }
+    for term in terms:
+        expanded.update(expansions.get(term, set()))
+    return expanded
 
 
 def format_material_context(materials: list[SourceMaterial], max_chars: int) -> str:

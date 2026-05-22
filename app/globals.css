@@ -118,7 +118,7 @@ summary:focus-visible {
   width: min(760px, 100%);
   margin: 0 auto;
   display: grid;
-  gap: 20px;
+  gap: 18px;
 }
 
 /* ── Messages ── */
@@ -417,27 +417,32 @@ summary:focus-visible {
 
 .artifactGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 16px;
+  grid-template-columns: 1fr;
+  gap: 0;
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
 .artifactCard {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 16px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 12px 0;
   text-align: left;
 }
 
 .artifactButton {
   width: 100%;
-  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+  display: grid;
+  grid-template-columns: 150px 110px minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  transition: background 0.12s ease;
 }
 
 .artifactButton:hover:not(:disabled) {
-  border-color: var(--line-strong);
-  background: var(--panel-soft);
+  background: #fafafa;
 }
 
 .artifactButton:disabled {
@@ -455,36 +460,39 @@ summary:focus-visible {
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 
 /* Large primary metric */
 .artifactPrimary {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+}
+
+.artifactButton p {
+  margin-top: 1px;
 }
 
 .artifactPrimary strong {
-  font-size: 26px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 650;
   line-height: 1.1;
   color: var(--ink);
-  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   text-transform: capitalize;
 }
 
-/* Grade-based top accent borders */
-.card--red    { border-top: 3px solid var(--red); }
-.card--green  { border-top: 3px solid var(--green); }
+/* Grade-based left accent rules */
+.card--red    { box-shadow: inset 3px 0 0 var(--red); }
+.card--green  { box-shadow: inset 3px 0 0 var(--green); }
 .card--yellow,
-.card--amber  { border-top: 3px solid var(--amber); }
-.card--ready  { border-top: 3px solid var(--green); }
-.card--conditional { border-top: 3px solid var(--amber); }
-.card--blocked { border-top: 3px solid var(--red); }
+.card--amber  { box-shadow: inset 3px 0 0 var(--amber); }
+.card--ready  { box-shadow: inset 3px 0 0 var(--green); }
+.card--conditional { box-shadow: inset 3px 0 0 var(--amber); }
+.card--blocked { box-shadow: inset 3px 0 0 var(--red); }
 
 .artifactCard p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
   margin: 0;
 }
@@ -496,11 +504,10 @@ summary:focus-visible {
 /* Artifact panels (claims / evidence / memo) */
 
 .artifactPanel {
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  border-radius: 12px;
-  background: white;
-  margin-top: 10px;
-  padding: 24px;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  margin-top: 18px;
+  padding: 18px 0 0;
 }
 
 .artifactPanelHeader {
@@ -531,7 +538,7 @@ summary:focus-visible {
 
 .claimGroups {
   display: grid;
-  gap: 14px;
+  gap: 18px;
 }
 
 .claimGroup h3 {
@@ -549,21 +556,21 @@ summary:focus-visible {
   grid-template-columns: auto minmax(0, 1fr) auto 16px;
   align-items: center;
   gap: 9px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: white;
-  padding: 9px 11px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 0;
   text-align: left;
-  transition: border-color 0.12s, background 0.12s;
+  transition: background 0.12s ease;
 }
 
 .claimRow + .claimRow {
-  margin-top: 5px;
+  margin-top: 0;
 }
 
 .claimRow:hover {
-  border-color: var(--line-strong);
-  background: var(--panel-soft);
+  background: #fafafa;
 }
 
 .claimRow > span:not(.statusPill) {
@@ -629,9 +636,8 @@ summary:focus-visible {
 }
 
 .metric {
-  background: var(--panel-soft);
-  border-radius: 8px;
-  padding: 9px 10px;
+  border-top: 1px solid var(--line);
+  padding: 9px 0;
   min-width: 0;
 }
 
@@ -667,9 +673,8 @@ summary:focus-visible {
 }
 
 .topGate {
-  background: var(--panel-soft);
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  padding: 9px 0;
   min-width: 0;
 }
 
@@ -737,9 +742,9 @@ summary:focus-visible {
 .readinessRow {
   display: grid;
   gap: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  padding: 12px 0;
 }
 
 .readinessClaim {
@@ -778,9 +783,9 @@ summary:focus-visible {
 
 .readinessMeta span {
   color: var(--muted);
-  background: var(--panel-soft);
-  border-radius: 999px;
-  padding: 3px 7px;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  padding: 0 7px 0 0;
   font-size: 11px;
   text-transform: capitalize;
 }
@@ -867,10 +872,11 @@ summary:focus-visible {
 }
 
 .evidenceItem {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: white;
-  padding: 12px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 14px 0;
 }
 
 .evidenceItem--supports {
@@ -958,12 +964,12 @@ summary:focus-visible {
   grid-template-columns: 16px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
-  background: #f9fafb;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line-strong);
-  border-radius: 0 8px 8px 0;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid var(--line-strong);
+  border-radius: 0;
   margin: 0 0 8px;
-  padding: 10px 12px;
+  padding: 4px 0 4px 12px;
 }
 
 .quoteBlock svg {
@@ -990,12 +996,10 @@ summary:focus-visible {
 
 .citationReason {
   color: #374151;
-  background: var(--panel-soft);
-  border-radius: 7px;
   font-size: 12px;
   font-weight: 600;
   margin-bottom: 8px;
-  padding: 7px 9px;
+  padding: 0;
 }
 
 .citationMeta {
@@ -1031,11 +1035,11 @@ summary:focus-visible {
 }
 
 .memoNarrative {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: white;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
   margin-bottom: 10px;
-  padding: 12px;
+  padding: 12px 0 0;
 }
 
 .memoNarrative h3 {
@@ -1062,10 +1066,10 @@ summary:focus-visible {
 }
 
 .memoSection {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: white;
-  padding: 12px;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 0 0;
 }
 
 .memoSection h3 {
@@ -1090,13 +1094,13 @@ summary:focus-visible {
 }
 
 .recommendation {
-  background: var(--panel-soft);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: transparent;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
   font-size: 13px;
   line-height: 1.55;
   margin-top: 10px;
-  padding: 12px;
+  padding: 12px 0 0;
 }
 
 .markdownDetails {
@@ -1112,9 +1116,9 @@ summary:focus-visible {
 }
 
 .markdownDetails pre {
-  background: white;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: #fafafa;
+  border: 0;
+  border-radius: 6px;
   color: #263241;
   font-size: 12px;
   line-height: 1.5;
@@ -1161,7 +1165,7 @@ summary:focus-visible {
   bottom: 0;
   z-index: 10;
   background: rgba(255, 255, 255, 0.96);
-  padding: 10px 20px 16px;
+  padding: 10px 20px 14px;
   backdrop-filter: blur(8px);
 }
 
@@ -1186,12 +1190,12 @@ summary:focus-visible {
   border-radius: 999px;
 }
 
-/* The unified composer card */
 .composerCard {
   background: white;
-  border: 1px solid var(--line-strong);
-  border-radius: 14px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  border-top: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  box-shadow: none;
   overflow: hidden;
 }
 
@@ -1358,6 +1362,15 @@ summary:focus-visible {
 
   .artifactGrid {
     grid-template-columns: 1fr;
+  }
+
+  .artifactButton {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .artifactButton p {
+    margin-top: 0;
   }
 
   .artifactPanel {

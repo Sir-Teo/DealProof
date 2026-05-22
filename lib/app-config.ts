@@ -22,7 +22,7 @@ export const UI_COPY = {
   companyLabel: "Company",
   taglineLabel: "Tagline",
   createDealButton: "Create deal",
-  seedDemoButton: "Seed demo",
+  seedDemoButton: "Seed demo and run agent",
   uploadButton: "Upload",
   addUrlPlaceholder: "Add URL",
   addMaterialButton: "Add",

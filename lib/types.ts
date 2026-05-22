@@ -86,6 +86,16 @@ export type QualityReview = {
   overconfidenceWarnings: string[];
 };
 
+export type ChatTurn = {
+  id: string;
+  dealId: string;
+  question: string;
+  answer: string;
+  citations: string[];
+  confidence: "high" | "medium" | "low";
+  createdAt: string;
+};
+
 export type SourceMaterial = {
   id: string;
   deal_id?: string;
@@ -112,6 +122,7 @@ export type DealAnalysis = {
   memo: RiskMemo | null;
   qualityReview: QualityReview | null;
   generatedAt: string | null;
+  chatHistory: ChatTurn[];
 };
 
 export type ChatAnswer = {

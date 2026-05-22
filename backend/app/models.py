@@ -125,6 +125,16 @@ class QualityReview(BaseModel):
     overconfidenceWarnings: list[str] = Field(default_factory=list)
 
 
+class ChatTurn(BaseModel):
+    id: str
+    dealId: str
+    question: str
+    answer: str
+    citations: list[str]
+    confidence: Literal["high", "medium", "low"]
+    createdAt: str
+
+
 class DealAnalysis(BaseModel):
     id: str
     company: str
@@ -139,6 +149,7 @@ class DealAnalysis(BaseModel):
     profile: DealProfile | None = None
     memo: RiskMemo | None = None
     qualityReview: QualityReview | None = None
+    chatHistory: list[ChatTurn] = Field(default_factory=list)
 
 
 class DealProfileGeneration(BaseModel):

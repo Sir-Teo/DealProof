@@ -10,6 +10,10 @@ def test_demo_deal_can_be_created_and_loaded():
         created = client.post("/deals/demo")
         assert created.status_code == 200
         deal = created.json()
+        assert deal["claims"] == []
+        assert deal["evidence"] == []
+        assert deal["memo"] is None
+        assert deal["chatHistory"] == []
 
         loaded = client.get(f"/deals/{deal['id']}")
         assert loaded.status_code == 200
@@ -45,6 +49,10 @@ def test_analysis_returns_quality_review_and_claim_review_patch(monkeypatch):
         analyzed = client.post(f"/deals/{deal_id}/analyze")
         assert analyzed.status_code == 200
         deal = analyzed.json()
+        assert deal["claims"]
+        assert deal["evidence"]
+        assert deal["memo"]
+        assert deal["generatedAt"]
         assert deal["qualityReview"]["memoReadinessScore"] >= 0
         claim_id = deal["claims"][0]["id"]
 
@@ -81,3 +89,49 @@ def test_claim_status_review_refreshes_memo_and_quality_review(monkeypatch):
     assert expected_grade == "green"
     assert updated["memo"]["overallGrade"] == expected_grade
     assert "High-importance claims remain weak or missing." not in updated["qualityReview"]["globalWarnings"]
+
+
+def test_chat_history_persists_multiple_follow_up_questions(monkeypatch):
+    monkeypatch.setattr("app.graph.DeepSeekClient", lambda: type("FakeDeepSeek", (), {"enabled": False})())
+
+    with TestClient(app) as client:
+        created = client.post("/deals/demo")
+        assert created.status_code == 200
+        deal_id = created.json()["id"]
+        analyzed = client.post(f"/deals/{deal_id}/analyze")
+        assert analyzed.status_code == 200
+
+        first = client.post(f"/deals/{deal_id}/chat", json={"question": "What evidence supports the ROI claims?"})
+        second = client.post(f"/deals/{deal_id}/chat", json={"question": "What about retention?"})
+        loaded = client.get(f"/deals/{deal_id}")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["id"] != second.json()["id"]
+    assert first.json()["dealId"] == deal_id
+    assert second.json()["citations"]
+    history = loaded.json()["chatHistory"]
+    assert [turn["question"] for turn in history[-2:]] == [
+        "What evidence supports the ROI claims?",
+        "What about retention?",
+    ]
+    assert all(turn["answer"] for turn in history[-2:])
+
+
+def test_follow_up_question_uses_diligence_category_context(monkeypatch):
+    monkeypatch.setattr("app.graph.DeepSeekClient", lambda: type("FakeDeepSeek", (), {"enabled": False})())
+
+    with TestClient(app) as client:
+        created = client.post("/deals/demo")
+        assert created.status_code == 200
+        deal_id = created.json()["id"]
+        analyzed = client.post(f"/deals/{deal_id}/analyze")
+        assert analyzed.status_code == 200
+
+        first = client.post(f"/deals/{deal_id}/chat", json={"question": "Can we trust ROI and retention?"})
+        follow_up = client.post(f"/deals/{deal_id}/chat", json={"question": "What about competition?"})
+
+    assert first.status_code == 200
+    assert follow_up.status_code == 200
+    assert "compet" in follow_up.json()["answer"].lower()
+    assert follow_up.json()["citations"]

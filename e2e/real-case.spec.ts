@@ -36,7 +36,7 @@ test("runs a real-world public-material diligence case", async ({ page }, testIn
 
   await page.locator(".claimRow").first().click();
   await expect(page.locator(".evidenceItem").first()).toBeVisible();
-  await expect(page.locator(".citationSummary")).toBeVisible();
+  await expect(page.locator(".citationMeta").first()).toBeVisible();
   await expect(page.locator(".quoteBlock").first()).toBeVisible();
 
   const chatResponse = page.waitForResponse((response) => response.url().includes("/chat") && response.request().method() === "POST");

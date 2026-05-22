@@ -7,12 +7,15 @@ const MOCK_DEAL_SEEDED = {
   company: "CaviClear AI",
   tagline: "AI billing automation for dental clinics",
   stage: "Series A",
+  status: "materials_loaded",
+  generatedAt: null,
   materials: [{ id: "m1", name: "pitch.pdf", type: "pdf" }],
   claims: [],
   evidence: [],
   memo: null,
   profile: null,
   qualityReview: null,
+  chatHistory: [],
 };
 
 const MOCK_DEAL_ANALYZED = {
@@ -44,11 +47,20 @@ const MOCK_DEAL_ANALYZED = {
     memoReadinessScore: 72,
     globalWarnings: ["TAM lacks external citation"],
   },
+  generatedAt: "2026-05-22T12:00:00Z",
+  status: "completed",
 };
 
 
 async function setupMocks(page: import("@playwright/test").Page) {
   await page.route("**/deals/demo", (route) => route.fulfill({ json: MOCK_DEAL_SEEDED }));
+  await page.route(`**/deals/${DEAL_ID}/analyze-stream`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+      body: `data: ${JSON.stringify({ event: "run_complete", step: "done", label: "Analysis complete" })}\n\n`,
+    });
+  });
   await page.route(`**/deals/${DEAL_ID}`, (route) => route.fulfill({ json: MOCK_DEAL_ANALYZED }));
   await page.route(`**/deals/${DEAL_ID}/claims/*/review`, (route) =>
     route.fulfill({ json: { ...MOCK_DEAL_ANALYZED, claims: MOCK_DEAL_ANALYZED.claims.map((c) => c.id === "c2" ? { ...c, reviewerStatus: "verified" } : c) } })
@@ -57,6 +69,13 @@ async function setupMocks(page: import("@playwright/test").Page) {
 
 test("pending cards: kicker + em-dash + descriptions visible", async ({ page }) => {
   await page.route("**/deals/demo", (route) => route.fulfill({ json: MOCK_DEAL_SEEDED }));
+  await page.route(`**/deals/${DEAL_ID}/analyze-stream`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+      body: `data: ${JSON.stringify({ event: "run_error", step: "done", label: "Stopped for pending-card UI test" })}\n\n`,
+    });
+  });
   await page.goto("/");
   await expect(page.getByText("Add deal materials to begin.")).toBeVisible();
 
@@ -91,20 +110,6 @@ test("post-analysis cards: real metrics + grade borders", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /Seed demo/i }).click();
   await expect(page.locator(".messageTitle").filter({ hasText: /Seeded/ })).toBeVisible({ timeout: 5_000 });
-
-  // Inject analyzed state by navigating as if analysis complete
-  await page.route(`**/deals/${DEAL_ID}`, (route) => route.fulfill({ json: MOCK_DEAL_ANALYZED }));
-
-  // Simulate analysis completion: manually set deal state via the analyze-stream endpoint
-  await page.route(`**/deals/${DEAL_ID}/analyze-stream`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { "Content-Type": "text/event-stream" },
-      body: `data: ${JSON.stringify({ event: "run_complete", step: "done", label: "Analysis complete", status: "done" })}\n\ndata: ${JSON.stringify({ event: "run_complete", step: "done", label: "Analysis complete", status: "done" })}\n\n`,
-    });
-  });
-
-  await page.getByRole("button", { name: /Run agent/i }).click();
   await expect(page.locator(".artifactCard")).toHaveCount(4, { timeout: 10_000 }); // 4th = qualityReview card
 
   // Claim Ledger shows count
@@ -139,20 +144,34 @@ test("composer: header, input, and composer card render correctly", async ({ pag
 
 test("attach drawer: opens and closes on paperclip click", async ({ page }) => {
   await page.route("**/deals/demo", (route) => route.fulfill({ json: MOCK_DEAL_SEEDED }));
+  await page.route(`**/deals/${DEAL_ID}/analyze-stream`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+      body: `data: ${JSON.stringify({ event: "run_error", step: "done", label: "Stopped for attach UI test" })}\n\n`,
+    });
+  });
   await page.goto("/");
   await page.getByRole("button", { name: /Seed demo/i }).click();
   await expect(page.locator(".messageTitle").filter({ hasText: /Seeded/ })).toBeVisible({ timeout: 5_000 });
 
   await expect(page.locator(".attachDrawer")).not.toBeVisible();
-  await page.locator(".iconButton").click();
+  await page.locator(".iconButton").evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator(".attachDrawer")).toBeVisible();
-  await page.locator(".iconButton").click();
+  await page.locator(".iconButton").evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator(".attachDrawer")).not.toBeVisible();
 });
 
 test("mobile: artifact cards stack to single column", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route("**/deals/demo", (route) => route.fulfill({ json: MOCK_DEAL_SEEDED }));
+  await page.route(`**/deals/${DEAL_ID}/analyze-stream`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+      body: `data: ${JSON.stringify({ event: "run_error", step: "done", label: "Stopped for mobile UI test" })}\n\n`,
+    });
+  });
   await page.goto("/");
   await page.getByRole("button", { name: /Seed demo/i }).click();
   await expect(page.locator(".messageTitle").filter({ hasText: /Seeded/ })).toBeVisible({ timeout: 5_000 });

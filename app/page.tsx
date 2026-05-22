@@ -27,7 +27,7 @@ import clsx from "clsx";
 import { API_BASE_URL, DEFAULT_DEAL, UI_COPY } from "@/lib/app-config";
 import { deriveIcReadiness, type ReadinessItem, type ReadinessSummary } from "@/lib/readiness";
 import { evidenceForClaim, generateMemoMarkdown, scoreClaims } from "@/lib/scoring";
-import type { ChatAnswer, ClaimStatus, DealAnalysis, DealClaim, EvidenceItem } from "@/lib/types";
+import type { ChatTurn, ClaimStatus, DealAnalysis, DealClaim, EvidenceItem } from "@/lib/types";
 
 const emptyCounts = { supported: 0, weak: 0, contradicted: 0, missing: 0 };
 
@@ -69,7 +69,7 @@ export default function Home() {
   const [files, setFiles] = useState<FileList | null>(null);
   const [url, setUrl] = useState("");
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<ChatAnswer | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
@@ -95,7 +95,7 @@ export default function Home() {
   const memoMarkdown = deal?.memo ? generateMemoMarkdown(deal.memo) : "";
   const exportUrl = deal ? `${API_BASE_URL}/deals/${deal.id}/export-memo` : "#";
   const suggestedQuestions = useMemo(() => buildSuggestedQuestions(claims), [claims]);
-  const isAnalyzing = busy === "analyze";
+  const isAnalyzing = busy === "analyze" || busy === "demo";
   const canRunAgent = Boolean(deal?.materials.length) && !isAnalyzing;
 
   useEffect(() => {
@@ -142,6 +142,29 @@ export default function Home() {
     setFeedNotes((notes) => [...notes.filter((item) => item.id !== "welcome"), { ...note, id: `${Date.now()}-${notes.length}` }]);
   }
 
+  async function runAnalysisForDeal(targetDeal: DealAnalysis) {
+    const response = await fetch(`${API_BASE_URL}/deals/${targetDeal.id}/analyze-stream`, { method: "POST" });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.detail ?? `Request failed: ${response.status}`);
+    }
+    let streamError: string | null = null;
+    await readAgentStream(response, (event) => {
+      if (event.event === "run_error") streamError = event.label;
+      setAgentEvents((events) => [...events, event]);
+    });
+    if (streamError) throw new Error(streamError);
+    const analyzed = await api<DealAnalysis>(`/deals/${targetDeal.id}`);
+    setDeal(analyzed);
+    setActiveArtifact({ type: "claims" });
+    addFeedNote({
+      role: "agent",
+      title: UI_COPY.analysisCompleteTitle,
+      body: `${analyzed.claims.length} claims, ${analyzed.evidence.length} evidence items, ${scoreClaims(analyzed.claims).grade.toUpperCase()} risk.`
+    });
+    return analyzed;
+  }
+
   async function ensureDeal() {
     if (deal) return deal;
     const created = await api<DealAnalysis>("/deals", {
@@ -151,7 +174,7 @@ export default function Home() {
     });
     setDeal(created);
     setAgentEvents([]);
-    setAnswer(null);
+    setPendingQuestion(null);
     addFeedNote({ role: "user", title: `${UI_COPY.createdDealPrefix} ${created.company}`, body: created.tagline });
     return created;
   }
@@ -162,10 +185,19 @@ export default function Home() {
     try {
       const created = await api<DealAnalysis>("/deals/demo", { method: "POST" });
       setDeal(created);
-      setAnswer(null);
+      setPendingQuestion(null);
+      setQuestion("");
       setAgentEvents([]);
       setActiveArtifact(null);
-      addFeedNote({ role: "user", title: `${UI_COPY.seededDealPrefix} ${created.company}`, body: `${created.materials.length} ${UI_COPY.sourceMaterialsLoaded}` });
+      setFeedNotes([
+        {
+          id: `seed-${created.id}`,
+          role: "user",
+          title: `${UI_COPY.seededDealPrefix} ${created.company}`,
+          body: `${created.materials.length} ${UI_COPY.sourceMaterialsLoaded}`
+        }
+      ]);
+      await runAnalysisForDeal(created);
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
     } finally {
@@ -203,30 +235,12 @@ export default function Home() {
     if (!deal) return;
     setBusy("analyze");
     setError(null);
-    setAnswer(null);
+    setPendingQuestion(null);
     setAgentEvents([]);
     setActiveArtifact(null);
     addFeedNote({ role: "user", title: UI_COPY.runAgentTitle, body: `${deal.materials.length} ${UI_COPY.materialsQueued}` });
     try {
-      const response = await fetch(`${API_BASE_URL}/deals/${deal.id}/analyze-stream`, { method: "POST" });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(payload?.detail ?? `Request failed: ${response.status}`);
-      }
-      let streamError: string | null = null;
-      await readAgentStream(response, (event) => {
-        if (event.event === "run_error") streamError = event.label;
-        setAgentEvents((events) => [...events, event]);
-      });
-      if (streamError) throw new Error(streamError);
-      const analyzed = await api<DealAnalysis>(`/deals/${deal.id}`);
-      setDeal(analyzed);
-      setActiveArtifact({ type: "claims" });
-      addFeedNote({
-        role: "agent",
-        title: UI_COPY.analysisCompleteTitle,
-        body: `${analyzed.claims.length} claims, ${analyzed.evidence.length} evidence items, ${scoreClaims(analyzed.claims).grade.toUpperCase()} risk.`
-      });
+      await runAnalysisForDeal(deal);
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
       const refreshed = await api<DealAnalysis>(`/deals/${deal.id}`).catch(() => null);
@@ -242,19 +256,20 @@ export default function Home() {
     if (!trimmed) return;
     setQuestion(trimmed);
     setBusy("chat");
-    setAnswer(null);
+    setPendingQuestion(trimmed);
     setError(null);
-    addFeedNote({ role: "user", title: trimmed });
     try {
-      const nextAnswer = await api<ChatAnswer>(`/deals/${deal.id}/chat`, {
+      const nextTurn = await api<ChatTurn>(`/deals/${deal.id}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: trimmed })
       });
-      setAnswer(nextAnswer);
+      setDeal((current) => current ? { ...current, chatHistory: [...(current.chatHistory ?? []), nextTurn] } : current);
+      setQuestion("");
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
     } finally {
+      setPendingQuestion(null);
       setBusy(null);
     }
   }
@@ -300,6 +315,12 @@ export default function Home() {
 
           {(isAnalyzing || agentEvents.length > 0) && <AgentActivity events={agentEvents} running={isAnalyzing} />}
 
+          {(deal?.chatHistory ?? []).map((turn) => (
+            <ChatTurnMessage key={turn.id} turn={turn} />
+          ))}
+
+          {pendingQuestion && <ChatBubble role="user" title={pendingQuestion} />}
+
           {busy === "chat" && (
             <article className="message agentMessage">
               <Avatar status="running" />
@@ -311,8 +332,6 @@ export default function Home() {
               </div>
             </article>
           )}
-
-          {answer && <AnswerMessage answer={answer} />}
 
           {deal && (
             <ResultArtifacts
@@ -340,7 +359,7 @@ export default function Home() {
           {suggestedQuestions.length > 0 && (
             <div className="sampleQuestions">
               {suggestedQuestions.map((item) => (
-                <button key={item} type="button" onClick={() => void askQuestion(item)} disabled={!deal?.claims.length}>
+                <button key={item} type="button" onClick={() => void askQuestion(item)} disabled={!deal?.claims.length || Boolean(busy)}>
                   {item}
                 </button>
               ))}
@@ -352,9 +371,9 @@ export default function Home() {
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
                 placeholder={UI_COPY.questionPlaceholder}
-                disabled={!deal}
+                disabled={!deal || Boolean(busy)}
               />
-              <button className="sendButton" type="submit" disabled={!deal || busy === "chat"}>
+              <button className="sendButton" type="submit" disabled={!deal || Boolean(busy)}>
                 {busy === "chat" ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
               </button>
             </div>
@@ -390,7 +409,7 @@ export default function Home() {
               >
                 <Paperclip size={15} />
               </button>
-              <button className="secondaryButton" type="button" onClick={() => void loadDemoPacket()} disabled={busy === "demo"}>
+              <button className="secondaryButton" type="button" onClick={() => void loadDemoPacket()} disabled={Boolean(busy)}>
                 {busy === "demo" ? <Loader2 className="spin" size={13} /> : null}
                 {UI_COPY.seedDemoButton}
               </button>
@@ -912,7 +931,16 @@ function MemoArtifact({ deal, memoMarkdown, exportUrl }: { deal: DealAnalysis; m
   );
 }
 
-function AnswerMessage({ answer }: { answer: ChatAnswer }) {
+function ChatTurnMessage({ turn }: { turn: ChatTurn }) {
+  return (
+    <>
+      <ChatBubble role="user" title={turn.question} />
+      <AnswerMessage answer={turn} />
+    </>
+  );
+}
+
+function AnswerMessage({ answer }: { answer: Pick<ChatTurn, "answer" | "citations"> }) {
   return (
     <article className="message agentMessage">
       <Avatar status="done" />

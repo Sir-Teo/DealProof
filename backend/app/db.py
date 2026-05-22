@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import DATABASE_FILENAME, DEFAULT_STAGE, DEFAULT_TAGLINE
-from .models import DealAnalysis, DealClaim, DealProfile, EvidenceItem, QualityReview, RiskMemo, SourceMaterial
+from .models import ChatTurn, DealAnalysis, DealClaim, DealProfile, EvidenceItem, QualityReview, RiskMemo, SourceMaterial
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
@@ -198,6 +198,33 @@ def get_materials(deal_id: str) -> list[SourceMaterial]:
     ]
 
 
+def chat_turn_from_row(row: sqlite3.Row) -> ChatTurn:
+    return ChatTurn(
+        id=row["id"],
+        dealId=row["deal_id"],
+        question=row["question"],
+        answer=row["answer"],
+        citations=json.loads(row["citations"]),
+        confidence=row["confidence"],
+        createdAt=row["created_at"],
+    )
+
+
+def get_chats(deal_id: str, limit: int | None = None) -> list[ChatTurn]:
+    query = "select * from chats where deal_id = ? order by created_at, rowid"
+    params: tuple[Any, ...] = (deal_id,)
+    if limit is not None:
+        query = f"""
+            select * from (
+              select rowid as chat_rowid, * from chats where deal_id = ? order by created_at desc, rowid desc limit ?
+            ) order by created_at, chat_rowid
+        """
+        params = (deal_id, limit)
+    with connect() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [chat_turn_from_row(row) for row in rows]
+
+
 def save_analysis(
     deal_id: str,
     claims: list[DealClaim],
@@ -342,6 +369,7 @@ def get_deal(deal_id: str) -> DealAnalysis:
         profile=DealProfile.model_validate(json.loads(profile_row["payload"])) if profile_row else None,
         memo=RiskMemo.model_validate(json.loads(memo_row["payload"])) if memo_row else None,
         qualityReview=QualityReview.model_validate(json.loads(review_row["payload"])) if review_row else None,
+        chatHistory=get_chats(deal_id),
     )
 
 
@@ -383,9 +411,11 @@ def save_review_artifacts(deal_id: str, memo: RiskMemo, quality_review: QualityR
         conn.execute("insert into quality_reviews (deal_id, payload) values (?, ?)", (deal_id, quality_review.model_dump_json()))
 
 
-def save_chat(chat_id: str, deal_id: str, question: str, payload: dict[str, Any]) -> None:
+def save_chat(chat_id: str, deal_id: str, question: str, payload: dict[str, Any]) -> ChatTurn:
     with connect() as conn:
         conn.execute(
             "insert into chats (id, deal_id, question, answer, citations, confidence) values (?, ?, ?, ?, ?, ?)",
             (chat_id, deal_id, question, payload["answer"], json.dumps(payload["citations"]), payload["confidence"]),
         )
+        row = conn.execute("select * from chats where id = ?", (chat_id,)).fetchone()
+    return chat_turn_from_row(row)
