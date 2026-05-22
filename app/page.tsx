@@ -630,31 +630,33 @@ function AgentOutput({ deal, scoring, memoMarkdown, exportUrl }: {
                     return (
                       <div key={claim.id} className="claimRow">
                         <StatusPill status={claim.status} />
-                        <span>{claim.text}</span>
+                        <span className="claimText" title={claim.text}>{claim.text}</span>
                         <small>{claimEvidence.length} {UI_COPY.evidenceLabel}</small>
                         {claimEvidence.length > 0 && (
                           <details className="claimEvidence">
-                            <summary>Evidence</summary>
-                            {claimEvidence.slice(0, 2).map((item) => (
-                              <article key={item.id} className={clsx("evidenceItem", `evidenceItem--${item.stance}`)}>
-                                <header className="citationHeader">
-                                  <div className="citationTitle">
-                                    <span>{item.stance.replaceAll("_", " ")}</span>
-                                    <strong>{sourceLabel(item)}</strong>
-                                  </div>
-                                  {item.sourceUrl && (
-                                    <a className="sourceLink" href={item.sourceUrl} target="_blank" rel="noreferrer">
-                                      <ExternalLink size={13} />
-                                      Open source
-                                    </a>
-                                  )}
-                                </header>
-                                <blockquote className="quoteBlock">
-                                  <Quote size={14} />
-                                  <p>{item.quoteSpan || item.snippet}</p>
-                                </blockquote>
-                              </article>
-                            ))}
+                            <summary>View</summary>
+                            <div className="claimEvidencePanel">
+                              {claimEvidence.slice(0, 2).map((item) => (
+                                <article key={item.id} className={clsx("evidenceItem", `evidenceItem--${item.stance}`)}>
+                                  <header className="citationHeader">
+                                    <div className="citationTitle">
+                                      <span>{item.stance.replaceAll("_", " ")}</span>
+                                      <strong>{sourceLabel(item)}</strong>
+                                    </div>
+                                    {item.sourceUrl && (
+                                      <a className="sourceLink" href={item.sourceUrl} target="_blank" rel="noreferrer">
+                                        <ExternalLink size={13} />
+                                        Open source
+                                      </a>
+                                    )}
+                                  </header>
+                                  <blockquote className="quoteBlock">
+                                    <Quote size={14} />
+                                    <p>{item.quoteSpan || item.snippet}</p>
+                                  </blockquote>
+                                </article>
+                              ))}
+                            </div>
                           </details>
                         )}
                       </div>
