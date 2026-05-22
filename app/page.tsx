@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   CircleHelp,
   ClipboardCheck,
+  ExternalLink,
   FileText,
   Gauge,
   Link,
@@ -16,6 +17,7 @@ import {
   MessageSquarePlus,
   PanelRightOpen,
   Paperclip,
+  Quote,
   Send,
   ShieldCheck,
   Upload,
@@ -595,6 +597,8 @@ function EvidenceArtifact({
   onUpdateClaimReview: (claimId: string, payload: { status?: ClaimStatus; reviewerStatus?: DealClaim["reviewerStatus"]; reviewerNotes?: string }) => Promise<void>;
 }) {
   const [notes, setNotes] = useState(claim.reviewerNotes);
+  const independentSourceCount = new Set(evidence.filter((item) => item.sourceIndependence === "third_party").map((item) => sourceLabel(item))).size;
+  const strongestEvidence = primaryEvidence(evidence);
   return (
     <section className="artifactPanel">
       <div className="artifactPanelHeader">
@@ -610,6 +614,11 @@ function EvidenceArtifact({
       <div className="rationale">
         <AlertTriangle size={16} />
         <p>{claim.riskRationale} {claim.verificationNeed}</p>
+      </div>
+      <div className="citationSummary">
+        <Metric label="Citations" value={`${evidence.length}`} />
+        <Metric label="Independent" value={`${independentSourceCount}`} />
+        <Metric label="Primary source" value={strongestEvidence ? sourceLabel(strongestEvidence) : "None"} />
       </div>
       {claim.qualityIssues.length > 0 && (
         <div className="qualityIssues">
@@ -648,13 +657,27 @@ function EvidenceArtifact({
       </form>
       <div className="evidenceList">
         {evidence.map((item) => (
-          <article key={item.id} className="evidenceItem">
-            <div>
-              <strong>{item.title}</strong>
-              <span>{item.stance.replaceAll("_", " ")}</span>
-            </div>
-            <p>{item.snippet}</p>
-            <footer>
+          <article key={item.id} className={clsx("evidenceItem", `evidenceItem--${item.stance}`)}>
+            <header className="citationHeader">
+              <div className="citationTitle">
+                <span>{item.stance.replaceAll("_", " ")}</span>
+                <strong>{sourceLabel(item)}</strong>
+                <small>{chunkLabel(item)}</small>
+              </div>
+              {item.sourceUrl && (
+                <a className="sourceLink" href={item.sourceUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink size={13} />
+                  Open source
+                </a>
+              )}
+            </header>
+            <blockquote className="quoteBlock">
+              <Quote size={14} />
+              <p>{item.quoteSpan || item.snippet}</p>
+            </blockquote>
+            {item.quoteSpan && item.snippet && item.snippet !== item.quoteSpan && <p className="contextSnippet">{item.snippet}</p>}
+            <div className="citationReason">Used to {stanceVerb(item.stance)} this claim.</div>
+            <footer className="citationMeta">
               <span>{item.citation}</span>
               <span>{item.sourceType.replace("_", " ")}</span>
               <span>{item.sourceIndependence.replace("_", " ")}</span>
@@ -738,8 +761,11 @@ function AnswerMessage({ answer }: { answer: ChatAnswer }) {
         </div>
         <p className="messageCopy">{answer.answer}</p>
         <footer>
-          {answer.citations.map((citation) => (
-            <span key={citation}>{citation}</span>
+          {answer.citations.map((citation, index) => (
+            <span key={citation} className="chatCitationChip">
+              <small>{index + 1}</small>
+              {shortCitation(citation)}
+            </span>
           ))}
         </footer>
       </div>
@@ -791,4 +817,35 @@ function buildSuggestedQuestions(claims: DealClaim[]) {
 
 function formatClaimCategory(category: DealClaim["category"]) {
   return category.replaceAll("_", " ");
+}
+
+function sourceLabel(item: EvidenceItem) {
+  return item.sourceName || item.citation.split(", chunk")[0] || "Source";
+}
+
+function chunkLabel(item: EvidenceItem) {
+  if (item.chunkIndex) return `Chunk ${item.chunkIndex}`;
+  const match = item.citation.match(/chunk\s+(\d+)/i);
+  return match ? `Chunk ${match[1]}` : "Source excerpt";
+}
+
+function stanceVerb(stance: EvidenceItem["stance"]) {
+  if (stance === "supports") return "support";
+  if (stance === "contradicts") return "contradict";
+  if (stance === "partially_supports") return "partially support";
+  return "mark evidence as missing for";
+}
+
+function primaryEvidence(evidence: EvidenceItem[]) {
+  const stanceRank: Record<EvidenceItem["stance"], number> = {
+    supports: 4,
+    contradicts: 3,
+    partially_supports: 2,
+    not_found: 1
+  };
+  return [...evidence].sort((a, b) => stanceRank[b.stance] - stanceRank[a.stance] || b.relevanceScore - a.relevanceScore)[0] ?? null;
+}
+
+function shortCitation(citation: string) {
+  return citation.replace(/,\s*chunk\s*/i, " #");
 }

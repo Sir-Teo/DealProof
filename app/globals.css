@@ -564,7 +564,7 @@ summary:focus-visible {
 }
 
 .statusPill,
-.evidenceItem footer span,
+.citationMeta span,
 .answerBox footer span {
   display: inline-flex;
   align-items: center;
@@ -619,6 +619,13 @@ summary:focus-visible {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.citationSummary {
+  display: grid;
+  grid-template-columns: 90px 110px minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .metric {
@@ -697,7 +704,7 @@ summary:focus-visible {
 
 .evidenceList {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .evidenceItem {
@@ -707,8 +714,24 @@ summary:focus-visible {
   padding: 12px;
 }
 
-.evidenceItem div,
-.evidenceItem footer,
+.evidenceItem--supports {
+  border-left: 3px solid var(--green);
+}
+
+.evidenceItem--contradicts {
+  border-left: 3px solid var(--red);
+}
+
+.evidenceItem--partially_supports {
+  border-left: 3px solid var(--amber);
+}
+
+.evidenceItem--not_found {
+  border-left: 3px solid var(--line-strong);
+}
+
+.citationHeader,
+.citationMeta,
 .answerBox footer {
   display: flex;
   align-items: center;
@@ -716,32 +739,109 @@ summary:focus-visible {
   flex-wrap: wrap;
 }
 
-.evidenceItem div strong {
-  font-size: 13px;
-  font-weight: 600;
+.citationHeader {
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
 
-.evidenceItem div span {
+.citationTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.citationTitle strong {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.citationTitle span {
   color: var(--muted);
   background: var(--gray-bg);
   border-radius: 999px;
   font-size: 11px;
+  font-weight: 700;
   padding: 3px 7px;
   text-transform: capitalize;
 }
 
-.evidenceItem p {
+.citationTitle small {
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 6px 0;
+  font-size: 11px;
+  font-weight: 600;
 }
 
-.evidenceItem footer {
+.sourceLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 7px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.sourceLink:hover {
+  background: var(--panel-soft);
+  border-color: var(--line-strong);
+}
+
+.quoteBlock {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 7px;
+  align-items: start;
+  background: #fafafa;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 0 0 8px;
+  padding: 10px;
+}
+
+.quoteBlock svg {
+  color: var(--faint);
+  margin-top: 2px;
+}
+
+.quoteBlock p {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.contextSnippet {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.citationReason {
+  color: #374151;
+  background: var(--panel-soft);
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  padding: 7px 9px;
+}
+
+.citationMeta {
   margin-top: 4px;
 }
 
-.evidenceItem footer span,
+.citationMeta span,
 .answerBox footer span {
   background: var(--gray-bg);
   color: #4b5563;
@@ -875,6 +975,18 @@ summary:focus-visible {
 
 .answerBox footer span {
   font-size: 11px;
+}
+
+.chatCitationChip small {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 /* ── Composer ── */
@@ -1097,6 +1209,10 @@ summary:focus-visible {
 
   .qualityStrip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .citationSummary {
+    grid-template-columns: 1fr;
   }
 
   .artifactPanelHeader {

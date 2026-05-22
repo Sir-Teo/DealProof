@@ -49,6 +49,10 @@ class MaterialChunk(BaseModel):
     deal_id: str
     citation: str
     text: str
+    sourceName: str = ""
+    sourceUrl: str | None = None
+    sourceType: Literal["file", "url", "seed"] = "file"
+    chunkIndex: int = 0
 
 
 class DealProfile(BaseModel):
@@ -89,6 +93,11 @@ class EvidenceItem(BaseModel):
     sourceIndependence: SourceIndependence = "internal"
     relevanceScore: float = 0
     quoteSpan: str | None = None
+    sourceMaterialId: str | None = None
+    sourceName: str | None = None
+    sourceUrl: str | None = None
+    chunkIndex: int | None = None
+    retrievedAt: str | None = None
 
 
 class RiskMemo(BaseModel):

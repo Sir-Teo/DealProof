@@ -81,6 +81,11 @@ def init_db() -> None:
               source_independence text not null default 'internal',
               relevance_score real not null default 0,
               quote_span text,
+              source_material_id text,
+              source_name text,
+              source_url text,
+              chunk_index integer,
+              retrieved_at text,
               primary key (deal_id, id)
             );
 
@@ -120,6 +125,11 @@ def init_db() -> None:
         ensure_column(conn, "evidence", "source_independence", "text not null default 'internal'")
         ensure_column(conn, "evidence", "relevance_score", "real not null default 0")
         ensure_column(conn, "evidence", "quote_span", "text")
+        ensure_column(conn, "evidence", "source_material_id", "text")
+        ensure_column(conn, "evidence", "source_name", "text")
+        ensure_column(conn, "evidence", "source_url", "text")
+        ensure_column(conn, "evidence", "chunk_index", "integer")
+        ensure_column(conn, "evidence", "retrieved_at", "text")
 
 
 def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -235,8 +245,9 @@ def save_analysis(
                 """
                 insert into evidence
                 (id, deal_id, claim_id, title, source_type, citation, snippet, stance, reliability,
-                 source_independence, relevance_score, quote_span)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 source_independence, relevance_score, quote_span, source_material_id, source_name, source_url,
+                 chunk_index, retrieved_at)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     item.id,
@@ -251,6 +262,11 @@ def save_analysis(
                     item.sourceIndependence,
                     item.relevanceScore,
                     item.quoteSpan,
+                    item.sourceMaterialId,
+                    item.sourceName,
+                    item.sourceUrl,
+                    item.chunkIndex,
+                    item.retrievedAt,
                 ),
             )
         conn.execute("insert into memos (deal_id, payload) values (?, ?)", (deal_id, memo.model_dump_json()))
@@ -315,6 +331,11 @@ def get_deal(deal_id: str) -> DealAnalysis:
                 sourceIndependence=row["source_independence"],
                 relevanceScore=row["relevance_score"],
                 quoteSpan=row["quote_span"],
+                sourceMaterialId=row["source_material_id"],
+                sourceName=row["source_name"],
+                sourceUrl=row["source_url"],
+                chunkIndex=row["chunk_index"],
+                retrievedAt=row["retrieved_at"],
             )
             for row in evidence
         ],

@@ -68,6 +68,10 @@ def test_direct_numeric_support_can_be_supported(monkeypatch):
     assert any(claim["status"] == "supported" for claim in deal["claims"])
     supported = [item for item in deal["evidence"] if item["stance"] == "supports"]
     assert supported
+    assert all(item["quoteSpan"] for item in supported)
+    assert all(item["sourceName"] for item in supported)
+    assert all(item["chunkIndex"] for item in supported)
+    assert all(item["sourceIndependence"] != "derived" for item in supported)
     assert any("financials_summary.txt" in item["citation"] for item in supported)
     assert any("Directionally supported" in item or "high reviewer confidence" in item for item in deal["memo"]["keyStrengths"])
 

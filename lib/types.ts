@@ -46,6 +46,11 @@ export type EvidenceItem = {
   sourceIndependence: "founder_supplied" | "internal" | "third_party" | "derived";
   relevanceScore: number;
   quoteSpan?: string | null;
+  sourceMaterialId?: string | null;
+  sourceName?: string | null;
+  sourceUrl?: string | null;
+  chunkIndex?: number | null;
+  retrievedAt?: string | null;
 };
 
 export type RiskMemo = {

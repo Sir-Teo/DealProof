@@ -22,9 +22,13 @@ def score_claims(claims: list[DealClaim]) -> tuple[int, str, dict[str, int]]:
 
 def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> DealClaim:
     stances = {item.stance for item in evidence}
-    independent_support = any(item.stance == "supports" and item.sourceIndependence != "founder_supplied" for item in evidence)
+    independent_support = any(
+        item.stance == "supports" and item.sourceIndependence != "founder_supplied" and has_audit_citation(item)
+        for item in evidence
+    )
     founder_only_support = any(item.stance in {"supports", "partially_supports"} for item in evidence) and not independent_support
-    if "contradicts" in stances:
+    contradiction = any(item.stance == "contradicts" and has_audit_citation(item) for item in evidence)
+    if contradiction:
         status = "contradicted"
     elif independent_support:
         status = "supported"
@@ -58,6 +62,16 @@ def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> D
     )
 
 
+def has_audit_citation(item: EvidenceItem) -> bool:
+    return bool(
+        item.citation.strip()
+        and item.quoteSpan
+        and item.quoteSpan.strip()
+        and item.sourceType != "derived"
+        and item.sourceIndependence != "derived"
+    )
+
+
 def quality_issues_for_claim(claim: DealClaim, evidence: list[EvidenceItem], status: str) -> list[str]:
     issues: list[str] = []
     if len(claim.text.split()) < 7:
@@ -70,6 +84,8 @@ def quality_issues_for_claim(claim: DealClaim, evidence: list[EvidenceItem], sta
         issues.append("No matching evidence was found in the uploaded packet.")
     if status == "contradicted":
         issues.append("Contradictory evidence should be resolved before IC.")
+    if evidence and any(item.stance in {"supports", "contradicts"} and not has_audit_citation(item) for item in evidence):
+        issues.append("Evidence is missing an exact quote-backed citation.")
     if evidence and not any(item.sourceIndependence == "third_party" for item in evidence):
         issues.append("No third-party validation is attached.")
     return issues

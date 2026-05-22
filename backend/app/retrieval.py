@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import datetime, timezone
 
 from .models import DealClaim, EvidenceItem, MaterialChunk, SourceIndependence, SourceMaterial
 from .config import LOCAL_RETRIEVAL_CITATION
@@ -27,6 +28,10 @@ def chunk_text(material: SourceMaterial, max_chars: int = 950) -> list[MaterialC
                 material_id=material.id,
                 citation=f"{material.name}, chunk {index}",
                 text=window.strip(),
+                sourceName=material.name,
+                sourceUrl=material.url,
+                sourceType=material.source_type,
+                chunkIndex=index,
             )
         )
         start += max(len(window), max_chars)
@@ -223,6 +228,8 @@ def evidence_stance_for_chunk(claim: DealClaim, chunk: MaterialChunk) -> str:
     chunk_numbers = normalized_numbers(chunk.text)
     independence = source_independence(chunk.citation)
     if claim_numbers and claim_numbers.issubset(chunk_numbers):
+        if independence == "third_party":
+            return "supports"
         if not same_source and independence != "founder_supplied":
             return "supports"
         return "partially_supports"
@@ -250,8 +257,31 @@ def evidence_title_for_stance(stance: str) -> str:
     return "Relevant supplied material"
 
 
+def quote_span_for_claim(claim: DealClaim, chunk: MaterialChunk) -> str:
+    candidates = [part.strip() for part in re.split(r"(?<=[.!?])\s+|\n+", chunk.text) if part.strip()]
+    if not candidates:
+        return chunk.text[:420].strip()
+    claim_terms = keywords(claim.text)
+    claim_numbers = normalized_numbers(claim.text)
+
+    def candidate_score(candidate: str) -> tuple[int, int, int]:
+        candidate_terms = keywords(candidate)
+        number_matches = len(claim_numbers & normalized_numbers(candidate))
+        return (number_matches, len(claim_terms & candidate_terms), len(candidate))
+
+    quote = max(candidates, key=candidate_score)
+    if len(quote) < 80 and len(chunk.text) <= 420:
+        return chunk.text.strip()
+    return quote[:420].strip()
+
+
+def source_type_for_chunk(chunk: MaterialChunk) -> str:
+    return "supplied_url" if chunk.sourceType == "url" else "uploaded"
+
+
 def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -> list[EvidenceItem]:
     relevant = find_relevant_chunks(claim, chunks, limit=3)
+    retrieved_at = datetime.now(timezone.utc).isoformat()
     if not relevant:
         return [
             EvidenceItem(
@@ -265,24 +295,33 @@ def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -
                 reliability="medium",
                 sourceIndependence="derived",
                 relevanceScore=0,
+                retrievedAt=retrieved_at,
             )
         ]
-    return [
-        EvidenceItem(
-            id=f"ev-{uuid.uuid4().hex[:10]}",
-            claimId=claim.id,
-            title=evidence_title_for_stance(evidence_stance_for_chunk(claim, chunk)),
-            sourceType=source_type_for_citation(chunk.citation),
-            citation=chunk.citation,
-            snippet=chunk.text[:360],
-            stance=evidence_stance_for_chunk(claim, chunk),  # type: ignore[arg-type]
-            reliability="high" if evidence_stance_for_chunk(claim, chunk) == "supports" else "medium",
-            sourceIndependence=source_independence(chunk.citation),
-            relevanceScore=relevance_score(claim, chunk),
-            quoteSpan=chunk.citation,
+    evidence: list[EvidenceItem] = []
+    for chunk in relevant:
+        stance = evidence_stance_for_chunk(claim, chunk)
+        evidence.append(
+            EvidenceItem(
+                id=f"ev-{uuid.uuid4().hex[:10]}",
+                claimId=claim.id,
+                title=evidence_title_for_stance(stance),
+                sourceType=source_type_for_chunk(chunk),  # type: ignore[arg-type]
+                citation=chunk.citation,
+                snippet=chunk.text[:420],
+                stance=stance,  # type: ignore[arg-type]
+                reliability="high" if stance == "supports" else "medium",
+                sourceIndependence=source_independence(chunk.citation),
+                relevanceScore=relevance_score(claim, chunk),
+                quoteSpan=quote_span_for_claim(claim, chunk),
+                sourceMaterialId=chunk.material_id,
+                sourceName=chunk.sourceName or chunk.citation.split(", chunk")[0],
+                sourceUrl=chunk.sourceUrl,
+                chunkIndex=chunk.chunkIndex,
+                retrievedAt=retrieved_at,
+            )
         )
-        for chunk in relevant
-    ]
+    return evidence
 
 
 def source_type_for_citation(citation: str) -> str:

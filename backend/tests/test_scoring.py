@@ -26,6 +26,7 @@ def test_supported_status_from_evidence():
                 snippet="ARR doubled",
                 stance="supports",
                 reliability="high",
+                quoteSpan="ARR doubled in Q1.",
             )
         ],
     )
@@ -33,6 +34,27 @@ def test_supported_status_from_evidence():
     assert updated.status == "supported"
     assert updated.confidence in {"medium", "high"}
     assert updated.qualityScore > 0
+
+
+def test_support_requires_quote_backed_citation():
+    updated = apply_rule_based_status(
+        claim(),
+        [
+            EvidenceItem(
+                id="ev-01",
+                claimId="claim-01",
+                title="ARR table",
+                sourceType="uploaded",
+                citation="financials.csv",
+                snippet="ARR doubled",
+                stance="supports",
+                reliability="high",
+            )
+        ],
+    )
+
+    assert updated.status == "weak"
+    assert "Evidence is missing an exact quote-backed citation." in updated.qualityIssues
 
 
 def test_founder_only_support_is_not_overconfident():

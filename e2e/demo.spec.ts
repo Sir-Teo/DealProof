@@ -21,6 +21,8 @@ test("runs the gold-path DealProof chat demo", async ({ page }) => {
 
   await page.locator(".claimRow").first().click();
   await expect(page.locator(".evidenceItem").first()).toBeVisible();
+  await expect(page.locator(".citationSummary")).toBeVisible();
+  await expect(page.locator(".quoteBlock").first()).toBeVisible();
 
   const memoResponse = page.waitForResponse((response) => response.url().includes("/export-memo") && response.request().method() === "GET");
   await page.getByRole("button", { name: /Risk memo/i }).click();
@@ -32,4 +34,5 @@ test("runs the gold-path DealProof chat demo", async ({ page }) => {
   await page.getByRole("button", { name: /^What evidence supports/i }).first().click();
   await expect((await chatResponse).ok()).toBe(true);
   await expect(page.locator(".answerBox")).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".chatCitationChip").first()).toBeVisible();
 });

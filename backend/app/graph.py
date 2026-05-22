@@ -24,7 +24,7 @@ from .models import (
     SourceMaterial,
 )
 from .retrieval import chunk_text, fallback_evidence_for_claim
-from .scoring import apply_rule_based_status, score_claims
+from .scoring import apply_rule_based_status, has_audit_citation, score_claims
 
 
 class DiligenceState(TypedDict, total=False):
@@ -654,8 +654,13 @@ def is_verifiable_claim(text: str) -> bool:
         "source:",
         "snapshot date",
         "page structure",
+        "filing date",
     ]
     if any(lower.startswith(prefix) for prefix in metadata_prefixes):
+        return False
+    if re.fullmatch(r"(?:20\d{2}\s+)?form\s+10-k.*https?://\S+", lower):
+        return False
+    if lower.count("http://") + lower.count("https://") >= 1 and len(re.findall(r"[a-zA-Z]+", lower)) <= 8:
         return False
     generic_terms = ["world-class", "future of", "delightful", "game-changing", "best-in-class"]
     concrete_terms = [
@@ -784,10 +789,7 @@ def fallback_memo(
         [claim for claim in report_claims if claim.status != "supported" or claim.confidence != "high"],
         key=risk_sort_key,
     )
-    risks = [
-        f"{claim.text} ({claim.status}, confidence: {claim.confidence}). {claim.riskRationale}"
-        for claim in risk_claims
-    ][:5] or [
+    risks = [format_risk_claim(claim, evidence) for claim in risk_claims[:5]] or [
         "No material red flags were identified from supplied materials, but external validation remains limited."
     ]
     questions = list(dict.fromkeys(claim.verificationNeed for claim in report_claims if claim.status in {"weak", "missing", "contradicted"}))[:6] or [
@@ -795,18 +797,17 @@ def fallback_memo(
     ]
     evidence_map = [evidence_summary_for_claim(claim, evidence) for claim in report_claims[:8]]
     decision_drivers = decision_drivers_for_claims(report_claims, quality_review)
-    thesis = thesis_assessment_for_grade(grade, report_counts)
+    thesis = thesis_assessment_for_report(grade, report_counts, strength_claims, risk_claims)
     summary = executive_summary_for_report(company, profile, grade, score, report_score, report_counts, risk_claims)
+    recommendation = recommendation_for_report(grade, report_counts, risk_claims)
     return RiskMemo(
         company=company,
         overallGrade=grade,  # type: ignore[arg-type]
-        investmentQuestion=f"Do the supplied materials support {company}'s core traction, market, and risk claims strongly enough for IC?",
+        investmentQuestion=investment_question_for_report(company, profile, risk_claims),
         keyStrengths=strengths,
         materialRisks=risks,
         followUpQuestions=questions,
-        icRecommendation=(
-            f"Current grade: {grade}. Proceed only after the team resolves weak, contradicted, and missing-evidence claims with cited support."
-        ),
+        icRecommendation=recommendation,
         executiveSummary=summary,
         thesisAssessment=thesis,
         evidenceMap=evidence_map,
@@ -823,11 +824,43 @@ def primary_citation_for_claim(claim: DealClaim, evidence: list[EvidenceItem]) -
     return "Primary citation: not attached."
 
 
+def primary_evidence_for_claim(claim: DealClaim, evidence: list[EvidenceItem]) -> EvidenceItem | None:
+    claim_evidence = [item for item in evidence if item.claimId == claim.id]
+    for stance in ["supports", "contradicts", "partially_supports", "not_found"]:
+        for item in claim_evidence:
+            if item.stance == stance and (has_audit_citation(item) or stance in {"partially_supports", "not_found"}):
+                return item
+    return claim_evidence[0] if claim_evidence else None
+
+
 def format_strength_claim(claim: DealClaim, evidence: list[EvidenceItem]) -> str:
-    citation = primary_citation_for_claim(claim, evidence)
+    primary = primary_evidence_for_claim(claim, evidence)
+    citation = f"Primary citation: {primary.citation}." if primary and primary.stance == "supports" else primary_citation_for_claim(claim, evidence)
+    qualifier = ""
+    if primary and primary.sourceIndependence != "third_party":
+        qualifier = f" The source is {primary.sourceIndependence.replace('_', ' ')}, so this should stay tied to the packet rather than treated as market proof."
+    quote = f" Quote: \"{primary.quoteSpan}\"" if primary and primary.quoteSpan else ""
     if claim.confidence == "high":
-        return f"{claim.text} This is supported with high reviewer confidence. {citation}"
-    return f"{claim.text} Directionally supported, but confidence is {claim.confidence}; keep diligence follow-up attached. {citation}"
+        return f"{claim.text} The cited evidence supports the claim with high reviewer confidence.{qualifier} {citation}{quote}"
+    return f"{claim.text} Directionally supported, but confidence is {claim.confidence}; keep diligence follow-up attached.{qualifier} {citation}{quote}"
+
+
+def format_risk_claim(claim: DealClaim, evidence: list[EvidenceItem]) -> str:
+    primary = primary_evidence_for_claim(claim, evidence)
+    citation = f" Citation: {primary.citation}." if primary else ""
+    quote = f" Quote: \"{primary.quoteSpan}\"" if primary and primary.quoteSpan else ""
+    if claim.status == "contradicted":
+        lead = "This is the cleanest red flag in the packet"
+    elif claim.status == "missing":
+        lead = "This remains an assertion rather than diligence evidence"
+    elif claim.status == "weak":
+        lead = "This is plausible but not yet underwritten"
+    else:
+        lead = "This should not be over-weighted"
+    return (
+        f"{claim.text} {lead}: status is {claim.status} with {claim.confidence} confidence. "
+        f"{claim.riskRationale}{citation}{quote}"
+    )
 
 
 def strength_sort_key(claim: DealClaim) -> tuple[int, int, int]:
@@ -874,11 +907,16 @@ def executive_summary_for_report(
     risk_clause = "No material unresolved target-company claim leads the memo."
     if risk_claims:
         lead = risk_claims[0]
-        risk_clause = f"The lead diligence issue is {lead.status}: {lead.text}"
+        risk_clause = f"The main diligence issue is that {lead.text} is {lead.status}."
+    posture = {
+        "green": "The packet is close to IC-ready on the evidence supplied, but it still deserves normal confirmatory checks.",
+        "yellow": "The packet has enough substance to continue diligence, but not enough to let the founder narrative carry the recommendation.",
+        "red": "The packet is not ready for IC because the unsupported or contradicted claims sit too close to the investment case.",
+    }.get(grade, "The packet needs further diligence before IC.")
     return (
-        f"{company} is a {profile.sector} company with a {profile.businessModel} model serving {profile.customer}. "
-        f"The overall diligence grade is {grade} ({score}/100), while the target-company memo focus scores {report_score}/100. "
-        f"The target-company ledger has {report_counts['supported']} supported, {report_counts['weak']} weak, "
+        f"{company} screens as a {profile.sector} company with a {profile.businessModel} model serving {profile.customer}. "
+        f"{posture} The full ledger scores {score}/100 and the target-company memo focus scores {report_score}/100, "
+        f"with {report_counts['supported']} supported, {report_counts['weak']} weak, "
         f"{report_counts['missing']} missing, and {report_counts['contradicted']} contradicted claims. {risk_clause}"
     )
 
@@ -900,11 +938,14 @@ def evidence_summary_for_claim(claim: DealClaim, evidence: list[EvidenceItem]) -
     independence = Counter(item.sourceIndependence for item in claim_evidence)
     stances = Counter(item.stance for item in claim_evidence)
     citations = list(dict.fromkeys(item.citation for item in claim_evidence))[:3]
+    primary = primary_evidence_for_claim(claim, evidence)
+    primary_source = primary.sourceName or primary.citation if primary else "not attached"
+    primary_quote = f" Primary quote: \"{primary.quoteSpan}\"." if primary and primary.quoteSpan else ""
     independence_summary = ", ".join(f"{key}: {value}" for key, value in sorted(independence.items()))
     stance_summary = ", ".join(f"{key}: {value}" for key, value in sorted(stances.items()))
     return (
-        f"{claim.id} ({claim.status}): {claim.text} - sources [{independence_summary}], "
-        f"stances [{stance_summary}], citations: {', '.join(citations)}."
+        f"{claim.id} ({claim.status}): {claim.text} - primary source: {primary_source}; "
+        f"sources [{independence_summary}], stances [{stance_summary}], citations: {', '.join(citations)}.{primary_quote}"
     )
 
 
@@ -913,9 +954,9 @@ def decision_drivers_for_claims(claims: list[DealClaim], quality_review: Quality
     contradicted = [claim for claim in claims if claim.status == "contradicted" and claim.decisionImpact == "high"]
     weak_high = [claim for claim in claims if claim.status in {"weak", "missing"} and claim.importance == "high"]
     if contradicted:
-        drivers.append("Resolve contradicted high-impact claims before IC.")
+        drivers.append(f"Resolve the contradicted high-impact claim before IC: {contradicted[0].text}")
     if weak_high:
-        drivers.append("Replace weak or missing high-importance claims with source-level customer, financial, or legal backup.")
+        drivers.append(f"Replace weak or missing high-importance support with source-level backup, starting with: {weak_high[0].text}")
     if quality_review and quality_review.globalWarnings:
         drivers.extend(quality_review.globalWarnings[:2])
     if not drivers:
@@ -923,18 +964,47 @@ def decision_drivers_for_claims(claims: list[DealClaim], quality_review: Quality
     return list(dict.fromkeys(drivers))[:5]
 
 
-def thesis_assessment_for_grade(grade: str, counts: dict[str, int] | None = None) -> str:
+def thesis_assessment_for_report(
+    grade: str,
+    counts: dict[str, int] | None = None,
+    strength_claims: list[DealClaim] | None = None,
+    risk_claims: list[DealClaim] | None = None,
+) -> str:
     counts = counts or {"supported": 0, "weak": 0, "missing": 0, "contradicted": 0}
+    strength_claims = strength_claims or []
+    risk_claims = risk_claims or []
+    best_support = f"The best-supported point is {strength_claims[0].text}" if strength_claims else "There is not yet a fully reliable proof point"
+    lead_risk = f"the gating issue is {risk_claims[0].text}" if risk_claims else "the remaining issue is normal confirmatory diligence"
     if counts.get("contradicted", 0):
         return (
-            "The thesis is not ready to rely on as presented: contradicted claims must be reconciled before IC, "
-            "even where parts of the packet are directionally supported."
+            f"The thesis should not be taken to IC as stated. {best_support}, but {lead_risk}; "
+            "that contradiction has to be reconciled before the memo can argue from the company's narrative."
         )
     if grade == "green":
-        return "The supplied packet is directionally IC-ready, subject to confirming no newer contradictory evidence exists."
+        return f"The supplied packet is directionally IC-ready. {best_support}, and no contradicted claim currently leads the decision."
     if grade == "yellow":
         return (
-            "The thesis has usable supporting evidence, but IC should focus on converting weak or medium-confidence support "
-            "into customer, financial, or third-party proof before relying on the narrative."
+            f"The thesis is investable only as a diligence workstream, not as a conclusion. {best_support}, but {lead_risk}; "
+            "IC should require customer, financial, or third-party proof before relying on the narrative."
         )
     return "The current packet is not IC-ready because material claims are contradicted, missing, or insufficiently supported."
+
+
+def investment_question_for_report(company: str, profile: DealProfile, risk_claims: list[DealClaim]) -> str:
+    if risk_claims:
+        return f"Can {company}'s {profile.businessModel} case survive diligence if the team cannot substantiate: {risk_claims[0].text}"
+    return f"Do the supplied materials support {company}'s core traction, market, and risk claims strongly enough for IC?"
+
+
+def recommendation_for_report(grade: str, counts: dict[str, int], risk_claims: list[DealClaim]) -> str:
+    if counts.get("contradicted", 0):
+        return (
+            f"Current grade: {grade}. Do not take the company narrative to IC unchanged; require source-level reconciliation "
+            "for the contradicted claims and rewrite the investment case around only supported evidence."
+        )
+    if grade == "green":
+        return "Current grade: green. Continue toward IC, with confirmatory diligence focused on freshness of citations and any customer-level checks still missing."
+    if grade == "yellow":
+        lead = f" The first gating item is: {risk_claims[0].text}" if risk_claims else ""
+        return f"Current grade: yellow. Keep the deal active, but condition IC readiness on converting weak or missing claims into cited support.{lead}"
+    return "Current grade: red. Pause IC work until the company supplies evidence that directly resolves the missing or weak high-impact claims."
