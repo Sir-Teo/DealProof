@@ -4,6 +4,7 @@ node_modules/
 coverage/
 playwright-report/
 test-results/
+generated_reports/
 .env*.local
 *.tsbuildinfo
 dist/

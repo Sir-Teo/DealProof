@@ -33,6 +33,15 @@ npm run build
 npm run e2e
 ```
 
+The default Playwright configuration starts the backend with an empty
+`DEEPSEEK_API_KEY`, so the demo, real-case, and report-quality E2E tests run
+against deterministic fallback analysis paths. To manually exercise the live LLM
+path, start the backend yourself with `DEEPSEEK_API_KEY` set and then run the UI
+or Playwright tests with the existing server reused.
+
+Generated exported memo files belong in `generated_reports/` and are treated as
+local demo/reference artifacts rather than source-controlled snapshots.
+
 ## Demo Flow
 
 1. Start on Upload and click Seed CaviClear Packet.
