@@ -413,6 +413,12 @@ summary:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.toolCall .rawModelOutput {
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
 /* ── Artifact grid (result cards) ── */
 
 .artifactGrid {

@@ -33,13 +33,14 @@ const emptyCounts = { supported: 0, weak: 0, contradicted: 0, missing: 0 };
 
 type AgentEventStatus = "running" | "done" | "error";
 type AgentEvent = {
-  event: "run_start" | "step_start" | "tool_start" | "tool_complete" | "step_complete" | "run_complete" | "run_error";
+  event: "run_start" | "step_start" | "tool_start" | "tool_delta" | "tool_complete" | "step_complete" | "run_complete" | "run_error";
   step: string;
   label: string;
   status: AgentEventStatus;
   toolName?: string;
   input?: string;
   output?: string;
+  rawOutput?: string;
   materials?: number;
   chunks?: number;
   claims?: number;
@@ -52,6 +53,7 @@ type AgentToolRun = {
   toolName?: string;
   input?: string;
   output?: string;
+  rawOutput?: string;
   statsEvent: AgentEvent;
 };
 type ActiveArtifact = { type: "claims" } | { type: "memo" } | { type: "readiness" } | { type: "claim"; claimId: string } | null;
@@ -333,7 +335,7 @@ export default function Home() {
             </article>
           )}
 
-          {deal && (
+          {deal && !isAnalyzing && (
             <ResultArtifacts
               deal={deal}
               scoring={scoring}
@@ -484,8 +486,9 @@ function AgentActivity({ events, running }: { events: AgentEvent[]; running: boo
 function groupAgentTools(events: AgentEvent[]) {
   const tools = new Map<string, AgentToolRun>();
   for (const event of events) {
-    if (event.event !== "tool_start" && event.event !== "tool_complete") continue;
+    if (event.event !== "tool_start" && event.event !== "tool_delta" && event.event !== "tool_complete") continue;
     const existing = tools.get(event.step);
+    const rawOutput = event.event === "tool_delta" ? `${existing?.rawOutput ?? ""}${event.rawOutput ?? ""}` : event.rawOutput ?? existing?.rawOutput;
     tools.set(event.step, {
       step: event.step,
       label: event.label,
@@ -493,6 +496,7 @@ function groupAgentTools(events: AgentEvent[]) {
       toolName: event.toolName ?? existing?.toolName,
       input: event.input ?? existing?.input,
       output: event.output ?? existing?.output,
+      rawOutput,
       statsEvent: event
     });
   }
@@ -517,6 +521,12 @@ function ToolCallRow({ tool }: { tool: AgentToolRun }) {
           <dt>{UI_COPY.outputLabel}</dt>
           <dd>{tool.output ?? UI_COPY.waitingForResult}</dd>
         </div>
+        {tool.rawOutput && (
+          <div>
+            <dt>DeepSeek</dt>
+            <dd className="rawModelOutput">{tool.rawOutput}</dd>
+          </div>
+        )}
       </dl>
     </details>
   );

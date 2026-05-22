@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import TypeVar
+from typing import Callable, TypeVar
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -22,20 +22,26 @@ class DeepSeekClient:
         return bool(self.api_key)
 
     def complete_json(self, system: str, user: str, schema: type[T]) -> T:
+        parsed, _ = self.complete_json_with_raw(system, user, schema)
+        return parsed
+
+    def complete_json_with_raw(self, system: str, user: str, schema: type[T], on_chunk: Callable[[str], None] | None = None) -> tuple[T, str]:
         if not self.api_key:
             raise RuntimeError("DEEPSEEK_API_KEY is not set")
 
-        content = self._complete(system, user)
+        content = self._complete_stream(system, user, on_chunk) if on_chunk else self._complete(system, user)
         try:
-            return schema.model_validate_json(extract_json(content))
+            return schema.model_validate_json(extract_json(content)), content
         except (ValidationError, json.JSONDecodeError) as exc:
             repair_prompt = (
                 "Repair the following response so it is valid JSON matching the requested schema. "
                 "Return JSON only, with no markdown.\n\n"
                 f"Validation error: {exc}\n\nResponse:\n{content}"
             )
-            repaired = self._complete(system, repair_prompt)
-            return schema.model_validate_json(extract_json(repaired))
+            if on_chunk:
+                on_chunk("\n\n[repair]\n")
+            repaired = self._complete_stream(system, repair_prompt, on_chunk) if on_chunk else self._complete(system, repair_prompt)
+            return schema.model_validate_json(extract_json(repaired)), repaired
 
     def _complete(self, system: str, user: str) -> str:
         response = httpx.post(
@@ -55,6 +61,39 @@ class DeepSeekClient:
         response.raise_for_status()
         payload = response.json()
         return payload["choices"][0]["message"]["content"]
+
+    def _complete_stream(self, system: str, user: str, on_chunk: Callable[[str], None]) -> str:
+        chunks: list[str] = []
+        with httpx.stream(
+            "POST",
+            f"{self.base_url.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            json={
+                "model": self.model,
+                "temperature": 0.15,
+                "response_format": {"type": "json_object"},
+                "stream": True,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            },
+            timeout=httpx.Timeout(60, read=120),
+        ) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line.removeprefix("data:").strip()
+                if data == "[DONE]":
+                    break
+                payload = json.loads(data)
+                delta = payload["choices"][0].get("delta", {}).get("content") or ""
+                if not delta:
+                    continue
+                chunks.append(delta)
+                on_chunk(delta)
+        return "".join(chunks)
 
 
 def extract_json(content: str) -> str:

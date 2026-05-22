@@ -38,6 +38,8 @@ class DiligenceState(TypedDict, total=False):
     evidence: list[EvidenceItem]
     quality_review: QualityReview
     memo: RiskMemo
+    llm_outputs: dict[str, str]
+    on_progress: ProgressCallback
     generated_at: str
 
 
@@ -96,7 +98,7 @@ def run_diligence(deal_id: str, on_progress: ProgressCallback | None = None) -> 
 
 
 def run_diligence_with_progress(deal_id: str, company: str, stage: str, on_progress: ProgressCallback) -> DiligenceState:
-    state: DiligenceState = {"deal_id": deal_id, "company": company, "stage": stage}
+    state: DiligenceState = {"deal_id": deal_id, "company": company, "stage": stage, "on_progress": on_progress}
     graph_updates = iter(build_graph().stream(state, stream_mode="updates"))
     for step_id, label, description in GRAPH_STEPS:
         before = progress_payload(state, label)
@@ -128,6 +130,7 @@ def run_diligence_with_progress(deal_id: str, company: str, stage: str, on_progr
                 "label": label,
                 "toolName": step_id,
                 "output": tool_output_summary(state, step_id),
+                **tool_raw_output(state, step_id),
             },
         )
         on_progress("step_complete", step_id, {**after, "label": description})
@@ -180,6 +183,31 @@ def tool_output_summary(state: DiligenceState, step_id: str) -> str:
     return summaries.get(step_id, "Complete.")
 
 
+def tool_raw_output(state: DiligenceState, step_id: str) -> dict[str, str]:
+    raw_output = state.get("llm_outputs", {}).get(step_id)
+    return {"rawOutput": raw_output} if raw_output else {}
+
+
+def with_llm_output(state: DiligenceState, step_id: str, raw_output: str) -> dict[str, dict[str, str]]:
+    outputs = {**state.get("llm_outputs", {}), step_id: raw_output}
+    return {"llm_outputs": outputs}
+
+
+def stream_llm_chunk(state: DiligenceState, step_id: str):
+    on_progress = state.get("on_progress")
+    if not on_progress:
+        return None
+
+    def emit(chunk: str) -> None:
+        on_progress(
+            "tool_delta",
+            step_id,
+            {"label": "Streaming DeepSeek response", "toolName": step_id, "rawOutput": chunk},
+        )
+
+    return emit
+
+
 def load_materials(state: DiligenceState) -> DiligenceState:
     materials = db.get_materials(state["deal_id"])
     if not materials:
@@ -212,8 +240,8 @@ def profile_deal(state: DiligenceState) -> DiligenceState:
             f"Materials:\n{context}"
         )
         try:
-            profile = llm.complete_json(system, user, DealProfileGeneration).profile
-            return {**state, "profile": normalize_profile(profile, state)}
+            generated, raw_output = llm.complete_json_with_raw(system, user, DealProfileGeneration, on_chunk=stream_llm_chunk(state, "profile_deal"))
+            return {**state, "profile": normalize_profile(generated.profile, state), **with_llm_output(state, "profile_deal", raw_output)}
         except Exception as exc:
             raise RuntimeError("DeepSeek profile step failed.") from exc
     return {**state, "profile": fallback_deal_profile(state)}
@@ -238,8 +266,9 @@ def extract_claims(state: DiligenceState) -> DiligenceState:
             "\"sourceMaterial\":\"...\",\"sourceSnippet\":\"...\",\"importance\":\"high|medium|low\",\"status\":\"missing\",\"riskRationale\":\"\"}]}\n\n"
             f"Materials:\n{context}"
         )
-        extracted = llm.complete_json(system, user, ClaimExtraction)
+        extracted, raw_output = llm.complete_json_with_raw(system, user, ClaimExtraction, on_chunk=stream_llm_chunk(state, "extract_claims"))
         claims = normalize_claim_ids(extracted.claims)
+        state = {**state, **with_llm_output(state, "extract_claims", raw_output)}
     else:
         claims = fallback_claims(state["materials"])
     if not claims:
@@ -338,8 +367,9 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
             "\"nextDiligenceRequests\":[...],\"decisionDrivers\":[...]}}"
         )
         try:
-            memo = llm.complete_json(system, user, MemoGeneration).memo
-            memo = memo.model_copy(update={"overallGrade": grade})
+            generated, raw_output = llm.complete_json_with_raw(system, user, MemoGeneration, on_chunk=stream_llm_chunk(state, "generate_memo"))
+            memo = generated.memo.model_copy(update={"overallGrade": grade})
+            return {**state, "memo": memo, **with_llm_output(state, "generate_memo", raw_output)}
         except Exception as exc:
             raise RuntimeError("DeepSeek memo step failed.") from exc
     else:
