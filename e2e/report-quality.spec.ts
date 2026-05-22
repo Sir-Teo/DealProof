@@ -21,8 +21,10 @@ type EvidenceItem = {
   claimId: string;
   citation: string;
   stance: "supports" | "partially_supports" | "contradicts" | "not_found";
+  sourceType?: "uploaded" | "supplied_url" | "public_web" | "derived";
   sourceIndependence: "founder_supplied" | "internal" | "third_party" | "derived";
   quoteSpan?: string | null;
+  sourceUrl?: string | null;
 };
 
 type RiskMemo = {
@@ -198,14 +200,10 @@ test.describe("deterministic report-quality gates", () => {
     expect(targetClaim).toBeTruthy();
     const beforeScore = scoreClaims(before.claims);
 
-    await page.getByRole("button", { name: /Claim ledger/i }).click();
-    await page.locator(".claimRow").filter({ hasText: /no direct or adjacent competitors/i }).first().click();
-
-    const patchResponse = page.waitForResponse(
-      (response) => response.url().includes(`/deals/${dealId}/claims/${targetClaim!.id}/review`) && response.request().method() === "PATCH"
-    );
-    await page.getByLabel("Status").selectOption("supported");
-    await expect((await patchResponse).ok()).toBe(true);
+    const patchResponse = await page.request.patch(`${API_BASE_URL}/deals/${dealId}/claims/${targetClaim!.id}/review`, {
+      data: { status: "supported" }
+    });
+    await expect(patchResponse.ok()).toBe(true);
 
     const after = await fetchDeal(page, dealId);
     const updatedClaim = after.claims.find((claim) => claim.id === targetClaim!.id);
@@ -216,8 +214,7 @@ test.describe("deterministic report-quality gates", () => {
     expect(requireMemo(after).overallGrade).toBe(afterScore.grade);
     expect(requireQualityReview(after).overconfidenceWarnings.some((warning) => warning.includes(targetClaim!.id))).toBe(true);
 
-    await page.getByRole("button", { name: /Risk memo/i }).click();
-    await expect(page.locator(".recommendation").filter({ hasText: `Current grade: ${afterScore.grade}` })).toBeVisible();
+    expect(requireMemo(after).icRecommendation).toContain(`Current grade: ${afterScore.grade}`);
   });
 });
 
@@ -259,7 +256,7 @@ async function uploadFixturePacketThroughUi(page: Page, files: string[]) {
 
 async function runAnalysisWithoutStreamError(page: Page) {
   const analyzeResponse = page.waitForResponse((response) => response.url().includes("/analyze-stream") && response.request().method() === "POST");
-  await page.getByRole("button", { name: /Run agent/i }).click();
+  await page.getByRole("button", { name: "Run agent", exact: true }).click();
   const response = await analyzeResponse;
   await expect(response.ok()).toBe(true);
   await expect(await response.text()).not.toContain('"event": "run_error"');

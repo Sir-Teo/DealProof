@@ -25,6 +25,7 @@ from .models import (
 )
 from .retrieval import chunk_text, fallback_evidence_for_claim
 from .scoring import apply_rule_based_status, has_audit_citation, score_claims
+from .web_research import collect_public_web_evidence
 
 
 class DiligenceState(TypedDict, total=False):
@@ -52,6 +53,7 @@ GRAPH_STEPS: list[GraphStep] = [
     ("profile_deal", "Profile deal context", "Inferring sector, buyer, model, stage, and material mix"),
     ("extract_claims", "Extract diligence claims", "Identifying concrete founder claims to verify"),
     ("retrieve_evidence", "Retrieve evidence", "Searching supplied materials for support and contradictions"),
+    ("search_public_web", "Search public web", "Gathering quote-backed third-party sources from the public internet"),
     ("score_claims", "Score claim support", "Applying support and risk scoring rules"),
     ("review_quality", "Review output quality", "Checking confidence, citations, and memo readiness"),
     ("generate_memo", "Draft red-team memo", "Writing the partner-ready diligence memo"),
@@ -66,6 +68,7 @@ def build_graph():
     graph.add_node("profile_deal", profile_deal)
     graph.add_node("extract_claims", extract_claims)
     graph.add_node("retrieve_evidence", retrieve_evidence)
+    graph.add_node("search_public_web", search_public_web)
     graph.add_node("score_claims", score_claim_statuses)
     graph.add_node("review_quality", review_quality)
     graph.add_node("generate_memo", generate_memo)
@@ -75,7 +78,8 @@ def build_graph():
     graph.add_edge("chunk_materials", "profile_deal")
     graph.add_edge("profile_deal", "extract_claims")
     graph.add_edge("extract_claims", "retrieve_evidence")
-    graph.add_edge("retrieve_evidence", "score_claims")
+    graph.add_edge("retrieve_evidence", "search_public_web")
+    graph.add_edge("search_public_web", "score_claims")
     graph.add_edge("score_claims", "review_quality")
     graph.add_edge("review_quality", "generate_memo")
     graph.add_edge("generate_memo", "persist_results")
@@ -161,6 +165,7 @@ def tool_input_summary(state: DiligenceState, step_id: str) -> str:
         "profile_deal": f"company={state['company']}; stage={state.get('stage', '')}; materials={len(state.get('materials', []))}",
         "extract_claims": f"company={state['company']}; sector={state.get('profile', DealProfile()).sector}; materials={len(state.get('materials', []))}",
         "retrieve_evidence": f"claims={len(state.get('claims', []))}; chunks={len(state.get('chunks', []))}",
+        "search_public_web": f"company={state['company']}; claims={len(state.get('claims', []))}; local_evidence={len(state.get('evidence', []))}",
         "score_claims": f"claims={len(state.get('claims', []))}; evidence={len(state.get('evidence', []))}",
         "generate_memo": f"company={state['company']}; claims={len(state.get('claims', []))}",
         "persist_results": f"deal_id={state['deal_id']}; claims={len(state.get('claims', []))}; evidence={len(state.get('evidence', []))}",
@@ -175,6 +180,7 @@ def tool_output_summary(state: DiligenceState, step_id: str) -> str:
         "profile_deal": f"Profiled {state.get('profile', DealProfile()).sector} / {state.get('profile', DealProfile()).businessModel}.",
         "extract_claims": f"Extracted {len(state.get('claims', []))} claims.",
         "retrieve_evidence": f"Retrieved {len(state.get('evidence', []))} evidence items.",
+        "search_public_web": f"Attached {len([item for item in state.get('evidence', []) if item.sourceType == 'public_web'])} public web evidence items.",
         "score_claims": f"Scored {len(state.get('claims', []))} claims.",
         "review_quality": f"Memo readiness {state.get('quality_review').memoReadinessScore if state.get('quality_review') else 0}%.",
         "generate_memo": "Generated red-team memo.",
@@ -287,6 +293,76 @@ def retrieve_evidence(state: DiligenceState) -> DiligenceState:
     return {**state, "claims": updated_claims, "evidence": all_evidence}
 
 
+def search_public_web(state: DiligenceState) -> DiligenceState:
+    try:
+        web_evidence = collect_public_web_evidence(
+            state["company"],
+            state.get("profile", DealProfile()),
+            state["claims"],
+            on_progress=web_progress_emitter(state),
+        )
+    except Exception:
+        emit = web_progress_emitter(state)
+        if emit:
+            emit("web_error", {"label": "Public web search failed; continuing with supplied materials"})
+        web_evidence = []
+    if not web_evidence:
+        return state
+
+    combined_evidence = replace_not_found_with_real_evidence([*state.get("evidence", []), *web_evidence])
+    evidence_by_claim = {claim.id: [item for item in combined_evidence if item.claimId == claim.id] for claim in state["claims"]}
+    updated_claims = [apply_rule_based_status(claim, evidence_by_claim.get(claim.id, [])) for claim in state["claims"]]
+    return {**state, "claims": updated_claims, "evidence": combined_evidence}
+
+
+def web_progress_emitter(state: DiligenceState):
+    on_progress = state.get("on_progress")
+    if not on_progress:
+        return None
+
+    def emit(event: str, payload: dict[str, int | str]) -> None:
+        label = str(payload.get("label", "Public web research"))
+        raw = web_progress_raw_line(event, payload)
+        on_progress(
+            "tool_delta",
+            "search_public_web",
+            {
+                "label": label,
+                "toolName": "search_public_web",
+                "webEvent": event,
+                "rawOutput": raw,
+                **payload,
+            },
+        )
+
+    return emit
+
+
+def web_progress_raw_line(event: str, payload: dict[str, int | str]) -> str:
+    if event == "web_query":
+        return f"Search: {payload.get('query', payload.get('label', ''))}\n"
+    if event == "web_results":
+        return f"Results: {payload.get('results', 0)} for {payload.get('query', '')}\n"
+    if event == "web_fetch":
+        return f"Fetch: {payload.get('sourceName') or payload.get('sourceUrl')}\n"
+    if event == "web_evidence":
+        return f"Evidence: {payload.get('stance')} from {payload.get('sourceName') or payload.get('sourceUrl')} (relevance {payload.get('relevanceScore')})\n"
+    return f"{payload.get('label', event)}\n"
+
+
+def replace_not_found_with_real_evidence(evidence: list[EvidenceItem]) -> list[EvidenceItem]:
+    claims_with_real_evidence = {
+        item.claimId
+        for item in evidence
+        if item.sourceType != "derived" and item.stance != "not_found"
+    }
+    return [
+        item
+        for item in evidence
+        if not (item.claimId in claims_with_real_evidence and item.sourceType == "derived" and item.stance == "not_found")
+    ]
+
+
 def score_claim_statuses(state: DiligenceState) -> DiligenceState:
     evidence_by_claim = {claim.id: [item for item in state["evidence"] if item.claimId == claim.id] for claim in state["claims"]}
     claims = [apply_rule_based_status(claim, evidence_by_claim.get(claim.id, [])) for claim in state["claims"]]
@@ -368,13 +444,38 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
         )
         try:
             generated, raw_output = llm.complete_json_with_raw(system, user, MemoGeneration, on_chunk=stream_llm_chunk(state, "generate_memo"))
-            memo = generated.memo.model_copy(update={"overallGrade": grade})
+            fallback = fallback_memo(state["company"], grade, state["claims"], state.get("evidence", []), profile, state.get("quality_review"))
+            memo = fill_missing_memo_sections(generated.memo.model_copy(update={"overallGrade": grade}), fallback)
             return {**state, "memo": memo, **with_llm_output(state, "generate_memo", raw_output)}
         except Exception as exc:
             raise RuntimeError("DeepSeek memo step failed.") from exc
     else:
         memo = fallback_memo(state["company"], grade, state["claims"], state.get("evidence", []), profile, state.get("quality_review"))
     return {**state, "memo": memo}
+
+
+def fill_missing_memo_sections(memo: RiskMemo, fallback: RiskMemo) -> RiskMemo:
+    updates = {}
+    for field in [
+        "investmentQuestion",
+        "icRecommendation",
+        "executiveSummary",
+        "thesisAssessment",
+    ]:
+        if not getattr(memo, field).strip():
+            updates[field] = getattr(fallback, field)
+    for field in [
+        "keyStrengths",
+        "materialRisks",
+        "followUpQuestions",
+        "evidenceMap",
+        "keyRisks",
+        "nextDiligenceRequests",
+        "decisionDrivers",
+    ]:
+        if not getattr(memo, field):
+            updates[field] = getattr(fallback, field)
+    return memo.model_copy(update=updates) if updates else memo
 
 
 def persist_results(state: DiligenceState) -> DiligenceState:

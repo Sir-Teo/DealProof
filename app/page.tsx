@@ -36,6 +36,17 @@ type AgentEvent = {
   input?: string;
   output?: string;
   rawOutput?: string;
+  webEvent?: string;
+  query?: string;
+  results?: number;
+  claimId?: string;
+  category?: string;
+  importance?: string;
+  sourceUrl?: string;
+  sourceName?: string;
+  stance?: string;
+  relevanceScore?: string;
+  webEvidence?: number;
   materials?: number;
   chunks?: number;
   claims?: number;
@@ -49,6 +60,7 @@ type AgentToolRun = {
   input?: string;
   output?: string;
   rawOutput?: string;
+  deltas: AgentEvent[];
   statsEvent: AgentEvent;
 };
 type FeedNote = { id: string; role: "user" | "agent"; title: string; body?: string };
@@ -439,6 +451,7 @@ function groupAgentTools(events: AgentEvent[]) {
     if (event.event !== "tool_start" && event.event !== "tool_delta" && event.event !== "tool_complete") continue;
     const existing = tools.get(event.step);
     const rawOutput = event.event === "tool_delta" ? `${existing?.rawOutput ?? ""}${event.rawOutput ?? ""}` : event.rawOutput ?? existing?.rawOutput;
+    const deltas = event.event === "tool_delta" ? [...(existing?.deltas ?? []), event] : existing?.deltas ?? [];
     tools.set(event.step, {
       step: event.step,
       label: event.label,
@@ -447,6 +460,7 @@ function groupAgentTools(events: AgentEvent[]) {
       input: event.input ?? existing?.input,
       output: event.output ?? existing?.output,
       rawOutput,
+      deltas,
       statsEvent: event
     });
   }
@@ -471,7 +485,15 @@ function ToolCallRow({ tool }: { tool: AgentToolRun }) {
           <dt>{UI_COPY.outputLabel}</dt>
           <dd>{tool.output ?? UI_COPY.waitingForResult}</dd>
         </div>
-        {tool.rawOutput && (
+        {tool.deltas.some((event) => event.webEvent) && (
+          <div>
+            <dt>Research</dt>
+            <dd>
+              <WebResearchLog events={tool.deltas} />
+            </dd>
+          </div>
+        )}
+        {tool.rawOutput && !tool.deltas.some((event) => event.webEvent) && (
           <div>
             <dt>DeepSeek</dt>
             <dd className="rawModelOutput">{tool.rawOutput}</dd>
@@ -480,6 +502,52 @@ function ToolCallRow({ tool }: { tool: AgentToolRun }) {
       </dl>
     </details>
   );
+}
+
+function WebResearchLog({ events }: { events: AgentEvent[] }) {
+  const visible = events.filter((event) => event.webEvent).slice(-12);
+  return (
+    <ol className="webResearchLog">
+      {visible.map((event, index) => (
+        <li key={`${event.webEvent}-${index}-${event.label}`}>
+          <span className={clsx("webEventBadge", event.webEvent)}>{formatWebEvent(event)}</span>
+          <div>
+            <strong>{event.label}</strong>
+            <small>{formatWebEventMeta(event)}</small>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function formatWebEvent(event: AgentEvent) {
+  const labels: Record<string, string> = {
+    web_start: "Start",
+    web_claim: "Claim",
+    web_query: "Search",
+    web_results: "Results",
+    web_fetch: "Fetch",
+    web_evidence: "Evidence",
+    web_complete: "Done",
+    web_disabled: "Off",
+    web_error: "Error"
+  };
+  return labels[event.webEvent ?? ""] ?? "Web";
+}
+
+function formatWebEventMeta(event: AgentEvent) {
+  if (event.webEvent === "web_query") return event.query ?? "";
+  if (event.webEvent === "web_results") return `${event.results ?? 0} results`;
+  if (event.webEvent === "web_fetch") return event.sourceUrl ?? "";
+  if (event.webEvent === "web_evidence") {
+    const stance = event.stance?.replaceAll("_", " ") ?? "evidence";
+    const score = event.relevanceScore ? ` · relevance ${event.relevanceScore}` : "";
+    return `${stance}${score}`;
+  }
+  if (event.webEvent === "web_claim") return [event.claimId, event.category, event.importance].filter(Boolean).join(" · ");
+  if (event.webEvidence !== undefined) return `${event.webEvidence} public evidence`;
+  return "";
 }
 
 function AgentOutput({ deal, scoring, memoMarkdown, exportUrl }: {

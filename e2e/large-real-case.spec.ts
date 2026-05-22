@@ -35,20 +35,21 @@ test("runs a larger public-material data room through the diligence workflow", a
   await expect(page.getByText(/14_analyst_claim_packet\.txt/)).toBeVisible();
 
   const analyzeResponse = page.waitForResponse((response) => response.url().includes("/analyze-stream") && response.request().method() === "POST");
-  await page.getByRole("button", { name: /Run agent/i }).click();
+  await page.getByRole("button", { name: "Run agent", exact: true }).click();
   await expect((await analyzeResponse).ok()).toBe(true);
   await expect(page.getByText("Analysis complete", { exact: true }).first()).toBeVisible({ timeout: 90_000 });
 
-  const claimLedger = page.getByRole("button", { name: /Claim ledger 18/i });
-  await expect(claimLedger).toBeEnabled({ timeout: 90_000 });
-  await claimLedger.click();
+  await expect(page.locator(".agentOutput")).toBeVisible();
+  await expect(page.locator(".gradeBar")).toBeVisible();
+  await expect(page.locator(".memoArtifact")).toBeVisible();
   await expect(page.getByRole("heading", { name: /18 diligence claims/i })).toBeVisible();
   await expect(page.locator(".claimRow").filter({ hasText: "contradicted" }).first()).toBeVisible();
   await expect(page.locator(".claimRow").filter({ hasText: "supported" }).first()).toBeVisible();
   await expect(page.locator(".claimRow").filter({ hasText: "weak" }).first()).toBeVisible();
 
-  await page.locator(".claimRow").filter({ hasText: "contradicted" }).first().click();
-  await expect(page.locator(".evidenceItem").filter({ hasText: "contradicts" }).first()).toBeVisible();
+  const contradictedEvidence = page.locator(".claimRow").filter({ hasText: "contradicted" }).first().locator(".claimEvidence");
+  await contradictedEvidence.locator("summary").click();
+  await expect(contradictedEvidence.locator(".evidenceItem").filter({ hasText: "contradicts" }).first()).toBeVisible();
 
   const chatResponse = page.waitForResponse((response) => response.url().includes("/chat") && response.request().method() === "POST");
   await page.getByPlaceholder("Ask about the deal evidence...").fill("What are the biggest unsupported or contradicted claims?");
@@ -58,7 +59,6 @@ test("runs a larger public-material data room through the diligence workflow", a
   await expect(page.locator(".answerBox footer span").first()).toBeVisible();
 
   const memoResponse = page.waitForResponse((response) => response.url().includes("/export-memo") && response.request().method() === "GET");
-  await page.getByRole("button", { name: /Risk memo/i }).click();
   await expect(page.getByText("Red team memo", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: /Export Markdown/i }).click();
   await expect((await memoResponse).ok()).toBe(true);

@@ -23,8 +23,28 @@ def fixture_uploads(names: list[str]):
     ]
 
 
+def load_manifest() -> dict:
+    return json.loads((FIXTURES / "manifest.json").read_text())
+
+
+def create_manifest_case_deal(client: TestClient, case: dict) -> dict:
+    created = client.post(
+        "/deals",
+        json={
+            "company": case["company"],
+            "tagline": "Real-world public-source diligence",
+            "stage": "Real-world fixture diligence",
+        },
+    )
+    assert created.status_code == 200
+    deal = created.json()
+    uploaded = client.post(f"/deals/{deal['id']}/materials", files=fixture_uploads(case["fixtures"]))
+    assert uploaded.status_code == 200
+    return deal
+
+
 def create_real_case_deal(client: TestClient) -> dict:
-    manifest = json.loads((FIXTURES / "manifest.json").read_text())
+    manifest = load_manifest()
     dm_case = next(case for case in manifest["cases"] if case["id"] == "dm_revenue_flow")
     apple_case = next(case for case in manifest["cases"] if case["id"] == "apple_2025_10k")
     created = client.post(
@@ -46,7 +66,7 @@ def create_real_case_deal(client: TestClient) -> dict:
 
 
 def create_large_real_case_deal(client: TestClient) -> dict:
-    manifest = json.loads((FIXTURES / "manifest.json").read_text())
+    manifest = load_manifest()
     large_case = next(case for case in manifest["cases"] if case["id"] == "large_public_data_room")
     created = client.post(
         "/deals",
@@ -68,15 +88,64 @@ def create_large_real_case_deal(client: TestClient) -> dict:
 
 
 def test_real_case_fixture_manifest_is_complete():
-    manifest = json.loads((FIXTURES / "manifest.json").read_text())
+    manifest = load_manifest()
 
     assert manifest["snapshotDate"]
+    assert len(manifest["cases"]) == 5
     for case in manifest["cases"]:
         assert case["sourceUrl"].startswith("https://")
         for name in case["fixtures"]:
             path = FIXTURES / name
             assert path.exists()
             assert path.read_text().strip()
+
+
+@pytest.mark.parametrize("case_id", [
+    "dm_revenue_flow",
+    "apple_2025_10k",
+    "large_public_data_room",
+    "microsoft_2025_annual_report",
+    "perplexity_public_web",
+])
+def test_five_real_case_quality_gate(monkeypatch, case_id):
+    disable_llm(monkeypatch)
+    manifest = load_manifest()
+    case = next(item for item in manifest["cases"] if item["id"] == case_id)
+    expected = case.get("expected", {})
+
+    with TestClient(app) as client:
+        deal = create_manifest_case_deal(client, case)
+        analyzed = client.post(f"/deals/{deal['id']}/analyze")
+        assert analyzed.status_code == 200
+        payload = analyzed.json()
+        question = expected.get("chatQuestion") or (expected.get("chatQuestions") or ["What are the strongest and weakest claims?"])[0]
+        answer = client.post(f"/deals/{deal['id']}/chat", json={"question": question})
+
+    claims = payload["claims"]
+    statuses = {claim["status"] for claim in claims}
+    evidence = payload["evidence"]
+    memo = payload["memo"]
+    strengths = "\n".join(memo["keyStrengths"])
+
+    assert len(claims) >= expected.get("minClaims", 1)
+    assert len({claim["text"] for claim in claims}) == len(claims)
+    assert len(evidence) >= len(claims)
+    assert all(item["citation"] for item in evidence)
+    assert any(item["quoteSpan"] for item in evidence if item["stance"] != "not_found")
+    assert set(expected.get("requiresStatuses", [])).issubset(statuses)
+    assert memo["executiveSummary"]
+    assert memo["thesisAssessment"]
+    assert memo["evidenceMap"]
+    assert memo["materialRisks"]
+    assert memo["followUpQuestions"]
+    assert answer.status_code == 200
+    assert answer.json()["citations"]
+
+    _, expected_grade, _ = score_claims([DealClaim.model_validate(claim) for claim in claims])
+    assert memo["overallGrade"] == expected_grade
+    for claim in claims:
+        if claim["status"] in {"weak", "missing", "contradicted"}:
+            assert claim["text"][:56] not in strengths
 
 
 def test_real_case_agent_output_has_supported_weak_and_contradicted_claims(monkeypatch):

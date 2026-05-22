@@ -11,7 +11,7 @@ export default defineConfig({
   workers: 1,
   webServer: [
     {
-      command: "cd backend && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000",
+      command: "cd backend && DEALPROOF_WEB_SEARCH_ENABLED=0 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000",
       url: "http://127.0.0.1:8000/health",
       reuseExistingServer: true,
       timeout: 30_000

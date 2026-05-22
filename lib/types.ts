@@ -38,7 +38,7 @@ export type EvidenceItem = {
   id: string;
   claimId: string;
   title: string;
-  sourceType: "uploaded" | "supplied_url" | "derived";
+  sourceType: "uploaded" | "supplied_url" | "public_web" | "derived";
   citation: string;
   snippet: string;
   stance: "supports" | "partially_supports" | "contradicts" | "not_found";

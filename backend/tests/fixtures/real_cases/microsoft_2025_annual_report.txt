@@ -1,0 +1,14 @@
+Source snapshot: Microsoft 2025 annual report public evidence.
+Source URL: https://www.microsoft.com/investor/reports/ar25/
+
+Claim: Microsoft revenue was $281.7 billion in fiscal 2025.
+Claim: Microsoft operating income was $128.5 billion in fiscal 2025.
+Claim: Microsoft Cloud revenue exceeded $168 billion in fiscal 2025.
+Claim: Microsoft has no direct competitors in cloud or AI platforms.
+Claim: Microsoft can sustain 30% annual revenue growth indefinitely.
+
+Annual report excerpt: Microsoft reported revenue of $281.7 billion for fiscal year 2025 and operating income of $128.5 billion.
+Annual report excerpt: Microsoft Cloud revenue surpassed $168 billion in fiscal year 2025.
+Annual report excerpt: The company says it faces intense competition across cloud infrastructure, productivity software, search, gaming, and AI platforms.
+Annual report excerpt: Direct competitors include Amazon, Google, Oracle, Salesforce, Apple, and other technology companies.
+Analyst note: The 30% annual growth claim is not supported by the annual report snapshot and should be validated against segment-level growth rates, market saturation, and AI infrastructure constraints.

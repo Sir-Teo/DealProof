@@ -60,6 +60,29 @@
           "What are the biggest unsupported or contradicted claims?"
         ]
       }
+    },
+    {
+      "id": "microsoft_2025_annual_report",
+      "company": "Microsoft Corporation",
+      "sourceUrl": "https://www.microsoft.com/investor/reports/ar25/",
+      "fixtures": ["microsoft_2025_annual_report.txt"],
+      "expected": {
+        "minClaims": 5,
+        "requiresStatuses": ["supported", "contradicted"],
+        "chatQuestion": "Which public evidence supports revenue and cloud claims?"
+      }
+    },
+    {
+      "id": "perplexity_public_web",
+      "company": "Perplexity AI",
+      "sourceUrl": "https://www.perplexity.ai/",
+      "secondarySources": ["https://www.perplexity.ai/enterprise"],
+      "fixtures": ["perplexity_public_web_packet.txt"],
+      "expected": {
+        "minClaims": 5,
+        "requiresStatuses": ["supported", "contradicted"],
+        "chatQuestion": "Can we trust the no-competitor and no-hallucination claims?"
+      }
     }
   ]
 }

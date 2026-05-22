@@ -85,7 +85,7 @@ class EvidenceItem(BaseModel):
     id: str
     claimId: str
     title: str
-    sourceType: Literal["uploaded", "supplied_url", "derived"]
+    sourceType: Literal["uploaded", "supplied_url", "public_web", "derived"]
     citation: str
     snippet: str
     stance: Literal["supports", "partially_supports", "contradicts", "not_found"]

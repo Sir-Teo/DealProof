@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const DEAL_ID = "test-deal-01";
 
@@ -9,175 +9,178 @@ const MOCK_DEAL_SEEDED = {
   stage: "Series A",
   status: "materials_loaded",
   generatedAt: null,
-  materials: [{ id: "m1", name: "pitch.pdf", type: "pdf" }],
+  materials: [{ id: "m1", name: "pitch.pdf", kind: "deck", summary: "Pitch deck", excerpt: "Deck excerpt" }],
   claims: [],
   evidence: [],
   memo: null,
   profile: null,
   qualityReview: null,
-  chatHistory: [],
+  chatHistory: []
 };
 
 const MOCK_DEAL_ANALYZED = {
   ...MOCK_DEAL_SEEDED,
-  profile: { sector: "Healthcare", businessModel: "SaaS", customer: "SMB", stage: "Series A" },
+  profile: { sector: "Healthcare", businessModel: "B2B SaaS", customer: "dental clinics", stage: "Series A", materialMix: ["deck: 1"] },
   claims: [
-    { id: "c1", text: "NRR above 140%", status: "supported", category: "financials", confidence: "high", qualityScore: 88, decisionImpact: "high", reviewerStatus: "pending", reviewerNotes: "", riskRationale: "Strong retention metric", qualityIssues: [] },
-    { id: "c2", text: "37 signed clinics", status: "weak", category: "traction", confidence: "medium", qualityScore: 61, decisionImpact: "medium", reviewerStatus: "pending", reviewerNotes: "", riskRationale: "Early cohort", qualityIssues: ["Small sample"] },
-    { id: "c3", text: "Full HIPAA compliance", status: "missing", category: "legal", confidence: "low", qualityScore: 30, decisionImpact: "high", reviewerStatus: "pending", reviewerNotes: "", riskRationale: "Not documented", qualityIssues: ["No evidence"] },
+    claim("c1", "NRR is above 140%.", "supported", "financials", "high"),
+    claim("c2", "37 signed clinics are active.", "weak", "growth", "medium"),
+    claim("c3", "Full HIPAA compliance is complete.", "missing", "compliance", "high")
   ],
   evidence: [
-    { id: "e1", claimId: "c1", stance: "supports", snippet: "NRR is above 140%", quoteSpan: "NRR is above 140%", sourceName: "Founder interview", sourceType: "interview", sourceUrl: null, sourceIndependence: "first_party", relevanceScore: 0.95, citation: "pitch.pdf, chunk 1", chunkIndex: 1 },
+    {
+      id: "e1",
+      claimId: "c1",
+      title: "Public web supporting evidence",
+      stance: "supports",
+      snippet: "NRR is above 140%",
+      quoteSpan: "NRR is above 140%",
+      sourceName: "Public source",
+      sourceType: "public_web",
+      sourceUrl: "https://example.com/nrr",
+      sourceIndependence: "third_party",
+      reliability: "high",
+      relevanceScore: 0.95,
+      citation: "Public source (https://example.com/nrr)",
+      chunkIndex: 1
+    }
   ],
   memo: {
+    company: "CaviClear AI",
     overallGrade: "yellow",
-    icRecommendation: "Conditional proceed pending financial audit.",
+    icRecommendation: "Current grade: yellow. Continue only after validating weak claims.",
     executiveSummary: "CaviClear is an early-stage dental billing automation company.",
     thesisAssessment: "Strong NRR but limited independent evidence.",
     investmentQuestion: "Can CaviClear scale beyond 50 clinics?",
-    keyStrengths: ["Strong NRR", "Sticky workflow"],
-    materialRisks: ["Small cohort", "HIPAA documentation gap"],
+    keyStrengths: ["Strong NRR"],
+    materialRisks: ["HIPAA documentation gap"],
     keyRisks: ["HIPAA documentation gap"],
     decisionDrivers: ["Audit financials", "Reference checks"],
     followUpQuestions: ["Provide audited P&L"],
     nextDiligenceRequests: ["Audited P&L"],
-    evidenceMap: [],
+    evidenceMap: ["c1 (supported): NRR is above 140%."]
   },
   qualityReview: {
     memoReadinessScore: 72,
     globalWarnings: ["TAM lacks external citation"],
+    duplicatedClaims: [],
+    lowValueClaims: [],
+    recommendedFollowUpEvidence: ["Provide audited P&L"],
+    overconfidenceWarnings: []
   },
   generatedAt: "2026-05-22T12:00:00Z",
-  status: "completed",
+  status: "completed"
 };
 
-
-async function setupMocks(page: import("@playwright/test").Page) {
-  await page.route("**/deals/demo", (route) => route.fulfill({ json: MOCK_DEAL_SEEDED }));
-  await page.route(`**/deals/${DEAL_ID}/analyze-stream`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { "Content-Type": "text/event-stream" },
-      body: `data: ${JSON.stringify({ event: "run_complete", step: "done", label: "Analysis complete" })}\n\n`,
-    });
-  });
-  await page.route(`**/deals/${DEAL_ID}`, (route) => route.fulfill({ json: MOCK_DEAL_ANALYZED }));
-  await page.route(`**/deals/${DEAL_ID}/claims/*/review`, (route) =>
-    route.fulfill({ json: { ...MOCK_DEAL_ANALYZED, claims: MOCK_DEAL_ANALYZED.claims.map((c) => c.id === "c2" ? { ...c, reviewerStatus: "verified" } : c) } })
-  );
+function claim(id: string, text: string, status: string, category: string, importance: string) {
+  return {
+    id,
+    text,
+    category,
+    sourceMaterial: "pitch.pdf",
+    sourceSnippet: text,
+    importance,
+    status,
+    riskRationale: "Risk rationale.",
+    confidence: status === "supported" ? "high" : "medium",
+    qualityScore: status === "supported" ? 88 : 54,
+    qualityIssues: [],
+    verificationNeed: "Request source-level evidence.",
+    decisionImpact: importance,
+    reviewerStatus: "unreviewed",
+    reviewerNotes: ""
+  };
 }
 
-test("pending cards: kicker + em-dash + descriptions visible", async ({ page }) => {
+async function setupAnalyzedMocks(page: Page, streamBody?: string) {
   await page.route("**/deals/demo", (route) => route.fulfill({ json: MOCK_DEAL_SEEDED }));
-  await page.route(`**/deals/${DEAL_ID}/analyze-stream`, async (route) => {
-    await route.fulfill({
+  await page.route(`**/deals/${DEAL_ID}/analyze-stream`, (route) =>
+    route.fulfill({
       status: 200,
       headers: { "Content-Type": "text/event-stream" },
-      body: `data: ${JSON.stringify({ event: "run_error", step: "done", label: "Stopped for pending-card UI test" })}\n\n`,
-    });
-  });
-  await page.goto("/");
-  await expect(page.getByText("Add deal materials to begin.")).toBeVisible();
+      body: streamBody ?? `data: ${JSON.stringify({ event: "run_complete", step: "agent", label: "Analysis complete" })}\n\n`
+    })
+  );
+  await page.route(`**/deals/${DEAL_ID}`, (route) => route.fulfill({ json: MOCK_DEAL_ANALYZED }));
+}
 
-  await page.getByRole("button", { name: /Seed demo/i }).click();
-  await expect(page.locator(".messageTitle").filter({ hasText: /Seeded/ })).toBeVisible({ timeout: 5_000 });
-
-  // Three cards in pending state
-  await expect(page.locator(".artifactCard")).toHaveCount(3);
-
-  // Eyebrow kickers
-  const kickers = page.locator(".artifactKicker");
-  await expect(kickers.nth(0)).toContainText("Claim ledger");
-  await expect(kickers.nth(1)).toContainText("IC readiness");
-  await expect(kickers.nth(2)).toContainText("Risk memo");
-
-  // All metrics show em-dash (no data yet)
-  for (const metric of await page.locator(".artifactPrimary strong").all()) {
-    await expect(metric).toHaveText("—");
-  }
-
-  // Pending copy
-  await expect(page.getByText("Run the agent to extract verifiable claims.")).toBeVisible();
-  await expect(page.getByText("Run the agent to unlock IC readiness.")).toBeVisible();
-  await expect(page.getByText("Run the agent to generate the memo.")).toBeVisible();
-
-  // No grade border classes applied before analysis
-  await expect(page.locator(".artifactCard").nth(0)).not.toHaveClass(/card--red|card--green|card--yellow|card--amber/);
-});
-
-test("post-analysis cards: real metrics + grade borders", async ({ page }) => {
-  await setupMocks(page);
-  await page.goto("/");
-  await page.getByRole("button", { name: /Seed demo/i }).click();
-  await expect(page.locator(".messageTitle").filter({ hasText: /Seeded/ })).toBeVisible({ timeout: 5_000 });
-  await expect(page.locator(".artifactCard")).toHaveCount(4, { timeout: 10_000 }); // 4th = qualityReview card
-
-  // Claim Ledger shows count
-  await expect(page.locator(".artifactKicker").nth(0)).toContainText("Claim ledger");
-  await expect(page.locator(".artifactPrimary strong").nth(0)).toHaveText("3");
-
-  // IC Readiness shows grade word
-  const readinessMetric = page.locator(".artifactPrimary strong").nth(1);
-  await expect(readinessMetric).not.toHaveText("—");
-
-  // Risk Memo shows grade
-  const memoMetric = page.locator(".artifactPrimary strong").nth(2);
-  await expect(memoMetric).toHaveText("yellow"); // CSS text-transform: capitalize renders it as "Yellow"
-
-  // Memo readiness shows score
-  await expect(page.locator(".artifactPrimary strong").nth(3)).toHaveText("72%");
-
-  // Grade border applied: risk memo card should have card--yellow
-  await expect(page.locator(".artifactCard").nth(2)).toHaveClass(/card--yellow/);
-});
-
-test("composer: header, input, and composer card render correctly", async ({ page }) => {
+test("composer and empty state render correctly", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.locator(".brandLine strong")).toHaveText("DealProof");
   await expect(page.locator(".brandMark")).toBeVisible();
+  await expect(page.getByText("Add deal materials to begin.")).toBeVisible();
   await expect(page.locator(".composerCard")).toBeVisible();
   await expect(page.locator(".promptArea input")).toBeDisabled();
-  await expect(page.getByRole("button", { name: /Run agent/i })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Run agent", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: /Seed demo/i })).toBeEnabled();
 });
 
-test("attach drawer: opens and closes on paperclip click", async ({ page }) => {
-  await page.route("**/deals/demo", (route) => route.fulfill({ json: MOCK_DEAL_SEEDED }));
-  await page.route(`**/deals/${DEAL_ID}/analyze-stream`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { "Content-Type": "text/event-stream" },
-      body: `data: ${JSON.stringify({ event: "run_error", step: "done", label: "Stopped for attach UI test" })}\n\n`,
-    });
-  });
+test("attach drawer opens and closes on paperclip click", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: /Seed demo/i }).click();
-  await expect(page.locator(".messageTitle").filter({ hasText: /Seeded/ })).toBeVisible({ timeout: 5_000 });
 
   await expect(page.locator(".attachDrawer")).not.toBeVisible();
-  await page.locator(".iconButton").evaluate((button: HTMLButtonElement) => button.click());
+  await page.getByRole("button", { name: "Attach files or URL" }).evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator(".attachDrawer")).toBeVisible();
-  await page.locator(".iconButton").evaluate((button: HTMLButtonElement) => button.click());
+  await expect(page.locator('input[type="file"]')).toBeAttached();
+  await page.getByRole("button", { name: "Attach files or URL" }).evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator(".attachDrawer")).not.toBeVisible();
 });
 
-test("mobile: artifact cards stack to single column", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.route("**/deals/demo", (route) => route.fulfill({ json: MOCK_DEAL_SEEDED }));
-  await page.route(`**/deals/${DEAL_ID}/analyze-stream`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { "Content-Type": "text/event-stream" },
-      body: `data: ${JSON.stringify({ event: "run_error", step: "done", label: "Stopped for mobile UI test" })}\n\n`,
-    });
-  });
+test("post-analysis panels show memo, claims, and evidence", async ({ page }) => {
+  await setupAnalyzedMocks(page);
   await page.goto("/");
   await page.getByRole("button", { name: /Seed demo/i }).click();
-  await expect(page.locator(".messageTitle").filter({ hasText: /Seeded/ })).toBeVisible({ timeout: 5_000 });
 
-  const grid = page.locator(".artifactGrid");
-  await expect(grid).toBeVisible();
-  const cols = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns);
-  expect(cols.trim().split(/\s+/).length).toBe(1);
+  await expect(page.locator(".messageTitle").filter({ hasText: /Seeded/ })).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator(".agentOutput")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".gradeBar")).toHaveClass(/card--yellow/);
+  await expect(page.locator(".memoArtifact")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Red team memo" })).toBeVisible();
+  await expect(page.locator(".profileGrid .metric")).toHaveCount(4);
+  await expect(page.getByRole("heading", { name: "3 diligence claims" })).toBeVisible();
+  await expect(page.locator(".claimGroup").filter({ hasText: "supported" })).toBeVisible();
+
+  const evidence = page.locator(".claimEvidence").first();
+  await evidence.locator("summary").click();
+  await expect(evidence.locator(".evidenceItem").first()).toBeVisible();
+  await expect(evidence.locator(".quoteBlock").first()).toBeVisible();
+  await expect(evidence.getByRole("link", { name: /Open source/i })).toBeVisible();
+});
+
+test("agent stream renders web-search research details", async ({ page }) => {
+  const streamBody = [
+    { event: "run_start", step: "agent", label: "Starting diligence agent" },
+    { event: "tool_start", step: "search_public_web", label: "Search public web", toolName: "search_public_web", input: "claims=3" },
+    { event: "tool_delta", step: "search_public_web", label: "\"CaviClear\" competitors", toolName: "search_public_web", webEvent: "web_query", query: "\"CaviClear\" competitors", rawOutput: "Search: \"CaviClear\" competitors\n" },
+    { event: "tool_delta", step: "search_public_web", label: "2 search results", toolName: "search_public_web", webEvent: "web_results", results: 2, rawOutput: "Results: 2\n" },
+    { event: "tool_delta", step: "search_public_web", label: "supports: Public source", toolName: "search_public_web", webEvent: "web_evidence", stance: "supports", relevanceScore: "0.91", sourceName: "Public source", sourceUrl: "https://example.com/nrr", rawOutput: "Evidence: supports\n" },
+    { event: "tool_complete", step: "search_public_web", label: "Search public web", toolName: "search_public_web", output: "Attached 1 public web evidence items." },
+    { event: "run_complete", step: "agent", label: "Analysis complete" }
+  ].map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
+
+  await setupAnalyzedMocks(page, streamBody);
+  await page.goto("/");
+  await page.getByRole("button", { name: /Seed demo/i }).click();
+
+  const webTool = page.locator(".toolCall").filter({ hasText: "search public web" }).first();
+  await expect(webTool).toBeVisible({ timeout: 10_000 });
+  await webTool.locator("summary").click();
+  await expect(webTool.locator(".webResearchLog")).toBeVisible();
+  await expect(webTool.locator(".webEventBadge.web_query")).toContainText("Search");
+  await expect(webTool.locator(".webEventBadge.web_evidence")).toContainText("Evidence");
+  await expect(webTool.getByText("supports · relevance 0.91")).toBeVisible();
+});
+
+test("mobile keeps composer and artifact panels usable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setupAnalyzedMocks(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /Seed demo/i }).click();
+
+  await expect(page.locator(".composerCard")).toBeVisible();
+  await expect(page.locator(".agentOutput")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".memoArtifact")).toBeVisible();
+  await expect(page.locator(".claimGroups")).toBeVisible();
+  const memoColumns = await page.locator(".memoColumns").evaluate((el) => getComputedStyle(el).gridTemplateColumns);
+  expect(memoColumns.trim().split(/\s+/).length).toBe(1);
 });

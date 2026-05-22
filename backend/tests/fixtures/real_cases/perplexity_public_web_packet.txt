@@ -1,0 +1,15 @@
+Source snapshot: Perplexity AI public website and public web evidence.
+Source URL: https://www.perplexity.ai/
+Secondary source: https://www.perplexity.ai/enterprise
+
+Claim: Perplexity offers an AI answer engine that returns cited answers from the web.
+Claim: Perplexity Enterprise Pro is positioned for team and company use.
+Claim: Perplexity has no direct AI search competitors.
+Claim: Perplexity can replace all traditional search workflows without hallucination risk.
+Claim: Perplexity has raised significant venture funding from institutional investors.
+
+Company website excerpt: Perplexity describes its product as an AI answer engine that searches the web and returns answers with source citations.
+Company website excerpt: Perplexity Enterprise Pro is marketed for organizations and teams that need AI-powered research with administrative controls.
+Public source excerpt: Coverage of the AI search market names Google, OpenAI, Microsoft Copilot, You.com, and other AI answer or search products as alternatives.
+Public source excerpt: Public reporting describes Perplexity as venture-backed, with funding from institutional investors and technology executives.
+Risk note: The no-hallucination and full-replacement claims require independent evaluation because public AI search products can still produce incorrect or incomplete answers.

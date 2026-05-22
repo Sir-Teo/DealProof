@@ -77,6 +77,7 @@ def source_independence(citation: str) -> SourceIndependence:
     if (
         "public" in lower
         or "annual report" in lower
+        or "annual_report" in lower
         or "10k" in lower
         or "10-k" in lower
         or "analyst" in lower
@@ -179,7 +180,7 @@ def evidence_stance_for_chunk(claim: DealClaim, chunk: MaterialChunk) -> str:
             "no competitors",
             "no direct competition",
         ]
-    )
+    ) or ("no direct" in claim_text and "competitor" in claim_text)
     names_competitors = any(
         phrase in chunk_text_lower
         for phrase in [
@@ -187,13 +188,14 @@ def evidence_stance_for_chunk(claim: DealClaim, chunk: MaterialChunk) -> str:
             "adjacent competitors",
             "competitors include",
             "as direct competitors",
+            "alternatives",
             "adjacent ai",
             "adjacent automation",
             "list ",
             "lists ",
         ]
     )
-    if denies_competition and names_competitors and not same_source:
+    if denies_competition and names_competitors and (not same_source or source_independence(chunk.citation) == "third_party"):
         return "contradicts"
 
     if "no manufacturing purchase obligations" in claim_text and "manufacturing purchase obligations" in chunk_text_lower and not same_source:
@@ -224,6 +226,11 @@ def evidence_stance_for_chunk(claim: DealClaim, chunk: MaterialChunk) -> str:
     ):
         return "contradicts"
 
+    if any(phrase in claim_text for phrase in ["indefinitely", "without hallucination", "no hallucination", "replace all"]) and any(
+        phrase in chunk_text_lower for phrase in ["not supported", "requires independent evaluation", "incorrect", "incomplete", "should be validated"]
+    ):
+        return "contradicts"
+
     claim_numbers = normalized_numbers(claim.text)
     chunk_numbers = normalized_numbers(chunk.text)
     independence = source_independence(chunk.citation)
@@ -237,7 +244,7 @@ def evidence_stance_for_chunk(claim: DealClaim, chunk: MaterialChunk) -> str:
     claim_terms = keywords(claim.text)
     chunk_terms = keywords(chunk.text)
     overlap = len(claim_terms & chunk_terms)
-    if overlap >= 5 and not same_source and independence == "third_party":
+    if overlap >= 5 and (not same_source or independence == "third_party") and independence == "third_party":
         return "supports"
     if (
         overlap >= 5

@@ -41,10 +41,11 @@ def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> D
     quality_score = quality_score_for_claim(claim, evidence, status, quality_issues)
     confidence = "high" if quality_score >= 82 else "medium" if quality_score >= 55 else "low"
     verification_need = verification_need_for_claim(claim, evidence, status)
+    has_public_web = any(item.sourceType == "public_web" for item in evidence)
     rationale = {
-        "supported": "The claim is supported by cited material supplied for this deal.",
+        "supported": "The claim is supported by quote-backed public web evidence." if has_public_web else "The claim is supported by cited material supplied for this deal.",
         "weak": "The claim has partial support, but methodology, cohort, or external validation is incomplete.",
-        "contradicted": "The claim conflicts with cited material or supplied source evidence.",
+        "contradicted": "The claim conflicts with cited public web evidence." if has_public_web else "The claim conflicts with cited material or supplied source evidence.",
         "missing": "No reliable uploaded or supplied-URL evidence supports this claim.",
     }[status]
     if claim.riskRationale and claim.status == status:

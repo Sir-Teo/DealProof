@@ -419,6 +419,80 @@ summary:focus-visible {
   white-space: pre-wrap;
 }
 
+.webResearchLog {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: inherit;
+}
+
+.webResearchLog li {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+
+.webResearchLog strong {
+  display: block;
+  color: #263241;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.webResearchLog small {
+  display: block;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.webEventBadge {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 18px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: #fff;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.webEventBadge.web_evidence {
+  color: #16794c;
+  border-color: rgba(22, 121, 76, 0.24);
+  background: rgba(22, 121, 76, 0.08);
+}
+
+.webEventBadge.web_query,
+.webEventBadge.web_fetch {
+  color: #3156d4;
+  border-color: rgba(49, 86, 212, 0.22);
+  background: rgba(49, 86, 212, 0.08);
+}
+
+.webEventBadge.web_error {
+  color: var(--red);
+  border-color: rgba(194, 65, 12, 0.24);
+  background: rgba(194, 65, 12, 0.08);
+}
+
 /* ── Grade bar (single-line result summary) ── */
 
 .gradeBar {
