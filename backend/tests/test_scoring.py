@@ -31,6 +31,32 @@ def test_supported_status_from_evidence():
     )
 
     assert updated.status == "supported"
+    assert updated.confidence in {"medium", "high"}
+    assert updated.qualityScore > 0
+
+
+def test_founder_only_support_is_not_overconfident():
+    updated = apply_rule_based_status(
+        claim(),
+        [
+            EvidenceItem(
+                id="ev-01",
+                claimId="claim-01",
+                title="Founder deck",
+                sourceType="uploaded",
+                citation="pitch_deck.txt",
+                snippet="ARR doubled in Q1.",
+                stance="supports",
+                reliability="high",
+                sourceIndependence="founder_supplied",
+                relevanceScore=0.91,
+            )
+        ],
+    )
+
+    assert updated.status == "weak"
+    assert updated.confidence != "high"
+    assert "Only founder-supplied evidence was found." in updated.qualityIssues
 
 
 def test_missing_status_from_no_evidence():

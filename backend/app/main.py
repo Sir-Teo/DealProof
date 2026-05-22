@@ -24,8 +24,8 @@ from .config import (
     LOCAL_FRONTEND_ORIGIN_REGEX,
     LOCAL_FRONTEND_ORIGINS,
 )
-from .graph import answer_question, run_diligence
-from .models import ChatAnswer, DealAnalysis, SourceMaterial
+from .graph import answer_question, refresh_review_artifacts, run_diligence
+from .models import ChatAnswer, ClaimStatus, DealAnalysis, ReviewerStatus, SourceMaterial
 from .parsers import fetch_url_text, infer_kind, parse_file, summarize
 from .scoring import memo_to_markdown
 
@@ -56,6 +56,12 @@ class UrlCreate(BaseModel):
 
 class ChatRequest(BaseModel):
     question: str
+
+
+class ClaimReviewPatch(BaseModel):
+    status: ClaimStatus | None = None
+    reviewerStatus: ReviewerStatus | None = None
+    reviewerNotes: str | None = None
 
 
 @app.on_event("startup")
@@ -229,6 +235,23 @@ def chat(deal_id: str, payload: ChatRequest) -> ChatAnswer:
     answer = answer_question(deal_id, payload.question.strip())
     db.save_chat(f"chat-{uuid.uuid4().hex[:10]}", deal_id, payload.question.strip(), answer.model_dump())
     return answer
+
+
+@app.patch("/deals/{deal_id}/claims/{claim_id}/review")
+def update_claim_review(deal_id: str, claim_id: str, payload: ClaimReviewPatch) -> DealAnalysis:
+    ensure_deal(deal_id)
+    try:
+        db.update_claim_review(
+            deal_id,
+            claim_id,
+            status=payload.status,
+            reviewer_status=payload.reviewerStatus,
+            reviewer_notes=payload.reviewerNotes,
+        )
+        refresh_review_artifacts(deal_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return db.get_deal(deal_id)
 
 
 @app.get("/deals/{deal_id}/export-memo")

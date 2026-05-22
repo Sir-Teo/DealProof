@@ -8,10 +8,12 @@ import {
   Bot,
   CheckCircle2,
   CircleHelp,
+  ClipboardCheck,
   FileText,
   Gauge,
   Link,
   Loader2,
+  MessageSquarePlus,
   PanelRightOpen,
   Paperclip,
   Send,
@@ -241,6 +243,21 @@ export default function Home() {
     }
   }
 
+  async function updateClaimReview(claimId: string, payload: { status?: ClaimStatus; reviewerStatus?: DealClaim["reviewerStatus"]; reviewerNotes?: string }) {
+    if (!deal) return;
+    setError(null);
+    try {
+      const updated = await api<DealAnalysis>(`/deals/${deal.id}/claims/${claimId}/review`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      setDeal(updated);
+    } catch (exc) {
+      setError(String(exc instanceof Error ? exc.message : exc));
+    }
+  }
+
   return (
     <main className="chatShell">
       <header className="appHeader">
@@ -293,6 +310,7 @@ export default function Home() {
               onOpenClaims={() => setActiveArtifact({ type: "claims" })}
               onOpenMemo={() => setActiveArtifact({ type: "memo" })}
               onSelectClaim={(claim) => setActiveArtifact({ type: "claim", claimId: claim.id })}
+              onUpdateClaimReview={updateClaimReview}
             />
           )}
         </div>
@@ -476,7 +494,8 @@ function ResultArtifacts({
   exportUrl,
   onOpenClaims,
   onOpenMemo,
-  onSelectClaim
+  onSelectClaim,
+  onUpdateClaimReview
 }: {
   deal: DealAnalysis;
   scoring: ReturnType<typeof scoreClaims>;
@@ -488,6 +507,7 @@ function ResultArtifacts({
   onOpenClaims: () => void;
   onOpenMemo: () => void;
   onSelectClaim: (claim: DealClaim) => void;
+  onUpdateClaimReview: (claimId: string, payload: { status?: ClaimStatus; reviewerStatus?: DealClaim["reviewerStatus"]; reviewerNotes?: string }) => Promise<void>;
 }) {
   const claims = deal.claims;
   if (!deal.materials.length) return null;
@@ -511,10 +531,22 @@ function ResultArtifacts({
           </div>
           <p>{deal.memo ? deal.memo.icRecommendation : UI_COPY.riskMemoPending}</p>
         </button>
+        {deal.qualityReview && (
+          <div className="artifactCard">
+            <div className="artifactHeader">
+              <ClipboardCheck size={16} />
+              <strong>Memo readiness</strong>
+              <span>{deal.qualityReview.memoReadinessScore}%</span>
+            </div>
+            <p>{deal.qualityReview.globalWarnings[0] ?? "Quality review passed without global warnings."}</p>
+          </div>
+        )}
       </div>
 
       {activeArtifact?.type === "claims" && <ClaimsArtifact claims={claims} evidence={deal.evidence} onSelectClaim={onSelectClaim} />}
-      {activeArtifact?.type === "claim" && selectedClaim && <EvidenceArtifact claim={selectedClaim} evidence={selectedEvidence} />}
+      {activeArtifact?.type === "claim" && selectedClaim && (
+        <EvidenceArtifact key={selectedClaim.id} claim={selectedClaim} evidence={selectedEvidence} onUpdateClaimReview={onUpdateClaimReview} />
+      )}
       {activeArtifact?.type === "memo" && deal.memo && <MemoArtifact deal={deal} memoMarkdown={memoMarkdown} exportUrl={exportUrl} />}
     </div>
   );
@@ -540,7 +572,7 @@ function ClaimsArtifact({ claims, evidence, onSelectClaim }: { claims: DealClaim
                   <button key={claim.id} type="button" className="claimRow" onClick={() => onSelectClaim(claim)}>
                     <StatusPill status={claim.status} />
                     <span>{claim.text}</span>
-                    <small>{claim.importance} / {count} {UI_COPY.evidenceLabel}</small>
+                    <small>{claim.confidence} confidence / {claim.qualityScore}% / {count} {UI_COPY.evidenceLabel}</small>
                     <PanelRightOpen size={14} />
                   </button>
                 );
@@ -553,17 +585,67 @@ function ClaimsArtifact({ claims, evidence, onSelectClaim }: { claims: DealClaim
   );
 }
 
-function EvidenceArtifact({ claim, evidence }: { claim: DealClaim; evidence: EvidenceItem[] }) {
+function EvidenceArtifact({
+  claim,
+  evidence,
+  onUpdateClaimReview
+}: {
+  claim: DealClaim;
+  evidence: EvidenceItem[];
+  onUpdateClaimReview: (claimId: string, payload: { status?: ClaimStatus; reviewerStatus?: DealClaim["reviewerStatus"]; reviewerNotes?: string }) => Promise<void>;
+}) {
+  const [notes, setNotes] = useState(claim.reviewerNotes);
   return (
     <section className="artifactPanel">
       <div className="artifactPanelHeader">
         <h2>{claim.text}</h2>
         <StatusPill status={claim.status} />
       </div>
+      <div className="qualityStrip">
+        <Metric label="Confidence" value={claim.confidence} />
+        <Metric label="Quality" value={`${claim.qualityScore}%`} />
+        <Metric label="Decision impact" value={claim.decisionImpact} />
+        <Metric label="Reviewer" value={claim.reviewerStatus.replaceAll("_", " ")} />
+      </div>
       <div className="rationale">
         <AlertTriangle size={16} />
-        <p>{claim.riskRationale}</p>
+        <p>{claim.riskRationale} {claim.verificationNeed}</p>
       </div>
+      {claim.qualityIssues.length > 0 && (
+        <div className="qualityIssues">
+          {claim.qualityIssues.map((issue) => (
+            <span key={issue}>{issue}</span>
+          ))}
+        </div>
+      )}
+      <div className="reviewControls">
+        <label>
+          Status
+          <select value={claim.status} onChange={(event) => void onUpdateClaimReview(claim.id, { status: event.target.value as ClaimStatus })}>
+            {(["supported", "weak", "contradicted", "missing"] as ClaimStatus[]).map((status) => (
+              <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+        </label>
+        <button type="button" className="secondaryButton" onClick={() => void onUpdateClaimReview(claim.id, { reviewerStatus: "verified" })}>
+          <CheckCircle2 size={13} />
+          Mark verified
+        </button>
+        <button type="button" className="secondaryButton" onClick={() => void onUpdateClaimReview(claim.id, { reviewerStatus: "needs_evidence" })}>
+          <MessageSquarePlus size={13} />
+          Request evidence
+        </button>
+      </div>
+      <form
+        className="reviewNotes"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onUpdateClaimReview(claim.id, { reviewerNotes: notes });
+        }}
+      >
+        <input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Reviewer note" />
+        <button type="submit" className="secondaryButton">Save note</button>
+      </form>
       <div className="evidenceList">
         {evidence.map((item) => (
           <article key={item.id} className="evidenceItem">
@@ -575,12 +657,23 @@ function EvidenceArtifact({ claim, evidence }: { claim: DealClaim; evidence: Evi
             <footer>
               <span>{item.citation}</span>
               <span>{item.sourceType.replace("_", " ")}</span>
+              <span>{item.sourceIndependence.replace("_", " ")}</span>
               <span>{item.reliability} reliability</span>
+              <span>{Math.round(item.relevanceScore * 100)}% relevance</span>
             </footer>
           </article>
         ))}
       </div>
     </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 

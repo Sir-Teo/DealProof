@@ -54,13 +54,13 @@ export function generateMemoMarkdown(memo: RiskMemo) {
 ## Investment Question
 ${memo.investmentQuestion}
 
-## Key Strengths
+## What We Can Trust
 ${memo.keyStrengths.map((item) => `- ${item}`).join("\n")}
 
-## Material Risks
+## What Remains Unproven
 ${memo.materialRisks.map((item) => `- ${item}`).join("\n")}
 
-## Questions Before IC
+## What Would Change the Decision
 ${memo.followUpQuestions.map((item) => `- ${item}`).join("\n")}
 
 ## Recommendation

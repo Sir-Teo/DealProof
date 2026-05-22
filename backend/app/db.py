@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import DATABASE_FILENAME, DEFAULT_STAGE, DEFAULT_TAGLINE
-from .models import DealAnalysis, DealClaim, EvidenceItem, RiskMemo, SourceMaterial
+from .models import DealAnalysis, DealClaim, EvidenceItem, QualityReview, RiskMemo, SourceMaterial
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
@@ -58,6 +58,13 @@ def init_db() -> None:
               importance text not null,
               status text not null,
               risk_rationale text not null,
+              confidence text not null default 'low',
+              quality_score integer not null default 0,
+              quality_issues text not null default '[]',
+              verification_need text not null default '',
+              decision_impact text not null default 'medium',
+              reviewer_status text not null default 'unreviewed',
+              reviewer_notes text not null default '',
               primary key (deal_id, id)
             );
 
@@ -71,10 +78,18 @@ def init_db() -> None:
               snippet text not null,
               stance text not null,
               reliability text not null,
+              source_independence text not null default 'internal',
+              relevance_score real not null default 0,
+              quote_span text,
               primary key (deal_id, id)
             );
 
             create table if not exists memos (
+              deal_id text primary key references deals(id) on delete cascade,
+              payload text not null
+            );
+
+            create table if not exists quality_reviews (
               deal_id text primary key references deals(id) on delete cascade,
               payload text not null
             );
@@ -90,6 +105,22 @@ def init_db() -> None:
             );
             """
         )
+        ensure_column(conn, "claims", "confidence", "text not null default 'low'")
+        ensure_column(conn, "claims", "quality_score", "integer not null default 0")
+        ensure_column(conn, "claims", "quality_issues", "text not null default '[]'")
+        ensure_column(conn, "claims", "verification_need", "text not null default ''")
+        ensure_column(conn, "claims", "decision_impact", "text not null default 'medium'")
+        ensure_column(conn, "claims", "reviewer_status", "text not null default 'unreviewed'")
+        ensure_column(conn, "claims", "reviewer_notes", "text not null default ''")
+        ensure_column(conn, "evidence", "source_independence", "text not null default 'internal'")
+        ensure_column(conn, "evidence", "relevance_score", "real not null default 0")
+        ensure_column(conn, "evidence", "quote_span", "text")
+
+
+def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    existing = {row["name"] for row in conn.execute(f"pragma table_info({table})").fetchall()}
+    if column not in existing:
+        conn.execute(f"alter table {table} add column {column} {definition}")
 
 
 def create_deal(deal_id: str, company: str, tagline: str = DEFAULT_TAGLINE, stage: str = DEFAULT_STAGE) -> None:
@@ -152,17 +183,26 @@ def get_materials(deal_id: str) -> list[SourceMaterial]:
     ]
 
 
-def save_analysis(deal_id: str, claims: list[DealClaim], evidence: list[EvidenceItem], memo: RiskMemo, generated_at: str) -> None:
+def save_analysis(
+    deal_id: str,
+    claims: list[DealClaim],
+    evidence: list[EvidenceItem],
+    memo: RiskMemo,
+    quality_review: QualityReview,
+    generated_at: str,
+) -> None:
     with connect() as conn:
         conn.execute("delete from claims where deal_id = ?", (deal_id,))
         conn.execute("delete from evidence where deal_id = ?", (deal_id,))
         conn.execute("delete from memos where deal_id = ?", (deal_id,))
+        conn.execute("delete from quality_reviews where deal_id = ?", (deal_id,))
         for claim in claims:
             conn.execute(
                 """
                 insert into claims
-                (id, deal_id, text, category, source_material, source_snippet, importance, status, risk_rationale)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, deal_id, text, category, source_material, source_snippet, importance, status, risk_rationale,
+                 confidence, quality_score, quality_issues, verification_need, decision_impact, reviewer_status, reviewer_notes)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     claim.id,
@@ -174,14 +214,22 @@ def save_analysis(deal_id: str, claims: list[DealClaim], evidence: list[Evidence
                     claim.importance,
                     claim.status,
                     claim.riskRationale,
+                    claim.confidence,
+                    claim.qualityScore,
+                    json.dumps(claim.qualityIssues),
+                    claim.verificationNeed,
+                    claim.decisionImpact,
+                    claim.reviewerStatus,
+                    claim.reviewerNotes,
                 ),
             )
         for item in evidence:
             conn.execute(
                 """
                 insert into evidence
-                (id, deal_id, claim_id, title, source_type, citation, snippet, stance, reliability)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, deal_id, claim_id, title, source_type, citation, snippet, stance, reliability,
+                 source_independence, relevance_score, quote_span)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     item.id,
@@ -193,9 +241,13 @@ def save_analysis(deal_id: str, claims: list[DealClaim], evidence: list[Evidence
                     item.snippet,
                     item.stance,
                     item.reliability,
+                    item.sourceIndependence,
+                    item.relevanceScore,
+                    item.quoteSpan,
                 ),
             )
         conn.execute("insert into memos (deal_id, payload) values (?, ?)", (deal_id, memo.model_dump_json()))
+        conn.execute("insert into quality_reviews (deal_id, payload) values (?, ?)", (deal_id, quality_review.model_dump_json()))
         conn.execute(
             "update deals set status = 'completed', error = null, generated_at = ? where id = ?",
             (generated_at, deal_id),
@@ -210,6 +262,7 @@ def get_deal(deal_id: str) -> DealAnalysis:
         claims = conn.execute("select * from claims where deal_id = ? order by id", (deal_id,)).fetchall()
         evidence = conn.execute("select * from evidence where deal_id = ? order by id", (deal_id,)).fetchall()
         memo_row = conn.execute("select payload from memos where deal_id = ?", (deal_id,)).fetchone()
+        review_row = conn.execute("select payload from quality_reviews where deal_id = ?", (deal_id,)).fetchone()
     return DealAnalysis(
         id=deal["id"],
         company=deal["company"],
@@ -229,6 +282,13 @@ def get_deal(deal_id: str) -> DealAnalysis:
                 importance=row["importance"],
                 status=row["status"],
                 riskRationale=row["risk_rationale"],
+                confidence=row["confidence"],
+                qualityScore=row["quality_score"],
+                qualityIssues=json.loads(row["quality_issues"]),
+                verificationNeed=row["verification_need"],
+                decisionImpact=row["decision_impact"],
+                reviewerStatus=row["reviewer_status"],
+                reviewerNotes=row["reviewer_notes"],
             )
             for row in claims
         ],
@@ -242,11 +302,53 @@ def get_deal(deal_id: str) -> DealAnalysis:
                 snippet=row["snippet"],
                 stance=row["stance"],
                 reliability=row["reliability"],
+                sourceIndependence=row["source_independence"],
+                relevanceScore=row["relevance_score"],
+                quoteSpan=row["quote_span"],
             )
             for row in evidence
         ],
         memo=RiskMemo.model_validate(json.loads(memo_row["payload"])) if memo_row else None,
+        qualityReview=QualityReview.model_validate(json.loads(review_row["payload"])) if review_row else None,
     )
+
+
+def update_claim_review(
+    deal_id: str,
+    claim_id: str,
+    status: str | None = None,
+    reviewer_status: str | None = None,
+    reviewer_notes: str | None = None,
+) -> None:
+    assignments: list[str] = []
+    values: list[str] = []
+    if status is not None:
+        assignments.append("status = ?")
+        values.append(status)
+    if reviewer_status is not None:
+        assignments.append("reviewer_status = ?")
+        values.append(reviewer_status)
+    if reviewer_notes is not None:
+        assignments.append("reviewer_notes = ?")
+        values.append(reviewer_notes)
+    if not assignments:
+        return
+    values.extend([deal_id, claim_id])
+    with connect() as conn:
+        result = conn.execute(
+            f"update claims set {', '.join(assignments)} where deal_id = ? and id = ?",
+            values,
+        )
+        if result.rowcount == 0:
+            raise KeyError(claim_id)
+
+
+def save_review_artifacts(deal_id: str, memo: RiskMemo, quality_review: QualityReview) -> None:
+    with connect() as conn:
+        conn.execute("delete from memos where deal_id = ?", (deal_id,))
+        conn.execute("delete from quality_reviews where deal_id = ?", (deal_id,))
+        conn.execute("insert into memos (deal_id, payload) values (?, ?)", (deal_id, memo.model_dump_json()))
+        conn.execute("insert into quality_reviews (deal_id, payload) values (?, ?)", (deal_id, quality_review.model_dump_json()))
 
 
 def save_chat(chat_id: str, deal_id: str, question: str, payload: dict[str, Any]) -> None:

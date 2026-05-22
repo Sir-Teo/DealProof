@@ -36,6 +36,7 @@ body {
 
 button,
 input,
+select,
 textarea,
 a {
   font: inherit;
@@ -613,6 +614,87 @@ summary:focus-visible {
   margin: 0;
 }
 
+.qualityStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.metric {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  min-width: 0;
+}
+
+.metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.metric strong {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: capitalize;
+  overflow-wrap: anywhere;
+}
+
+.qualityIssues {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.qualityIssues span {
+  background: var(--gray-bg);
+  border-radius: 999px;
+  color: #4b5563;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+}
+
+.reviewControls,
+.reviewNotes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.reviewControls label {
+  display: inline-grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.reviewControls select,
+.reviewNotes input {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  min-height: 34px;
+  padding: 6px 9px;
+}
+
+.reviewNotes input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
 .evidenceList {
   display: grid;
   gap: 8px;
@@ -975,6 +1057,10 @@ summary:focus-visible {
 
   .memoColumns {
     grid-template-columns: 1fr;
+  }
+
+  .qualityStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .artifactPanelHeader {

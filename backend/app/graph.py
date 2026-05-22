@@ -16,6 +16,7 @@ from .models import (
     EvidenceItem,
     MaterialChunk,
     MemoGeneration,
+    QualityReview,
     RiskMemo,
     SourceMaterial,
 )
@@ -30,6 +31,7 @@ class DiligenceState(TypedDict, total=False):
     chunks: list[MaterialChunk]
     claims: list[DealClaim]
     evidence: list[EvidenceItem]
+    quality_review: QualityReview
     memo: RiskMemo
     generated_at: str
 
@@ -43,6 +45,7 @@ def build_graph():
     graph.add_node("extract_claims", extract_claims)
     graph.add_node("retrieve_evidence", retrieve_evidence)
     graph.add_node("score_claims", score_claim_statuses)
+    graph.add_node("review_quality", review_quality)
     graph.add_node("generate_memo", generate_memo)
     graph.add_node("persist_results", persist_results)
     graph.set_entry_point("load_materials")
@@ -50,7 +53,8 @@ def build_graph():
     graph.add_edge("chunk_materials", "extract_claims")
     graph.add_edge("extract_claims", "retrieve_evidence")
     graph.add_edge("retrieve_evidence", "score_claims")
-    graph.add_edge("score_claims", "generate_memo")
+    graph.add_edge("score_claims", "review_quality")
+    graph.add_edge("review_quality", "generate_memo")
     graph.add_edge("generate_memo", "persist_results")
     graph.add_edge("persist_results", END)
     return graph.compile()
@@ -78,6 +82,7 @@ def run_diligence_with_progress(deal_id: str, company: str, on_progress: Progres
         ("extract_claims", "Extract diligence claims", "Identifying concrete founder claims to verify", extract_claims),
         ("retrieve_evidence", "Retrieve evidence", "Searching supplied materials for support and contradictions", retrieve_evidence),
         ("score_claims", "Score claim support", "Applying support and risk scoring rules", score_claim_statuses),
+        ("review_quality", "Review output quality", "Checking confidence, citations, and memo readiness", review_quality),
         ("generate_memo", "Draft red-team memo", "Writing the partner-ready diligence memo", generate_memo),
         ("persist_results", "Save analysis results", "Persisting claims, evidence, memo, and run metadata", persist_results),
     ]
@@ -145,6 +150,7 @@ def tool_output_summary(state: DiligenceState, step_id: str) -> str:
         "extract_claims": f"Extracted {len(state.get('claims', []))} claims.",
         "retrieve_evidence": f"Retrieved {len(state.get('evidence', []))} evidence items.",
         "score_claims": f"Scored {len(state.get('claims', []))} claims.",
+        "review_quality": f"Memo readiness {state.get('quality_review').memoReadinessScore if state.get('quality_review') else 0}%.",
         "generate_memo": "Generated red-team memo.",
         "persist_results": "Saved analysis results.",
     }
@@ -209,20 +215,69 @@ def score_claim_statuses(state: DiligenceState) -> DiligenceState:
     return {**state, "claims": claims}
 
 
+def review_quality(state: DiligenceState) -> DiligenceState:
+    claims = state["claims"]
+    evidence = state["evidence"]
+    duplicated = duplicated_claims(claims)
+    low_value = [claim.id for claim in claims if claim.qualityScore < 35 or "Claim is too terse to verify precisely." in claim.qualityIssues]
+    warnings: list[str] = []
+    if any(claim.status == "contradicted" for claim in claims):
+        warnings.append("At least one important claim is contradicted by supplied evidence.")
+    if any(claim.status == "supported" and claim.confidence != "high" for claim in claims):
+        warnings.append("Some supported claims have less than high reviewer confidence.")
+    if not any(item.sourceIndependence == "third_party" for item in evidence):
+        warnings.append("No third-party validation was attached to the analysis.")
+    if any(claim.status in {"missing", "weak"} and claim.importance == "high" for claim in claims):
+        warnings.append("High-importance claims remain weak or missing.")
+    overconfidence = [
+        f"{claim.id}: {claim.text}"
+        for claim in claims
+        if claim.status == "supported" and ("No third-party validation is attached." in claim.qualityIssues or claim.confidence != "high")
+    ]
+    follow_up = [claim.verificationNeed for claim in claims if claim.status != "supported"]
+    unique_follow_up = list(dict.fromkeys(follow_up))[:6]
+    avg_quality = round(sum(claim.qualityScore for claim in claims) / len(claims)) if claims else 0
+    penalty = min(30, len(warnings) * 5 + len(duplicated) * 3)
+    review = QualityReview(
+        memoReadinessScore=max(0, min(100, avg_quality - penalty)),
+        globalWarnings=warnings,
+        duplicatedClaims=duplicated,
+        lowValueClaims=low_value,
+        recommendedFollowUpEvidence=unique_follow_up,
+        overconfidenceWarnings=overconfidence,
+    )
+    return {**state, "quality_review": review}
+
+
+def duplicated_claims(claims: list[DealClaim]) -> list[str]:
+    seen: dict[str, str] = {}
+    duplicates: list[str] = []
+    for claim in claims:
+        signature = " ".join(sorted(re.findall(r"[a-zA-Z0-9]+", claim.text.lower()))[:8])
+        if signature in seen:
+            duplicates.append(f"{seen[signature]} / {claim.id}")
+        else:
+            seen[signature] = claim.id
+    return duplicates
+
+
 def generate_memo(state: DiligenceState) -> DiligenceState:
     llm = DeepSeekClient()
     _, grade, _ = score_claims(state["claims"])
     claim_context = "\n".join(
-        f"- [{claim.status}/{claim.importance}/{claim.category}] {claim.text} Rationale: {claim.riskRationale}"
+        f"- [{claim.status}/{claim.importance}/{claim.category}/confidence={claim.confidence}/quality={claim.qualityScore}] "
+        f"{claim.text} Rationale: {claim.riskRationale} Verification need: {claim.verificationNeed}"
         for claim in state["claims"]
     )
+    quality_context = state.get("quality_review", QualityReview()).model_dump_json()
     if llm.enabled:
         system = (
             "You write concise partner-ready VC red-team memos. Return JSON only. "
-            "Use unsupported/missing evidence language where appropriate. Do not invent facts."
+            "Use decision-oriented sections: what can be trusted, what remains unproven, what would change the decision, and a recommendation. "
+            "Do not present weak, missing, contradicted, or low-confidence claims as strengths. Do not invent facts."
         )
         user = (
-            f"Company: {state['company']}\nOverall grade from scoring rules: {grade}\n\nClaims:\n{claim_context}\n\n"
+            f"Company: {state['company']}\nOverall grade from scoring rules: {grade}\nQuality review: {quality_context}\n\nClaims:\n{claim_context}\n\n"
             "Return shape: {\"memo\":{\"company\":\"...\",\"overallGrade\":\"green|yellow|red\",\"investmentQuestion\":\"...\","
             "\"keyStrengths\":[...],\"materialRisks\":[...],\"followUpQuestions\":[...],\"icRecommendation\":\"...\"}}"
         )
@@ -238,8 +293,24 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
 
 def persist_results(state: DiligenceState) -> DiligenceState:
     generated_at = datetime.now(timezone.utc).isoformat()
-    db.save_analysis(state["deal_id"], state["claims"], state["evidence"], state["memo"], generated_at)
+    db.save_analysis(state["deal_id"], state["claims"], state["evidence"], state["memo"], state.get("quality_review", QualityReview()), generated_at)
     return {**state, "generated_at": generated_at}
+
+
+def refresh_review_artifacts(deal_id: str) -> None:
+    deal = db.get_deal(deal_id)
+    if not deal.claims:
+        return
+    state: DiligenceState = {
+        "deal_id": deal_id,
+        "company": deal.company,
+        "claims": deal.claims,
+        "evidence": deal.evidence,
+    }
+    reviewed = review_quality(state)
+    _, grade, _ = score_claims(deal.claims)
+    memo = fallback_memo(deal.company, grade, deal.claims)
+    db.save_review_artifacts(deal_id, memo, reviewed["quality_review"])
 
 
 def answer_question(deal_id: str, question: str):
@@ -385,13 +456,21 @@ def infer_claim_category(text: str) -> str:
 
 
 def fallback_memo(company: str, grade: str, claims: list[DealClaim]) -> RiskMemo:
-    strengths = [claim.text for claim in claims if claim.status == "supported"][:3] or ["Some supplied materials contain concrete diligence claims."]
-    risks = [f"{claim.text} ({claim.status})" for claim in claims if claim.status != "supported"][:4] or [
+    strengths = [
+        f"{claim.text} (confidence: {claim.confidence}, quality: {claim.qualityScore}/100)"
+        for claim in claims
+        if claim.status == "supported" and claim.confidence == "high"
+    ][:3] or ["No claim is ready to treat as fully trusted without additional review."]
+    risks = [
+        f"{claim.text} ({claim.status}, confidence: {claim.confidence}). {claim.riskRationale}"
+        for claim in claims
+        if claim.status != "supported" or claim.confidence != "high"
+    ][:4] or [
         "No material red flags were identified from supplied materials, but external validation remains limited."
     ]
-    questions = [
-        f"Provide source-level support for: {claim.text}" for claim in claims if claim.status in {"weak", "missing", "contradicted"}
-    ][:4] or ["Which customer references can validate the strongest claims?"]
+    questions = list(dict.fromkeys(claim.verificationNeed for claim in claims if claim.status in {"weak", "missing", "contradicted"}))[:4] or [
+        "Which customer references can validate the strongest claims?"
+    ]
     return RiskMemo(
         company=company,
         overallGrade=grade,  # type: ignore[arg-type]

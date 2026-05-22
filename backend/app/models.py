@@ -18,6 +18,10 @@ ClaimCategory = Literal[
     "financials",
 ]
 Importance = Literal["high", "medium", "low"]
+Confidence = Literal["high", "medium", "low"]
+DecisionImpact = Literal["high", "medium", "low"]
+ReviewerStatus = Literal["unreviewed", "verified", "needs_evidence"]
+SourceIndependence = Literal["founder_supplied", "internal", "third_party", "derived"]
 
 
 class SourceMaterial(BaseModel):
@@ -50,6 +54,13 @@ class DealClaim(BaseModel):
     importance: Importance
     status: ClaimStatus = "missing"
     riskRationale: str = ""
+    confidence: Confidence = "low"
+    qualityScore: int = 0
+    qualityIssues: list[str] = Field(default_factory=list)
+    verificationNeed: str = ""
+    decisionImpact: DecisionImpact = "medium"
+    reviewerStatus: ReviewerStatus = "unreviewed"
+    reviewerNotes: str = ""
 
 
 class EvidenceItem(BaseModel):
@@ -61,6 +72,9 @@ class EvidenceItem(BaseModel):
     snippet: str
     stance: Literal["supports", "partially_supports", "contradicts", "not_found"]
     reliability: Literal["high", "medium", "low"]
+    sourceIndependence: SourceIndependence = "internal"
+    relevanceScore: float = 0
+    quoteSpan: str | None = None
 
 
 class RiskMemo(BaseModel):
@@ -71,6 +85,15 @@ class RiskMemo(BaseModel):
     materialRisks: list[str]
     followUpQuestions: list[str]
     icRecommendation: str
+
+
+class QualityReview(BaseModel):
+    memoReadinessScore: int = 0
+    globalWarnings: list[str] = Field(default_factory=list)
+    duplicatedClaims: list[str] = Field(default_factory=list)
+    lowValueClaims: list[str] = Field(default_factory=list)
+    recommendedFollowUpEvidence: list[str] = Field(default_factory=list)
+    overconfidenceWarnings: list[str] = Field(default_factory=list)
 
 
 class DealAnalysis(BaseModel):
@@ -85,6 +108,7 @@ class DealAnalysis(BaseModel):
     claims: list[DealClaim] = Field(default_factory=list)
     evidence: list[EvidenceItem] = Field(default_factory=list)
     memo: RiskMemo | None = None
+    qualityReview: QualityReview | None = None
 
 
 class ClaimExtraction(BaseModel):

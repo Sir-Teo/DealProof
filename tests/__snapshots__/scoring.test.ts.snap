@@ -8,13 +8,13 @@ exports[`DealProof scoring > generates a partner-ready markdown memo 1`] = `
 ## Investment Question
 Is this credible enough for IC?
 
-## Key Strengths
+## What We Can Trust
 - ARR support exists.
 
-## Material Risks
+## What Remains Unproven
 - ROI methodology is missing.
 
-## Questions Before IC
+## What Would Change the Decision
 - Show customer cohort data.
 
 ## Recommendation

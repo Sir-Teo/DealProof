@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import uuid
 
-from .models import DealClaim, EvidenceItem, MaterialChunk, SourceMaterial
+from .models import DealClaim, EvidenceItem, MaterialChunk, SourceIndependence, SourceMaterial
 from .config import LOCAL_RETRIEVAL_CITATION
 
 
@@ -35,7 +35,24 @@ def chunk_text(material: SourceMaterial, max_chars: int = 950) -> list[MaterialC
 
 
 def keywords(text: str) -> set[str]:
-    stop = {"the", "and", "for", "with", "that", "this", "from", "into", "are", "our", "has", "have", "will", "can"}
+    stop = {
+        "the",
+        "and",
+        "for",
+        "with",
+        "that",
+        "this",
+        "from",
+        "into",
+        "are",
+        "our",
+        "has",
+        "have",
+        "will",
+        "can",
+        "claim",
+        "claims",
+    }
     return {word for word in re.findall(r"[a-zA-Z0-9$%]+", text.lower()) if len(word) > 3 and word not in stop}
 
 
@@ -48,6 +65,31 @@ def normalized_numbers(text: str) -> set[str]:
     return numbers
 
 
+def source_independence(citation: str) -> SourceIndependence:
+    lower = citation.lower()
+    if "claim_packet" in lower or "claim packet" in lower or "deck" in lower or "pitch" in lower or "founder" in lower:
+        return "founder_supplied"
+    if "public" in lower or "annual report" in lower or "10k" in lower or "10-k" in lower or "analyst" in lower:
+        return "third_party"
+    if "customer" in lower or "reference" in lower or "financial" in lower or "model" in lower or "data_room" in lower:
+        return "internal"
+    if citation == LOCAL_RETRIEVAL_CITATION:
+        return "derived"
+    return "internal"
+
+
+def relevance_score(claim: DealClaim, chunk: MaterialChunk) -> float:
+    claim_terms = keywords(claim.text)
+    chunk_terms = keywords(chunk.text)
+    if not claim_terms:
+        return 0
+    lexical = len(claim_terms & chunk_terms) / len(claim_terms)
+    number_bonus = 0.3 if normalized_numbers(claim.text) and normalized_numbers(claim.text).issubset(normalized_numbers(chunk.text)) else 0
+    category_bonus = 0.12 if claim.category.replace("_", " ") in chunk.text.lower() else 0
+    independence_bonus = {"third_party": 0.12, "internal": 0.07, "founder_supplied": 0, "derived": 0}[source_independence(chunk.citation)]
+    return round(min(1, lexical + number_bonus + category_bonus + independence_bonus), 3)
+
+
 def find_relevant_chunks(claim: DealClaim, chunks: list[MaterialChunk], limit: int = 4) -> list[MaterialChunk]:
     claim_terms = keywords(claim.text)
     scored = []
@@ -55,8 +97,8 @@ def find_relevant_chunks(claim: DealClaim, chunks: list[MaterialChunk], limit: i
         chunk_terms = keywords(chunk.text)
         overlap = len(claim_terms & chunk_terms)
         if overlap:
-            scored.append((overlap, chunk))
-    return [chunk for _, chunk in sorted(scored, key=lambda item: item[0], reverse=True)[:limit]]
+            scored.append((relevance_score(claim, chunk), overlap, chunk))
+    return [chunk for _, __, chunk in sorted(scored, key=lambda item: (item[0], item[1]), reverse=True)[:limit]]
 
 
 def evidence_stance_for_chunk(claim: DealClaim, chunk: MaterialChunk) -> str:
@@ -112,17 +154,18 @@ def evidence_stance_for_chunk(claim: DealClaim, chunk: MaterialChunk) -> str:
 
     claim_numbers = normalized_numbers(claim.text)
     chunk_numbers = normalized_numbers(chunk.text)
+    independence = source_independence(chunk.citation)
     if claim_numbers and claim_numbers.issubset(chunk_numbers):
-        if not same_source:
+        if not same_source and independence != "founder_supplied":
             return "supports"
         return "partially_supports"
 
     claim_terms = keywords(claim.text)
     chunk_terms = keywords(chunk.text)
     overlap = len(claim_terms & chunk_terms)
-    if overlap >= 4 and not same_source and not claim_packet_source:
+    if overlap >= 5 and not same_source and independence == "third_party":
         return "supports"
-    if overlap >= 4 and not same_source and claim.category in {"financials", "pricing", "retention"}:
+    if overlap >= 5 and not same_source and claim.category in {"financials", "pricing", "retention"} and independence == "internal":
         return "supports"
     return "partially_supports"
 
@@ -148,6 +191,8 @@ def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -
                 snippet="No uploaded material or supplied URL chunk matched this claim closely enough to support it.",
                 stance="not_found",
                 reliability="medium",
+                sourceIndependence="derived",
+                relevanceScore=0,
             )
         ]
     return [
@@ -160,6 +205,9 @@ def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -
             snippet=chunk.text[:360],
             stance=evidence_stance_for_chunk(claim, chunk),  # type: ignore[arg-type]
             reliability="high" if evidence_stance_for_chunk(claim, chunk) == "supports" else "medium",
+            sourceIndependence=source_independence(chunk.citation),
+            relevanceScore=relevance_score(claim, chunk),
+            quoteSpan=chunk.citation,
         )
         for chunk in relevant
     ]

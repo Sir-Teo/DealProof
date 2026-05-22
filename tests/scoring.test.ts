@@ -11,7 +11,14 @@ const claims: DealClaim[] = [
     sourceSnippet: "ARR,82000,235000",
     importance: "high",
     status: "supported",
-    riskRationale: "Supported by financial snapshot."
+    riskRationale: "Supported by financial snapshot.",
+    confidence: "high",
+    qualityScore: 92,
+    qualityIssues: [],
+    verificationNeed: "Keep citation attached.",
+    decisionImpact: "high",
+    reviewerStatus: "unreviewed",
+    reviewerNotes: ""
   },
   {
     id: "claim-02",
@@ -21,7 +28,14 @@ const claims: DealClaim[] = [
     sourceSnippet: "recover 18 hours",
     importance: "high",
     status: "weak",
-    riskRationale: "Methodology is not supplied."
+    riskRationale: "Methodology is not supplied.",
+    confidence: "medium",
+    qualityScore: 52,
+    qualityIssues: ["No customer-level methodology."],
+    verificationNeed: "Request customer cohort data.",
+    decisionImpact: "high",
+    reviewerStatus: "unreviewed",
+    reviewerNotes: ""
   },
   {
     id: "claim-03",
@@ -31,7 +45,14 @@ const claims: DealClaim[] = [
     sourceSnippet: "No direct competitor",
     importance: "medium",
     status: "contradicted",
-    riskRationale: "Supplied source conflicts with this claim."
+    riskRationale: "Supplied source conflicts with this claim.",
+    confidence: "high",
+    qualityScore: 16,
+    qualityIssues: ["Contradictory evidence should be resolved before IC."],
+    verificationNeed: "Reconcile the contradiction.",
+    decisionImpact: "medium",
+    reviewerStatus: "unreviewed",
+    reviewerNotes: ""
   },
   {
     id: "claim-04",
@@ -41,7 +62,14 @@ const claims: DealClaim[] = [
     sourceSnippet: "$6B opportunity",
     importance: "high",
     status: "missing",
-    riskRationale: "No source is supplied."
+    riskRationale: "No source is supplied.",
+    confidence: "low",
+    qualityScore: 20,
+    qualityIssues: ["No matching evidence was found."],
+    verificationNeed: "Request bottom-up market evidence.",
+    decisionImpact: "high",
+    reviewerStatus: "unreviewed",
+    reviewerNotes: ""
   }
 ];
 
@@ -54,7 +82,10 @@ const evidence: EvidenceItem[] = [
     citation: "source.txt",
     snippet: "Competitor exists.",
     stance: "contradicts",
-    reliability: "medium"
+    reliability: "medium",
+    sourceIndependence: "third_party",
+    relevanceScore: 0.84,
+    quoteSpan: "source.txt"
   }
 ];
 
@@ -90,7 +121,7 @@ describe("DealProof scoring", () => {
     const markdown = generateMemoMarkdown(memo);
 
     expect(markdown).toContain("# DealProof Red Team Memo: CaviClear AI");
-    expect(markdown).toContain("## Questions Before IC");
+    expect(markdown).toContain("## What Would Change the Decision");
     expect(markdown).toMatchSnapshot();
   });
 });

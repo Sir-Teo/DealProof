@@ -1,4 +1,6 @@
 export type ClaimStatus = "supported" | "weak" | "contradicted" | "missing";
+export type Confidence = "high" | "medium" | "low";
+export type ReviewerStatus = "unreviewed" | "verified" | "needs_evidence";
 
 export type DealClaim = {
   id: string;
@@ -17,6 +19,13 @@ export type DealClaim = {
   importance: "high" | "medium" | "low";
   status: ClaimStatus;
   riskRationale: string;
+  confidence: Confidence;
+  qualityScore: number;
+  qualityIssues: string[];
+  verificationNeed: string;
+  decisionImpact: "high" | "medium" | "low";
+  reviewerStatus: ReviewerStatus;
+  reviewerNotes: string;
 };
 
 export type EvidenceItem = {
@@ -28,6 +37,9 @@ export type EvidenceItem = {
   snippet: string;
   stance: "supports" | "partially_supports" | "contradicts" | "not_found";
   reliability: "high" | "medium" | "low";
+  sourceIndependence: "founder_supplied" | "internal" | "third_party" | "derived";
+  relevanceScore: number;
+  quoteSpan?: string | null;
 };
 
 export type RiskMemo = {
@@ -38,6 +50,15 @@ export type RiskMemo = {
   materialRisks: string[];
   followUpQuestions: string[];
   icRecommendation: string;
+};
+
+export type QualityReview = {
+  memoReadinessScore: number;
+  globalWarnings: string[];
+  duplicatedClaims: string[];
+  lowValueClaims: string[];
+  recommendedFollowUpEvidence: string[];
+  overconfidenceWarnings: string[];
 };
 
 export type SourceMaterial = {
@@ -63,6 +84,7 @@ export type DealAnalysis = {
   claims: DealClaim[];
   evidence: EvidenceItem[];
   memo: RiskMemo | null;
+  qualityReview: QualityReview | null;
   generatedAt: string | null;
 };
 
