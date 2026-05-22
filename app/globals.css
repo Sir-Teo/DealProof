@@ -476,6 +476,10 @@ summary:focus-visible {
   margin: 8px 0 0;
 }
 
+.artifactAnchor {
+  scroll-margin-top: 18px;
+}
+
 /* Artifact panels (claims / evidence / memo) */
 
 .artifactPanel {
@@ -651,6 +655,164 @@ summary:focus-visible {
   font-weight: 600;
   text-transform: capitalize;
   overflow-wrap: anywhere;
+}
+
+/* ── IC readiness ── */
+
+.readinessPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.readinessSummary {
+  display: grid;
+  grid-template-columns: 120px 100px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.topGate {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.topGate span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.topGate strong {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.statusBadge {
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: #374151;
+  background: var(--gray-bg);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.statusBadge--ready {
+  color: var(--green);
+  background: var(--green-bg);
+}
+
+.statusBadge--conditional {
+  color: var(--amber);
+  background: var(--amber-bg);
+}
+
+.statusBadge--blocked {
+  color: var(--red);
+  background: var(--red-bg);
+}
+
+.readinessGroup {
+  display: grid;
+  gap: 7px;
+}
+
+.readinessGroup h3 {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.readinessRows {
+  display: grid;
+  gap: 7px;
+}
+
+.readinessRow {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.readinessClaim {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+}
+
+.readinessClaim > span:not(.statusPill) {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.readinessClaim small {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.readinessMeta,
+.readinessActions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.readinessMeta span {
+  color: var(--muted);
+  background: var(--panel-soft);
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.readinessActions label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.readinessActions select {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+  color: var(--ink);
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.emptyReadiness {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+  padding: 10px 12px;
 }
 
 .qualityIssues {
@@ -1209,6 +1371,10 @@ summary:focus-visible {
 
   .qualityStrip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .readinessSummary {
+    grid-template-columns: 1fr;
   }
 
   .citationSummary {

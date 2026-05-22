@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { deriveIcReadiness } from "@/lib/readiness";
 import { evidenceForClaim, generateMemoMarkdown, scoreClaims } from "@/lib/scoring";
 import type { DealClaim, EvidenceItem, RiskMemo } from "@/lib/types";
 
@@ -131,5 +132,61 @@ describe("DealProof scoring", () => {
     expect(markdown).toContain("## Evidence Map");
     expect(markdown).toContain("## What Would Change the Decision");
     expect(markdown).toMatchSnapshot();
+  });
+
+  it("treats high-impact contradicted claims as IC blockers", () => {
+    const readiness = deriveIcReadiness(
+      claims.map((claim) => (claim.id === "claim-03" ? { ...claim, importance: "high", decisionImpact: "high" } : claim)),
+      evidence,
+      null
+    );
+
+    expect(readiness.grade).toBe("blocked");
+    expect(readiness.blockers.map((item) => item.claim.id)).toContain("claim-03");
+    expect(readiness.topGatingIssue).toBe("No competitors exist.");
+  });
+
+  it("moves reviewer-verified claims into resolved readiness items", () => {
+    const readiness = deriveIcReadiness(
+      claims.map((claim) => (claim.id === "claim-02" ? { ...claim, reviewerStatus: "verified" } : claim)),
+      evidence,
+      null
+    );
+
+    expect(readiness.resolved.map((item) => item.claim.id)).toContain("claim-02");
+    expect(readiness.blockers.map((item) => item.claim.id)).not.toContain("claim-02");
+  });
+
+  it("flags claims with no independent evidence as evidence requests", () => {
+    const readiness = deriveIcReadiness(
+      [
+        {
+          ...claims[0],
+          id: "claim-05",
+          text: "Customer reference confirms ROI.",
+          importance: "medium",
+          status: "supported",
+          decisionImpact: "medium"
+        }
+      ],
+      [
+        {
+          id: "ev-05",
+          claimId: "claim-05",
+          title: "Founder source",
+          sourceType: "uploaded",
+          citation: "deck.pdf",
+          snippet: "ROI is confirmed.",
+          stance: "supports",
+          reliability: "medium",
+          sourceIndependence: "founder_supplied",
+          relevanceScore: 0.77
+        }
+      ],
+      null
+    );
+
+    expect(readiness.evidenceRequests).toHaveLength(1);
+    expect(readiness.evidenceRequests[0].reason).toBe("No third-party support is attached.");
   });
 });

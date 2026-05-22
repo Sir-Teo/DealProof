@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { ChangeEvent, FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, FormEvent, RefObject } from "react";
 import {
   AlertTriangle,
   ArrowDownToLine,
@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { API_BASE_URL, DEFAULT_DEAL, UI_COPY } from "@/lib/app-config";
+import { deriveIcReadiness, type ReadinessItem, type ReadinessSummary } from "@/lib/readiness";
 import { evidenceForClaim, generateMemoMarkdown, scoreClaims } from "@/lib/scoring";
 import type { ChatAnswer, ClaimStatus, DealAnalysis, DealClaim, EvidenceItem } from "@/lib/types";
 
@@ -53,7 +54,7 @@ type AgentToolRun = {
   output?: string;
   statsEvent: AgentEvent;
 };
-type ActiveArtifact = { type: "claims" } | { type: "memo" } | { type: "claim"; claimId: string } | null;
+type ActiveArtifact = { type: "claims" } | { type: "memo" } | { type: "readiness" } | { type: "claim"; claimId: string } | null;
 type FeedNote = { id: string; role: "user" | "agent"; title: string; body?: string };
 
 const statusIcon: Record<ClaimStatus, typeof CheckCircle2> = {
@@ -82,9 +83,12 @@ export default function Home() {
       body: UI_COPY.welcomeBody
     }
   ]);
+  const feedWrapRef = useRef<HTMLElement>(null);
+  const artifactAnchorRef = useRef<HTMLDivElement>(null);
 
   const claims = useMemo(() => deal?.claims ?? [], [deal?.claims]);
   const scoring = useMemo(() => (claims.length ? scoreClaims(claims) : { overall: 0, grade: "red" as const, counts: emptyCounts }), [claims]);
+  const readiness = useMemo(() => deriveIcReadiness(claims, deal?.evidence ?? [], deal?.qualityReview), [claims, deal?.evidence, deal?.qualityReview]);
   const selectedClaim =
     activeArtifact?.type === "claim" ? claims.find((claim) => claim.id === activeArtifact.claimId) ?? claims[0] ?? null : claims[0] ?? null;
   const selectedEvidence = selectedClaim && deal ? evidenceForClaim(selectedClaim.id, deal.evidence) : [];
@@ -93,6 +97,16 @@ export default function Home() {
   const suggestedQuestions = useMemo(() => buildSuggestedQuestions(claims), [claims]);
   const isAnalyzing = busy === "analyze";
   const canRunAgent = Boolean(deal?.materials.length) && !isAnalyzing;
+
+  useEffect(() => {
+    if (!activeArtifact) return;
+    requestAnimationFrame(() => {
+      const container = feedWrapRef.current;
+      const anchor = artifactAnchorRef.current;
+      if (!container || !anchor) return;
+      container.scrollTo({ top: Math.max(0, anchor.offsetTop - 64), behavior: "smooth" });
+    });
+  }, [activeArtifact]);
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${API_BASE_URL}${path}`, init);
@@ -271,7 +285,7 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="feedWrap">
+      <section className="feedWrap" ref={feedWrapRef}>
         <div className="messageFeed" aria-live="polite">
           {error && (
             <article className="systemBanner errorBanner">
@@ -304,12 +318,15 @@ export default function Home() {
             <ResultArtifacts
               deal={deal}
               scoring={scoring}
+              readiness={readiness}
               activeArtifact={activeArtifact}
               selectedClaim={selectedClaim}
               selectedEvidence={selectedEvidence}
               memoMarkdown={memoMarkdown}
               exportUrl={exportUrl}
+              artifactAnchorRef={artifactAnchorRef}
               onOpenClaims={() => setActiveArtifact({ type: "claims" })}
+              onOpenReadiness={() => setActiveArtifact({ type: "readiness" })}
               onOpenMemo={() => setActiveArtifact({ type: "memo" })}
               onSelectClaim={(claim) => setActiveArtifact({ type: "claim", claimId: claim.id })}
               onUpdateClaimReview={updateClaimReview}
@@ -489,24 +506,30 @@ function ToolCallRow({ tool }: { tool: AgentToolRun }) {
 function ResultArtifacts({
   deal,
   scoring,
+  readiness,
   activeArtifact,
   selectedClaim,
   selectedEvidence,
   memoMarkdown,
   exportUrl,
+  artifactAnchorRef,
   onOpenClaims,
+  onOpenReadiness,
   onOpenMemo,
   onSelectClaim,
   onUpdateClaimReview
 }: {
   deal: DealAnalysis;
   scoring: ReturnType<typeof scoreClaims>;
+  readiness: ReadinessSummary;
   activeArtifact: ActiveArtifact;
   selectedClaim: DealClaim | null;
   selectedEvidence: EvidenceItem[];
   memoMarkdown: string;
   exportUrl: string;
+  artifactAnchorRef: RefObject<HTMLDivElement | null>;
   onOpenClaims: () => void;
+  onOpenReadiness: () => void;
   onOpenMemo: () => void;
   onSelectClaim: (claim: DealClaim) => void;
   onUpdateClaimReview: (claimId: string, payload: { status?: ClaimStatus; reviewerStatus?: DealClaim["reviewerStatus"]; reviewerNotes?: string }) => Promise<void>;
@@ -525,6 +548,14 @@ function ResultArtifacts({
           </div>
           <p>{claims.length ? `${scoring.counts.weak + scoring.counts.contradicted + scoring.counts.missing} ${UI_COPY.exceptionsNeedReview}` : UI_COPY.claimLedgerPending}</p>
         </button>
+        <button className="artifactCard artifactButton" type="button" onClick={onOpenReadiness} disabled={!claims.length}>
+          <div className="artifactHeader">
+            <ClipboardCheck size={16} />
+            <strong>{UI_COPY.icReadinessTitle}</strong>
+            <span>{readiness.grade}</span>
+          </div>
+          <p>{claims.length ? `${readiness.blockerCount} ${UI_COPY.exceptionsNeedReview} ${readiness.topGatingIssue}` : UI_COPY.icReadinessPending}</p>
+        </button>
         <button className="artifactCard artifactButton" type="button" onClick={onOpenMemo} disabled={!deal.memo}>
           <div className="artifactHeader">
             <FileText size={16} />
@@ -536,7 +567,7 @@ function ResultArtifacts({
         {deal.qualityReview && (
           <div className="artifactCard">
             <div className="artifactHeader">
-              <ClipboardCheck size={16} />
+              <Gauge size={16} />
               <strong>Memo readiness</strong>
               <span>{deal.qualityReview.memoReadinessScore}%</span>
             </div>
@@ -545,7 +576,11 @@ function ResultArtifacts({
         )}
       </div>
 
+      <div ref={artifactAnchorRef} className="artifactAnchor" aria-hidden="true" />
       {activeArtifact?.type === "claims" && <ClaimsArtifact claims={claims} evidence={deal.evidence} onSelectClaim={onSelectClaim} />}
+      {activeArtifact?.type === "readiness" && (
+        <ReadinessArtifact readiness={readiness} onSelectClaim={onSelectClaim} onUpdateClaimReview={onUpdateClaimReview} />
+      )}
       {activeArtifact?.type === "claim" && selectedClaim && (
         <EvidenceArtifact key={selectedClaim.id} claim={selectedClaim} evidence={selectedEvidence} onUpdateClaimReview={onUpdateClaimReview} />
       )}
@@ -585,6 +620,135 @@ function ClaimsArtifact({ claims, evidence, onSelectClaim }: { claims: DealClaim
       </div>
     </section>
   );
+}
+
+function ReadinessArtifact({
+  readiness,
+  onSelectClaim,
+  onUpdateClaimReview
+}: {
+  readiness: ReadinessSummary;
+  onSelectClaim: (claim: DealClaim) => void;
+  onUpdateClaimReview: (claimId: string, payload: { status?: ClaimStatus; reviewerStatus?: DealClaim["reviewerStatus"]; reviewerNotes?: string }) => Promise<void>;
+}) {
+  return (
+    <section className="artifactPanel readinessPanel">
+      <div className="artifactPanelHeader">
+        <h2>{UI_COPY.icReadinessPanelTitle}</h2>
+        <StatusBadge label={readiness.grade} />
+      </div>
+      <div className="readinessSummary">
+        <Metric label={UI_COPY.icReadinessScoreLabel} value={`${readiness.score}%`} />
+        <Metric label={UI_COPY.icBlockersLabel} value={`${readiness.blockerCount}`} />
+        <div className="topGate">
+          <span>{UI_COPY.topGatingIssueLabel}</span>
+          <strong>{readiness.topGatingIssue}</strong>
+        </div>
+      </div>
+      <ReadinessGroup
+        title={UI_COPY.criticalBlockersTitle}
+        empty={UI_COPY.noCriticalBlockers}
+        items={readiness.blockers}
+        onSelectClaim={onSelectClaim}
+        onUpdateClaimReview={onUpdateClaimReview}
+      />
+      <ReadinessGroup
+        title={UI_COPY.evidenceRequestsTitle}
+        empty={UI_COPY.noEvidenceRequests}
+        items={readiness.evidenceRequests}
+        onSelectClaim={onSelectClaim}
+        onUpdateClaimReview={onUpdateClaimReview}
+      />
+      <ReadinessGroup
+        title={UI_COPY.resolvedItemsTitle}
+        empty={UI_COPY.noResolvedItems}
+        items={readiness.resolved}
+        onSelectClaim={onSelectClaim}
+        onUpdateClaimReview={onUpdateClaimReview}
+      />
+    </section>
+  );
+}
+
+function ReadinessGroup({
+  title,
+  empty,
+  items,
+  onSelectClaim,
+  onUpdateClaimReview
+}: {
+  title: string;
+  empty: string;
+  items: ReadinessItem[];
+  onSelectClaim: (claim: DealClaim) => void;
+  onUpdateClaimReview: (claimId: string, payload: { status?: ClaimStatus; reviewerStatus?: DealClaim["reviewerStatus"]; reviewerNotes?: string }) => Promise<void>;
+}) {
+  return (
+    <section className="readinessGroup">
+      <h3>{title}</h3>
+      {items.length ? (
+        <div className="readinessRows">
+          {items.map((item) => (
+            <ReadinessRow
+              key={item.claim.id}
+              item={item}
+              onSelectClaim={onSelectClaim}
+              onUpdateClaimReview={onUpdateClaimReview}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="emptyReadiness">{empty}</p>
+      )}
+    </section>
+  );
+}
+
+function ReadinessRow({
+  item,
+  onSelectClaim,
+  onUpdateClaimReview
+}: {
+  item: ReadinessItem;
+  onSelectClaim: (claim: DealClaim) => void;
+  onUpdateClaimReview: (claimId: string, payload: { status?: ClaimStatus; reviewerStatus?: DealClaim["reviewerStatus"]; reviewerNotes?: string }) => Promise<void>;
+}) {
+  return (
+    <article className="readinessRow">
+      <button type="button" className="readinessClaim" onClick={() => onSelectClaim(item.claim)}>
+        <StatusPill status={item.claim.status} />
+        <span>{item.claim.text}</span>
+        <small>{item.reason}</small>
+      </button>
+      <div className="readinessMeta">
+        <span>{item.independentEvidenceCount} independent</span>
+        <span>{item.evidenceCount} evidence</span>
+        <span>{item.claim.reviewerStatus.replaceAll("_", " ")}</span>
+      </div>
+      <div className="readinessActions">
+        <label>
+          Status
+          <select value={item.claim.status} onChange={(event) => void onUpdateClaimReview(item.claim.id, { status: event.target.value as ClaimStatus })}>
+            {(["supported", "weak", "contradicted", "missing"] as ClaimStatus[]).map((status) => (
+              <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+        </label>
+        <button type="button" className="secondaryButton" onClick={() => void onUpdateClaimReview(item.claim.id, { reviewerStatus: "verified" })}>
+          <CheckCircle2 size={13} />
+          Mark verified
+        </button>
+        <button type="button" className="secondaryButton" onClick={() => void onUpdateClaimReview(item.claim.id, { reviewerStatus: "needs_evidence" })}>
+          <MessageSquarePlus size={13} />
+          Request evidence
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function StatusBadge({ label }: { label: string }) {
+  return <span className={clsx("statusBadge", `statusBadge--${label}`)}>{label}</span>;
 }
 
 function EvidenceArtifact({

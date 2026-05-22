@@ -26,7 +26,7 @@ test("runs a real-world public-material diligence case", async ({ page }, testIn
   const analyzeResponse = page.waitForResponse((response) => response.url().includes("/analyze-stream") && response.request().method() === "POST");
   await page.getByRole("button", { name: /Run agent/i }).click();
   await expect((await analyzeResponse).ok()).toBe(true);
-  await expect(page.getByText("Analysis complete")).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText("Analysis complete", { exact: true }).first()).toBeVisible({ timeout: 90_000 });
 
   const claimLedger = page.getByRole("button", { name: /Claim ledger [1-9]/i });
   await expect(claimLedger).toBeEnabled({ timeout: 90_000 });
