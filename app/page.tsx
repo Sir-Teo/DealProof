@@ -540,36 +540,44 @@ function ResultArtifacts({
   return (
     <div>
       <div className="artifactGrid">
-        <button className="artifactCard artifactButton" type="button" onClick={onOpenClaims} disabled={!claims.length}>
-          <div className="artifactHeader">
-            <Gauge size={16} />
-            <strong>{UI_COPY.claimLedgerTitle}</strong>
-            <span>{claims.length || UI_COPY.pending}</span>
+        <button className={clsx("artifactCard artifactButton", claims.length && `card--${scoring.grade}`)} type="button" onClick={onOpenClaims} disabled={!claims.length}>
+          <div className="artifactKicker">
+            <Gauge size={12} />
+            <span>{UI_COPY.claimLedgerTitle}</span>
+          </div>
+          <div className="artifactPrimary">
+            <strong>{claims.length || "—"}</strong>
           </div>
           <p>{claims.length ? `${scoring.counts.weak + scoring.counts.contradicted + scoring.counts.missing} ${UI_COPY.exceptionsNeedReview}` : UI_COPY.claimLedgerPending}</p>
         </button>
-        <button className="artifactCard artifactButton" type="button" onClick={onOpenReadiness} disabled={!claims.length}>
-          <div className="artifactHeader">
-            <ClipboardCheck size={16} />
-            <strong>{UI_COPY.icReadinessTitle}</strong>
-            <span>{readiness.grade}</span>
+        <button className={clsx("artifactCard artifactButton", claims.length && `card--${readiness.grade.toLowerCase()}`)} type="button" onClick={onOpenReadiness} disabled={!claims.length}>
+          <div className="artifactKicker">
+            <ClipboardCheck size={12} />
+            <span>{UI_COPY.icReadinessTitle}</span>
+          </div>
+          <div className="artifactPrimary">
+            <strong>{claims.length ? readiness.grade : "—"}</strong>
           </div>
           <p>{claims.length ? `${readiness.blockerCount} ${UI_COPY.exceptionsNeedReview} ${readiness.topGatingIssue}` : UI_COPY.icReadinessPending}</p>
         </button>
-        <button className="artifactCard artifactButton" type="button" onClick={onOpenMemo} disabled={!deal.memo}>
-          <div className="artifactHeader">
-            <FileText size={16} />
-            <strong>{UI_COPY.riskMemoTitle}</strong>
-            <span>{deal.memo?.overallGrade ?? UI_COPY.pending}</span>
+        <button className={clsx("artifactCard artifactButton", deal.memo && `card--${deal.memo.overallGrade?.toLowerCase()}`)} type="button" onClick={onOpenMemo} disabled={!deal.memo}>
+          <div className="artifactKicker">
+            <FileText size={12} />
+            <span>{UI_COPY.riskMemoTitle}</span>
+          </div>
+          <div className="artifactPrimary">
+            <strong>{deal.memo?.overallGrade ?? "—"}</strong>
           </div>
           <p>{deal.memo ? deal.memo.icRecommendation : UI_COPY.riskMemoPending}</p>
         </button>
         {deal.qualityReview && (
           <div className="artifactCard">
-            <div className="artifactHeader">
-              <Gauge size={16} />
-              <strong>Memo readiness</strong>
-              <span>{deal.qualityReview.memoReadinessScore}%</span>
+            <div className="artifactKicker">
+              <Gauge size={12} />
+              <span>Memo readiness</span>
+            </div>
+            <div className="artifactPrimary">
+              <strong>{deal.qualityReview.memoReadinessScore}%</strong>
             </div>
             <p>{deal.qualityReview.globalWarnings[0] ?? "Quality review passed without global warnings."}</p>
           </div>
