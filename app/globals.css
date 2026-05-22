@@ -758,10 +758,42 @@ summary:focus-visible {
   font-size: 15px;
 }
 
+.profileGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.memoNarrative {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  margin-bottom: 10px;
+  padding: 12px;
+}
+
+.memoNarrative h3 {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.memoNarrative p {
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
 .memoColumns {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  margin-bottom: 8px;
 }
 
 .memoSection {
@@ -1057,6 +1089,10 @@ summary:focus-visible {
 
   .memoColumns {
     grid-template-columns: 1fr;
+  }
+
+  .profileGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .qualityStrip {

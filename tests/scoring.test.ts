@@ -96,7 +96,13 @@ const memo: RiskMemo = {
   keyStrengths: ["ARR support exists."],
   materialRisks: ["ROI methodology is missing."],
   followUpQuestions: ["Show customer cohort data."],
-  icRecommendation: "Proceed only after validating weak claims."
+  icRecommendation: "Proceed only after validating weak claims.",
+  executiveSummary: "CaviClear is a yellow diligence case with mixed support.",
+  thesisAssessment: "The core thesis needs stronger customer proof before IC.",
+  evidenceMap: ["claim-01: supported by financials.csv."],
+  keyRisks: ["ROI methodology is missing."],
+  nextDiligenceRequests: ["Show customer cohort data."],
+  decisionDrivers: ["Resolve high-importance weak claims."]
 };
 
 describe("DealProof scoring", () => {
@@ -121,6 +127,8 @@ describe("DealProof scoring", () => {
     const markdown = generateMemoMarkdown(memo);
 
     expect(markdown).toContain("# DealProof Red Team Memo: CaviClear AI");
+    expect(markdown).toContain("## Executive Summary");
+    expect(markdown).toContain("## Evidence Map");
     expect(markdown).toContain("## What Would Change the Decision");
     expect(markdown).toMatchSnapshot();
   });

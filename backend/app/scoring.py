@@ -62,7 +62,7 @@ def quality_issues_for_claim(claim: DealClaim, evidence: list[EvidenceItem], sta
     issues: list[str] = []
     if len(claim.text.split()) < 7:
         issues.append("Claim is too terse to verify precisely.")
-    if not any(char.isdigit() for char in claim.text) and claim.category in {"growth", "market", "customer_roi", "financials", "pricing"}:
+    if not any(char.isdigit() for char in claim.text) and claim.category in {"growth", "market", "customer_roi", "financials", "pricing", "fundraising"}:
         issues.append("Claim lacks a concrete metric or threshold.")
     if status == "weak" and evidence and all(item.sourceIndependence == "founder_supplied" for item in evidence):
         issues.append("Only founder-supplied evidence was found.")
@@ -98,38 +98,69 @@ def verification_need_for_claim(claim: DealClaim, evidence: list[EvidenceItem], 
         return "Ask the company to reconcile the contradiction with source-level documentation."
     if any(item.sourceIndependence == "founder_supplied" for item in evidence):
         return "Request independent or customer-level evidence for this claim."
-    if claim.category in {"growth", "financials", "pricing"}:
+    if claim.category in {"growth", "financials", "pricing", "fundraising"}:
         return "Request financial backup with period, cohort, and calculation detail."
     if claim.category == "customer_roi":
         return "Request customer references or cohort methodology supporting the ROI claim."
+    if claim.category == "product":
+        return "Request product proof such as demos, usage logs, implementation detail, or customer validation."
+    if claim.category == "team":
+        return "Request background evidence for team claims and role-specific execution proof."
+    if claim.category == "go_to_market":
+        return "Request pipeline, conversion, channel, and cohort evidence for go-to-market claims."
+    if claim.category == "legal":
+        return "Request legal, IP, contract, or regulatory documentation that directly validates the claim."
+    if claim.category == "operations":
+        return "Request operating metrics, vendor documentation, or process evidence for this claim."
     return "Request source-level evidence that directly validates the claim."
 
 
 def decision_impact_for_claim(claim: DealClaim) -> str:
-    if claim.importance == "high" or claim.category in {"growth", "financials", "compliance", "customer_roi"}:
+    if claim.importance == "high" or claim.category in {"growth", "financials", "compliance", "customer_roi", "fundraising", "legal"}:
         return "high"
-    if claim.category in {"market", "competition", "pricing", "retention"}:
+    if claim.category in {"market", "competition", "pricing", "retention", "product", "go_to_market", "operations"}:
         return "medium"
     return "low"
 
 
 def memo_to_markdown(memo: RiskMemo) -> str:
-    return f"""# {MEMO_TITLE}: {memo.company}
+    sections = [
+        f"# {MEMO_TITLE}: {memo.company}",
+        "",
+        f"**Overall grade:** {memo.overallGrade.upper()}",
+    ]
+    if memo.executiveSummary:
+        sections.extend(["", "## Executive Summary", memo.executiveSummary])
+    if memo.thesisAssessment:
+        sections.extend(["", "## Thesis Assessment", memo.thesisAssessment])
+    if memo.decisionDrivers:
+        sections.extend(["", "## Decision Drivers", markdown_bullets(memo.decisionDrivers)])
+    if memo.evidenceMap:
+        sections.extend(["", "## Evidence Map", markdown_bullets(memo.evidenceMap)])
+    sections.extend(
+        [
+            "",
+            "## Investment Question",
+            memo.investmentQuestion,
+            "",
+            "## What We Can Trust",
+            markdown_bullets(memo.keyStrengths),
+            "",
+            "## What Remains Unproven",
+            markdown_bullets(memo.keyRisks or memo.materialRisks),
+            "",
+            "## What Would Change the Decision",
+            markdown_bullets(memo.nextDiligenceRequests or memo.followUpQuestions),
+            "",
+            "## Recommendation",
+            memo.icRecommendation,
+            "",
+        ]
+    )
+    return "\n".join(sections)
 
-**Overall grade:** {memo.overallGrade.upper()}
 
-## Investment Question
-{memo.investmentQuestion}
-
-## What We Can Trust
-{chr(10).join(f"- {item}" for item in memo.keyStrengths)}
-
-## What Remains Unproven
-{chr(10).join(f"- {item}" for item in memo.materialRisks)}
-
-## What Would Change the Decision
-{chr(10).join(f"- {item}" for item in memo.followUpQuestions)}
-
-## Recommendation
-{memo.icRecommendation}
-"""
+def markdown_bullets(items: list[str]) -> str:
+    if not items:
+        return "- None."
+    return "\n".join(f"- {item}" for item in items)

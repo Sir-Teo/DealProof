@@ -39,6 +39,8 @@ def test_seeded_agent_output_is_concrete_and_memo_grade_matches(monkeypatch):
     assert len(claim_texts) >= 6
     assert len(claim_texts) == len(set(claim_texts))
     assert all(len(text) >= 20 for text in claim_texts)
+    assert "ARR,82000,118000,167000,235000" not in claim_texts
+    assert any("ARR grew from $82k to $235k" in text for text in claim_texts)
     assert all(item["citation"] for item in deal["evidence"])
 
     _, expected_grade, counts = score_claims([DealClaim.model_validate(claim) for claim in deal["claims"]])
@@ -67,6 +69,34 @@ def test_direct_numeric_support_can_be_supported(monkeypatch):
     supported = [item for item in deal["evidence"] if item["stance"] == "supports"]
     assert supported
     assert any("financials_summary.txt" in item["citation"] for item in supported)
+    assert any("Directionally supported" in item or "high reviewer confidence" in item for item in deal["memo"]["keyStrengths"])
+
+
+def test_generalized_claim_categories_are_extracted_without_llm(monkeypatch):
+    disable_llm(monkeypatch)
+    with TestClient(app) as client:
+        deal = analyze_packet(
+            client,
+            [
+                (
+                    "growth_packet.txt",
+                    "\n".join(
+                        [
+                            "Claim: AtlasOps platform integrates with Salesforce and automates renewal workflows for sales teams.",
+                            "Claim: Founder previously led go-to-market at Stripe and hired two enterprise sales directors.",
+                            "Claim: The company is raising $8M on a $40M pre-money valuation.",
+                            "Claim: Pipeline includes 38 enterprise opportunities sourced through channel partners.",
+                        ]
+                    ).encode(),
+                )
+            ],
+        )
+
+    categories = {claim["category"] for claim in deal["claims"]}
+    assert {"product", "team", "fundraising", "go_to_market"}.issubset(categories)
+    assert deal["profile"]["businessModel"]
+    assert deal["memo"]["executiveSummary"]
+    assert deal["memo"]["evidenceMap"]
 
 
 def test_competitor_contradiction_is_detected(monkeypatch):
@@ -90,6 +120,52 @@ def test_competitor_contradiction_is_detected(monkeypatch):
     assert contradicted
     assert any("no direct competitors" in claim["text"].lower() for claim in contradicted)
     assert any(item["stance"] == "contradicts" for item in deal["evidence"])
+
+
+def test_richer_memo_export_and_grade_are_consistent(monkeypatch):
+    disable_llm(monkeypatch)
+    with TestClient(app) as client:
+        created = client.post("/deals/demo")
+        assert created.status_code == 200
+        deal_id = created.json()["id"]
+
+        analyzed = client.post(f"/deals/{deal_id}/analyze")
+        assert analyzed.status_code == 200
+        deal = analyzed.json()
+
+        exported = client.get(f"/deals/{deal_id}/export-memo")
+        assert exported.status_code == 200
+
+    _, expected_grade, _ = score_claims([DealClaim.model_validate(claim) for claim in deal["claims"]])
+    assert deal["memo"]["overallGrade"] == expected_grade
+    assert deal["profile"]["sector"]
+    assert deal["memo"]["executiveSummary"]
+    assert deal["memo"]["thesisAssessment"]
+    assert deal["memo"]["decisionDrivers"]
+    assert "## Executive Summary" in exported.text
+    assert "## Evidence Map" in exported.text
+
+
+def test_unsupported_claims_do_not_appear_as_strengths(monkeypatch):
+    disable_llm(monkeypatch)
+    with TestClient(app) as client:
+        deal = analyze_packet(
+            client,
+            [
+                (
+                    "founder_deck.txt",
+                    b"Claim: Customers save 30 hours per week after deployment with no customer-level methodology attached.",
+                )
+            ],
+        )
+
+    claim_text = "Customers save 30 hours per week"
+    strengths = "\n".join(deal["memo"]["keyStrengths"])
+    risks = "\n".join(deal["memo"]["keyRisks"] or deal["memo"]["materialRisks"])
+    requests = "\n".join(deal["memo"]["nextDiligenceRequests"] or deal["memo"]["followUpQuestions"])
+    assert claim_text not in strengths
+    assert claim_text in risks
+    assert requests
 
 
 def test_vague_packet_returns_clear_failure(monkeypatch):

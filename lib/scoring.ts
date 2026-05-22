@@ -47,25 +47,38 @@ export function evidenceForClaim(claimId: string, evidence: EvidenceItem[]) {
 }
 
 export function generateMemoMarkdown(memo: RiskMemo) {
-  return `# ${UI_COPY.appName} Red Team Memo: ${memo.company}
+  const sections = [
+    `# ${UI_COPY.appName} Red Team Memo: ${memo.company}`,
+    "",
+    `**Overall grade:** ${memo.overallGrade.toUpperCase()}`
+  ];
+  if (memo.executiveSummary) sections.push("", "## Executive Summary", memo.executiveSummary);
+  if (memo.thesisAssessment) sections.push("", "## Thesis Assessment", memo.thesisAssessment);
+  if (memo.decisionDrivers?.length) sections.push("", "## Decision Drivers", markdownBullets(memo.decisionDrivers));
+  if (memo.evidenceMap?.length) sections.push("", "## Evidence Map", markdownBullets(memo.evidenceMap));
+  sections.push(
+    "",
+    "## Investment Question",
+    memo.investmentQuestion,
+    "",
+    "## What We Can Trust",
+    markdownBullets(memo.keyStrengths),
+    "",
+    "## What Remains Unproven",
+    markdownBullets(memo.keyRisks?.length ? memo.keyRisks : memo.materialRisks),
+    "",
+    "## What Would Change the Decision",
+    markdownBullets(memo.nextDiligenceRequests?.length ? memo.nextDiligenceRequests : memo.followUpQuestions),
+    "",
+    "## Recommendation",
+    memo.icRecommendation,
+    ""
+  );
+  return sections.join("\n");
+}
 
-**Overall grade:** ${memo.overallGrade.toUpperCase()}
-
-## Investment Question
-${memo.investmentQuestion}
-
-## What We Can Trust
-${memo.keyStrengths.map((item) => `- ${item}`).join("\n")}
-
-## What Remains Unproven
-${memo.materialRisks.map((item) => `- ${item}`).join("\n")}
-
-## What Would Change the Decision
-${memo.followUpQuestions.map((item) => `- ${item}`).join("\n")}
-
-## Recommendation
-${memo.icRecommendation}
-`;
+function markdownBullets(items: string[]) {
+  return items.length ? items.map((item) => `- ${item}`).join("\n") : "- None.";
 }
 
 export function findRelevantClaims(question: string, claims: DealClaim[]) {

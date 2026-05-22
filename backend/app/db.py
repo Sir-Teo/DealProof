@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import DATABASE_FILENAME, DEFAULT_STAGE, DEFAULT_TAGLINE
-from .models import DealAnalysis, DealClaim, EvidenceItem, QualityReview, RiskMemo, SourceMaterial
+from .models import DealAnalysis, DealClaim, DealProfile, EvidenceItem, QualityReview, RiskMemo, SourceMaterial
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
@@ -85,6 +85,11 @@ def init_db() -> None:
             );
 
             create table if not exists memos (
+              deal_id text primary key references deals(id) on delete cascade,
+              payload text not null
+            );
+
+            create table if not exists deal_profiles (
               deal_id text primary key references deals(id) on delete cascade,
               payload text not null
             );
@@ -190,11 +195,13 @@ def save_analysis(
     memo: RiskMemo,
     quality_review: QualityReview,
     generated_at: str,
+    profile: DealProfile | None = None,
 ) -> None:
     with connect() as conn:
         conn.execute("delete from claims where deal_id = ?", (deal_id,))
         conn.execute("delete from evidence where deal_id = ?", (deal_id,))
         conn.execute("delete from memos where deal_id = ?", (deal_id,))
+        conn.execute("delete from deal_profiles where deal_id = ?", (deal_id,))
         conn.execute("delete from quality_reviews where deal_id = ?", (deal_id,))
         for claim in claims:
             conn.execute(
@@ -247,6 +254,8 @@ def save_analysis(
                 ),
             )
         conn.execute("insert into memos (deal_id, payload) values (?, ?)", (deal_id, memo.model_dump_json()))
+        if profile:
+            conn.execute("insert into deal_profiles (deal_id, payload) values (?, ?)", (deal_id, profile.model_dump_json()))
         conn.execute("insert into quality_reviews (deal_id, payload) values (?, ?)", (deal_id, quality_review.model_dump_json()))
         conn.execute(
             "update deals set status = 'completed', error = null, generated_at = ? where id = ?",
@@ -261,6 +270,7 @@ def get_deal(deal_id: str) -> DealAnalysis:
             raise KeyError(deal_id)
         claims = conn.execute("select * from claims where deal_id = ? order by id", (deal_id,)).fetchall()
         evidence = conn.execute("select * from evidence where deal_id = ? order by id", (deal_id,)).fetchall()
+        profile_row = conn.execute("select payload from deal_profiles where deal_id = ?", (deal_id,)).fetchone()
         memo_row = conn.execute("select payload from memos where deal_id = ?", (deal_id,)).fetchone()
         review_row = conn.execute("select payload from quality_reviews where deal_id = ?", (deal_id,)).fetchone()
     return DealAnalysis(
@@ -308,6 +318,7 @@ def get_deal(deal_id: str) -> DealAnalysis:
             )
             for row in evidence
         ],
+        profile=DealProfile.model_validate(json.loads(profile_row["payload"])) if profile_row else None,
         memo=RiskMemo.model_validate(json.loads(memo_row["payload"])) if memo_row else None,
         qualityReview=QualityReview.model_validate(json.loads(review_row["payload"])) if review_row else None,
     )

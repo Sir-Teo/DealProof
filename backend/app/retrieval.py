@@ -69,7 +69,17 @@ def source_independence(citation: str) -> SourceIndependence:
     lower = citation.lower()
     if "claim_packet" in lower or "claim packet" in lower or "deck" in lower or "pitch" in lower or "founder" in lower:
         return "founder_supplied"
-    if "public" in lower or "annual report" in lower or "10k" in lower or "10-k" in lower or "analyst" in lower:
+    if (
+        "public" in lower
+        or "annual report" in lower
+        or "10k" in lower
+        or "10-k" in lower
+        or "analyst" in lower
+        or "sec" in lower
+        or "crunchbase" in lower
+        or "linkedin" in lower
+        or "gartner" in lower
+    ):
         return "third_party"
     if "customer" in lower or "reference" in lower or "financial" in lower or "model" in lower or "data_room" in lower:
         return "internal"
@@ -85,9 +95,56 @@ def relevance_score(claim: DealClaim, chunk: MaterialChunk) -> float:
         return 0
     lexical = len(claim_terms & chunk_terms) / len(claim_terms)
     number_bonus = 0.3 if normalized_numbers(claim.text) and normalized_numbers(claim.text).issubset(normalized_numbers(chunk.text)) else 0
-    category_bonus = 0.12 if claim.category.replace("_", " ") in chunk.text.lower() else 0
+    category_bonus = 0.12 if category_matches_chunk(claim, chunk.text) else 0
     independence_bonus = {"third_party": 0.12, "internal": 0.07, "founder_supplied": 0, "derived": 0}[source_independence(chunk.citation)]
-    return round(min(1, lexical + number_bonus + category_bonus + independence_bonus), 3)
+    freshness_bonus = 0.06 if source_freshness_score(chunk.text) else 0
+    contradiction_bonus = 0.14 if contradiction_cue_matches(claim.text, chunk.text) else 0
+    return round(min(1, lexical + number_bonus + category_bonus + independence_bonus + freshness_bonus + contradiction_bonus), 3)
+
+
+def category_matches_chunk(claim: DealClaim, text: str) -> bool:
+    lower = text.lower()
+    category_terms = {
+        "market": ["market", "tam", "sam", "vertical"],
+        "growth": ["growth", "grew", "signed", "customer", "traction"],
+        "customer_roi": ["roi", "save", "savings", "hours", "efficiency"],
+        "competition": ["competitor", "competition", "vendor", "alternative"],
+        "pricing": ["price", "pricing", "acv", "contract"],
+        "retention": ["retention", "churn", "nrr", "renewal"],
+        "compliance": ["compliance", "regulatory", "audit", "hipaa", "soc 2"],
+        "financials": ["arr", "mrr", "revenue", "gross margin", "cash", "expense"],
+        "product": ["product", "platform", "automates", "integrates", "workflow"],
+        "team": ["founder", "team", "hired", "previously", "led"],
+        "go_to_market": ["pipeline", "sales", "channel", "partner", "lead"],
+        "fundraising": ["raise", "round", "valuation", "pre-money", "post-money"],
+        "legal": ["legal", "lawsuit", "patent", "ip", "contractual"],
+        "operations": ["operations", "manufacturing", "inventory", "supply", "implementation"],
+    }
+    return any(term in lower for term in category_terms.get(claim.category, []))
+
+
+def source_freshness_score(text: str) -> int:
+    return len(re.findall(r"\b20(?:2[3-9]|3[0-9])\b|Q[1-4]\s+20\d{2}|FY\s*20\d{2}", text, flags=re.IGNORECASE))
+
+
+def contradiction_cue_matches(claim_text: str, chunk_text: str) -> bool:
+    lower_claim = claim_text.lower()
+    lower_chunk = chunk_text.lower()
+    negated_claim = any(phrase in lower_claim for phrase in ["no ", "none", "without", "not "])
+    contradiction_terms = [
+        "not",
+        "does not",
+        "did not",
+        "lacks",
+        "missing",
+        "instead",
+        "however",
+        "but",
+        "contradict",
+        "competitors include",
+        "not independently verified",
+    ]
+    return negated_claim or any(term in lower_chunk for term in contradiction_terms)
 
 
 def find_relevant_chunks(claim: DealClaim, chunks: list[MaterialChunk], limit: int = 4) -> list[MaterialChunk]:
@@ -96,7 +153,9 @@ def find_relevant_chunks(claim: DealClaim, chunks: list[MaterialChunk], limit: i
     for chunk in chunks:
         chunk_terms = keywords(chunk.text)
         overlap = len(claim_terms & chunk_terms)
-        if overlap:
+        number_match = bool(normalized_numbers(claim.text) & normalized_numbers(chunk.text))
+        contradiction_match = contradiction_cue_matches(claim.text, chunk.text) and bool(claim_terms & chunk_terms)
+        if overlap or number_match or contradiction_match:
             scored.append((relevance_score(claim, chunk), overlap, chunk))
     return [chunk for _, __, chunk in sorted(scored, key=lambda item: (item[0], item[1]), reverse=True)[:limit]]
 
@@ -105,8 +164,6 @@ def evidence_stance_for_chunk(claim: DealClaim, chunk: MaterialChunk) -> str:
     claim_text = claim.text.lower()
     chunk_text_lower = chunk.text.lower()
     same_source = chunk.citation.lower().startswith(claim.sourceMaterial.lower())
-    claim_packet_source = "claim_packet" in claim.sourceMaterial.lower() or "claim packet" in claim.sourceMaterial.lower()
-
     denies_competition = any(
         phrase in claim_text
         for phrase in [
@@ -152,6 +209,16 @@ def evidence_stance_for_chunk(claim: DealClaim, chunk: MaterialChunk) -> str:
     ):
         return "contradicts"
 
+    if any(phrase in claim_text for phrase in ["no legal risk", "no compliance risk", "no regulatory risk"]) and any(
+        phrase in chunk_text_lower for phrase in ["lawsuit", "regulatory risk", "requires compliance", "not compliant", "pending review"]
+    ):
+        return "contradicts"
+
+    if any(phrase in claim_text for phrase in ["fully automated", "no human review", "no manual review"]) and any(
+        phrase in chunk_text_lower for phrase in ["human review", "manual review", "human-in-the-loop", "human in the loop"]
+    ):
+        return "contradicts"
+
     claim_numbers = normalized_numbers(claim.text)
     chunk_numbers = normalized_numbers(chunk.text)
     independence = source_independence(chunk.citation)
@@ -165,7 +232,12 @@ def evidence_stance_for_chunk(claim: DealClaim, chunk: MaterialChunk) -> str:
     overlap = len(claim_terms & chunk_terms)
     if overlap >= 5 and not same_source and independence == "third_party":
         return "supports"
-    if overlap >= 5 and not same_source and claim.category in {"financials", "pricing", "retention"} and independence == "internal":
+    if (
+        overlap >= 5
+        and not same_source
+        and claim.category in {"financials", "pricing", "retention", "operations", "legal", "compliance", "fundraising"}
+        and independence == "internal"
+    ):
         return "supports"
     return "partially_supports"
 
@@ -179,7 +251,7 @@ def evidence_title_for_stance(stance: str) -> str:
 
 
 def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -> list[EvidenceItem]:
-    relevant = find_relevant_chunks(claim, chunks, limit=2)
+    relevant = find_relevant_chunks(claim, chunks, limit=3)
     if not relevant:
         return [
             EvidenceItem(
@@ -200,7 +272,7 @@ def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -
             id=f"ev-{uuid.uuid4().hex[:10]}",
             claimId=claim.id,
             title=evidence_title_for_stance(evidence_stance_for_chunk(claim, chunk)),
-            sourceType="uploaded",
+            sourceType=source_type_for_citation(chunk.citation),
             citation=chunk.citation,
             snippet=chunk.text[:360],
             stance=evidence_stance_for_chunk(claim, chunk),  # type: ignore[arg-type]
@@ -211,3 +283,7 @@ def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -
         )
         for chunk in relevant
     ]
+
+
+def source_type_for_citation(citation: str) -> str:
+    return "supplied_url" if citation.startswith(("http://", "https://")) else "uploaded"

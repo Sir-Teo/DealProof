@@ -679,6 +679,9 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function MemoArtifact({ deal, memoMarkdown, exportUrl }: { deal: DealAnalysis; memoMarkdown: string; exportUrl: string }) {
   if (!deal.memo) return null;
+  const memo = deal.memo;
+  const risks = memo.keyRisks?.length ? memo.keyRisks : memo.materialRisks;
+  const diligenceRequests = memo.nextDiligenceRequests?.length ? memo.nextDiligenceRequests : memo.followUpQuestions;
   return (
     <section className="artifactPanel memoArtifact">
       <div className="artifactPanelHeader">
@@ -688,13 +691,35 @@ function MemoArtifact({ deal, memoMarkdown, exportUrl }: { deal: DealAnalysis; m
           {UI_COPY.exportMarkdownButton}
         </a>
       </div>
-      <p className="memoQuestion">{deal.memo.investmentQuestion}</p>
+      {deal.profile && (
+        <div className="profileGrid">
+          <Metric label="Sector" value={deal.profile.sector} />
+          <Metric label="Model" value={deal.profile.businessModel} />
+          <Metric label="Customer" value={deal.profile.customer} />
+          <Metric label="Stage" value={deal.profile.stage} />
+        </div>
+      )}
+      {memo.executiveSummary && (
+        <section className="memoNarrative">
+          <h3>{UI_COPY.executiveSummaryTitle}</h3>
+          <p>{memo.executiveSummary}</p>
+        </section>
+      )}
+      {memo.thesisAssessment && (
+        <section className="memoNarrative">
+          <h3>{UI_COPY.thesisAssessmentTitle}</h3>
+          <p>{memo.thesisAssessment}</p>
+        </section>
+      )}
+      <p className="memoQuestion">{memo.investmentQuestion}</p>
+      {memo.decisionDrivers?.length ? <MemoSection title={UI_COPY.decisionDriversTitle} items={memo.decisionDrivers} /> : null}
       <div className="memoColumns">
-        <MemoSection title={UI_COPY.keyStrengthsTitle} items={deal.memo.keyStrengths} />
-        <MemoSection title={UI_COPY.materialRisksTitle} items={deal.memo.materialRisks} danger />
-        <MemoSection title={UI_COPY.followUpQuestionsTitle} items={deal.memo.followUpQuestions} />
+        <MemoSection title={UI_COPY.keyStrengthsTitle} items={memo.keyStrengths} />
+        <MemoSection title={UI_COPY.materialRisksTitle} items={risks} danger />
+        <MemoSection title={UI_COPY.followUpQuestionsTitle} items={diligenceRequests} />
       </div>
-      <div className="recommendation">{deal.memo.icRecommendation}</div>
+      {memo.evidenceMap?.length ? <MemoSection title={UI_COPY.evidenceMapTitle} items={memo.evidenceMap} /> : null}
+      <div className="recommendation">{memo.icRecommendation}</div>
       <details className="markdownDetails">
         <summary>{UI_COPY.markdownPreviewTitle}</summary>
         <pre>{memoMarkdown}</pre>

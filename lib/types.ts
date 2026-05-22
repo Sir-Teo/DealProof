@@ -13,7 +13,13 @@ export type DealClaim = {
     | "pricing"
     | "retention"
     | "compliance"
-    | "financials";
+    | "financials"
+    | "product"
+    | "team"
+    | "go_to_market"
+    | "fundraising"
+    | "legal"
+    | "operations";
   sourceMaterial: string;
   sourceSnippet: string;
   importance: "high" | "medium" | "low";
@@ -50,6 +56,20 @@ export type RiskMemo = {
   materialRisks: string[];
   followUpQuestions: string[];
   icRecommendation: string;
+  executiveSummary?: string;
+  thesisAssessment?: string;
+  evidenceMap?: string[];
+  keyRisks?: string[];
+  nextDiligenceRequests?: string[];
+  decisionDrivers?: string[];
+};
+
+export type DealProfile = {
+  sector: string;
+  businessModel: string;
+  customer: string;
+  stage: string;
+  materialMix: string[];
 };
 
 export type QualityReview = {
@@ -83,6 +103,7 @@ export type DealAnalysis = {
   materials: SourceMaterial[];
   claims: DealClaim[];
   evidence: EvidenceItem[];
+  profile: DealProfile | null;
   memo: RiskMemo | null;
   qualityReview: QualityReview | null;
   generatedAt: string | null;

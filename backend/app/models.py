@@ -16,6 +16,12 @@ ClaimCategory = Literal[
     "retention",
     "compliance",
     "financials",
+    "product",
+    "team",
+    "go_to_market",
+    "fundraising",
+    "legal",
+    "operations",
 ]
 Importance = Literal["high", "medium", "low"]
 Confidence = Literal["high", "medium", "low"]
@@ -43,6 +49,14 @@ class MaterialChunk(BaseModel):
     deal_id: str
     citation: str
     text: str
+
+
+class DealProfile(BaseModel):
+    sector: str = "Unknown"
+    businessModel: str = "Unknown"
+    customer: str = "Unknown"
+    stage: str = DEFAULT_STAGE
+    materialMix: list[str] = Field(default_factory=list)
 
 
 class DealClaim(BaseModel):
@@ -85,6 +99,12 @@ class RiskMemo(BaseModel):
     materialRisks: list[str]
     followUpQuestions: list[str]
     icRecommendation: str
+    executiveSummary: str = ""
+    thesisAssessment: str = ""
+    evidenceMap: list[str] = Field(default_factory=list)
+    keyRisks: list[str] = Field(default_factory=list)
+    nextDiligenceRequests: list[str] = Field(default_factory=list)
+    decisionDrivers: list[str] = Field(default_factory=list)
 
 
 class QualityReview(BaseModel):
@@ -107,8 +127,13 @@ class DealAnalysis(BaseModel):
     materials: list[SourceMaterial] = Field(default_factory=list)
     claims: list[DealClaim] = Field(default_factory=list)
     evidence: list[EvidenceItem] = Field(default_factory=list)
+    profile: DealProfile | None = None
     memo: RiskMemo | None = None
     qualityReview: QualityReview | None = None
+
+
+class DealProfileGeneration(BaseModel):
+    profile: DealProfile
 
 
 class ClaimExtraction(BaseModel):

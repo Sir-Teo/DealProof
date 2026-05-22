@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Callable, TypedDict
 
@@ -13,6 +14,8 @@ from .llm import DeepSeekClient
 from .models import (
     ClaimExtraction,
     DealClaim,
+    DealProfile,
+    DealProfileGeneration,
     EvidenceItem,
     MaterialChunk,
     MemoGeneration,
@@ -20,15 +23,17 @@ from .models import (
     RiskMemo,
     SourceMaterial,
 )
-from .retrieval import chunk_text, fallback_evidence_for_claim, find_relevant_chunks
+from .retrieval import chunk_text, fallback_evidence_for_claim
 from .scoring import apply_rule_based_status, score_claims
 
 
 class DiligenceState(TypedDict, total=False):
     deal_id: str
     company: str
+    stage: str
     materials: list[SourceMaterial]
     chunks: list[MaterialChunk]
+    profile: DealProfile
     claims: list[DealClaim]
     evidence: list[EvidenceItem]
     quality_review: QualityReview
@@ -42,6 +47,7 @@ def build_graph():
     graph = StateGraph(DiligenceState)
     graph.add_node("load_materials", load_materials)
     graph.add_node("chunk_materials", chunk_materials)
+    graph.add_node("profile_deal", profile_deal)
     graph.add_node("extract_claims", extract_claims)
     graph.add_node("retrieve_evidence", retrieve_evidence)
     graph.add_node("score_claims", score_claim_statuses)
@@ -50,7 +56,8 @@ def build_graph():
     graph.add_node("persist_results", persist_results)
     graph.set_entry_point("load_materials")
     graph.add_edge("load_materials", "chunk_materials")
-    graph.add_edge("chunk_materials", "extract_claims")
+    graph.add_edge("chunk_materials", "profile_deal")
+    graph.add_edge("profile_deal", "extract_claims")
     graph.add_edge("extract_claims", "retrieve_evidence")
     graph.add_edge("retrieve_evidence", "score_claims")
     graph.add_edge("score_claims", "review_quality")
@@ -65,20 +72,21 @@ def run_diligence(deal_id: str, on_progress: ProgressCallback | None = None) -> 
     try:
         deal = db.get_deal(deal_id)
         if on_progress:
-            result = run_diligence_with_progress(deal_id, deal.company, on_progress)
+            result = run_diligence_with_progress(deal_id, deal.company, deal.stage, on_progress)
         else:
-            result = build_graph().invoke({"deal_id": deal_id, "company": deal.company})
+            result = build_graph().invoke({"deal_id": deal_id, "company": deal.company, "stage": deal.stage})
         return result
     except Exception as exc:
         db.update_deal_status(deal_id, "failed", error=str(exc))
         raise
 
 
-def run_diligence_with_progress(deal_id: str, company: str, on_progress: ProgressCallback) -> DiligenceState:
-    state: DiligenceState = {"deal_id": deal_id, "company": company}
+def run_diligence_with_progress(deal_id: str, company: str, stage: str, on_progress: ProgressCallback) -> DiligenceState:
+    state: DiligenceState = {"deal_id": deal_id, "company": company, "stage": stage}
     steps = [
         ("load_materials", "Read supplied materials", "Loading source packets from the deal workspace", load_materials),
         ("chunk_materials", "Split source text", "Creating retrievable evidence chunks", chunk_materials),
+        ("profile_deal", "Profile deal context", "Inferring sector, buyer, model, stage, and material mix", profile_deal),
         ("extract_claims", "Extract diligence claims", "Identifying concrete founder claims to verify", extract_claims),
         ("retrieve_evidence", "Retrieve evidence", "Searching supplied materials for support and contradictions", retrieve_evidence),
         ("score_claims", "Score claim support", "Applying support and risk scoring rules", score_claim_statuses),
@@ -125,6 +133,8 @@ def progress_payload(state: DiligenceState, label: str) -> dict[str, int | str]:
         payload["claims"] = len(state["claims"])
     if "evidence" in state:
         payload["evidence"] = len(state["evidence"])
+    if "profile" in state:
+        payload["profile"] = state["profile"].sector
     if "generated_at" in state:
         payload["generatedAt"] = state["generated_at"]
     return payload
@@ -134,7 +144,8 @@ def tool_input_summary(state: DiligenceState, step_id: str) -> str:
     summaries = {
         "load_materials": f"deal_id={state['deal_id']}",
         "chunk_materials": f"materials={len(state.get('materials', []))}",
-        "extract_claims": f"company={state['company']}; materials={len(state.get('materials', []))}",
+        "profile_deal": f"company={state['company']}; stage={state.get('stage', '')}; materials={len(state.get('materials', []))}",
+        "extract_claims": f"company={state['company']}; sector={state.get('profile', DealProfile()).sector}; materials={len(state.get('materials', []))}",
         "retrieve_evidence": f"claims={len(state.get('claims', []))}; chunks={len(state.get('chunks', []))}",
         "score_claims": f"claims={len(state.get('claims', []))}; evidence={len(state.get('evidence', []))}",
         "generate_memo": f"company={state['company']}; claims={len(state.get('claims', []))}",
@@ -147,6 +158,7 @@ def tool_output_summary(state: DiligenceState, step_id: str) -> str:
     summaries = {
         "load_materials": f"Loaded {len(state.get('materials', []))} materials.",
         "chunk_materials": f"Created {len(state.get('chunks', []))} chunks.",
+        "profile_deal": f"Profiled {state.get('profile', DealProfile()).sector} / {state.get('profile', DealProfile()).businessModel}.",
         "extract_claims": f"Extracted {len(state.get('claims', []))} claims.",
         "retrieve_evidence": f"Retrieved {len(state.get('evidence', []))} evidence items.",
         "score_claims": f"Scored {len(state.get('claims', []))} claims.",
@@ -173,19 +185,45 @@ def chunk_materials(state: DiligenceState) -> DiligenceState:
     return {**state, "chunks": chunks}
 
 
+def profile_deal(state: DiligenceState) -> DiligenceState:
+    llm = DeepSeekClient()
+    context = format_material_context(state["materials"], max_chars=9_000)
+    if llm.enabled:
+        system = (
+            "You profile private-market diligence packets. Return JSON only. "
+            "Infer sector, businessModel, customer, stage, and materialMix from the supplied materials. "
+            "Use concise phrases and do not invent facts that are not implied by the packet."
+        )
+        user = (
+            f"Company: {state['company']}\nStage from deal record: {state.get('stage', '')}\n\n"
+            "Return shape: {\"profile\":{\"sector\":\"...\",\"businessModel\":\"...\",\"customer\":\"...\","
+            "\"stage\":\"...\",\"materialMix\":[\"deck\",\"financials\",\"customer references\"]}}\n\n"
+            f"Materials:\n{context}"
+        )
+        try:
+            profile = llm.complete_json(system, user, DealProfileGeneration).profile
+            return {**state, "profile": normalize_profile(profile, state)}
+        except Exception:
+            pass
+    return {**state, "profile": fallback_deal_profile(state)}
+
+
 def extract_claims(state: DiligenceState) -> DiligenceState:
     llm = DeepSeekClient()
-    context = format_material_context(state["materials"], max_chars=14_000)
+    context = format_material_context(state["materials"], max_chars=18_000)
+    profile = state.get("profile", DealProfile())
     if llm.enabled:
         system = (
             "You extract investor diligence claims from deal materials. Return JSON only. "
-            "Extract concrete, verifiable claims about market, growth, ROI, competition, pricing, retention, compliance, and financials. "
+            "Extract concrete, verifiable VC/PE diligence claims about market, growth, ROI, competition, pricing, retention, "
+            "compliance, financials, product, team, go-to-market, fundraising, legal, and operations. "
             "Every claim must include a sourceMaterial and direct sourceSnippet from the supplied context. "
-            "Initial status must be missing and riskRationale can be empty."
+            "Prefer specific claims with metrics, named customers, dates, cohorts, fundraising terms, product capabilities, legal status, "
+            "or explicit assertions that would affect an IC decision. Initial status must be missing and riskRationale can be empty."
         )
         user = (
-            f"Company: {state['company']}\n\n"
-            "Return shape: {\"claims\":[{\"id\":\"claim-01\",\"text\":\"...\",\"category\":\"market|growth|customer_roi|competition|pricing|retention|compliance|financials\","
+            f"Company: {state['company']}\nProfile: {profile.model_dump_json()}\n\n"
+            "Return shape: {\"claims\":[{\"id\":\"claim-01\",\"text\":\"...\",\"category\":\"market|growth|customer_roi|competition|pricing|retention|compliance|financials|product|team|go_to_market|fundraising|legal|operations\","
             "\"sourceMaterial\":\"...\",\"sourceSnippet\":\"...\",\"importance\":\"high|medium|low\",\"status\":\"missing\",\"riskRationale\":\"\"}]}\n\n"
             f"Materials:\n{context}"
         )
@@ -264,36 +302,51 @@ def duplicated_claims(claims: list[DealClaim]) -> list[str]:
 def generate_memo(state: DiligenceState) -> DiligenceState:
     llm = DeepSeekClient()
     _, grade, _ = score_claims(state["claims"])
+    profile = state.get("profile", DealProfile())
     claim_context = "\n".join(
         f"- [{claim.status}/{claim.importance}/{claim.category}/confidence={claim.confidence}/quality={claim.qualityScore}] "
         f"{claim.text} Rationale: {claim.riskRationale} Verification need: {claim.verificationNeed}"
         for claim in state["claims"]
     )
+    evidence_context = "\n".join(evidence_summary_for_claim(claim, state.get("evidence", [])) for claim in state["claims"])
     quality_context = state.get("quality_review", QualityReview()).model_dump_json()
     if llm.enabled:
         system = (
-            "You write concise partner-ready VC red-team memos. Return JSON only. "
-            "Use decision-oriented sections: what can be trusted, what remains unproven, what would change the decision, and a recommendation. "
-            "Do not present weak, missing, contradicted, or low-confidence claims as strengths. Do not invent facts."
+            "You write concise partner-ready VC/PE IC diligence memos. Return JSON only. "
+            "Use decision-oriented sections: executive summary, thesis assessment, evidence map, what can be trusted, "
+            "material risks, decision drivers, next diligence requests, open questions, and recommendation. "
+            "Do not present weak, missing, contradicted, or low-confidence claims as strengths. Do not invent facts. "
+            "The overallGrade must match the scoring rules supplied by the caller."
         )
         user = (
-            f"Company: {state['company']}\nOverall grade from scoring rules: {grade}\nQuality review: {quality_context}\n\nClaims:\n{claim_context}\n\n"
+            f"Company: {state['company']}\nProfile: {profile.model_dump_json()}\nOverall grade from scoring rules: {grade}\n"
+            f"Quality review: {quality_context}\n\nClaims:\n{claim_context}\n\nEvidence summaries:\n{evidence_context}\n\n"
             "Return shape: {\"memo\":{\"company\":\"...\",\"overallGrade\":\"green|yellow|red\",\"investmentQuestion\":\"...\","
-            "\"keyStrengths\":[...],\"materialRisks\":[...],\"followUpQuestions\":[...],\"icRecommendation\":\"...\"}}"
+            "\"keyStrengths\":[...],\"materialRisks\":[...],\"followUpQuestions\":[...],\"icRecommendation\":\"...\","
+            "\"executiveSummary\":\"...\",\"thesisAssessment\":\"...\",\"evidenceMap\":[...],\"keyRisks\":[...],"
+            "\"nextDiligenceRequests\":[...],\"decisionDrivers\":[...]}}"
         )
         try:
             memo = llm.complete_json(system, user, MemoGeneration).memo
             memo = memo.model_copy(update={"overallGrade": grade})
         except Exception:
-            memo = fallback_memo(state["company"], grade, state["claims"])
+            memo = fallback_memo(state["company"], grade, state["claims"], state.get("evidence", []), profile, state.get("quality_review"))
     else:
-        memo = fallback_memo(state["company"], grade, state["claims"])
+        memo = fallback_memo(state["company"], grade, state["claims"], state.get("evidence", []), profile, state.get("quality_review"))
     return {**state, "memo": memo}
 
 
 def persist_results(state: DiligenceState) -> DiligenceState:
     generated_at = datetime.now(timezone.utc).isoformat()
-    db.save_analysis(state["deal_id"], state["claims"], state["evidence"], state["memo"], state.get("quality_review", QualityReview()), generated_at)
+    db.save_analysis(
+        state["deal_id"],
+        state["claims"],
+        state["evidence"],
+        state["memo"],
+        state.get("quality_review", QualityReview()),
+        generated_at,
+        state.get("profile"),
+    )
     return {**state, "generated_at": generated_at}
 
 
@@ -304,12 +357,14 @@ def refresh_review_artifacts(deal_id: str) -> None:
     state: DiligenceState = {
         "deal_id": deal_id,
         "company": deal.company,
+        "stage": deal.stage,
+        "profile": deal.profile or DealProfile(stage=deal.stage),
         "claims": deal.claims,
         "evidence": deal.evidence,
     }
     reviewed = review_quality(state)
     _, grade, _ = score_claims(deal.claims)
-    memo = fallback_memo(deal.company, grade, deal.claims)
+    memo = fallback_memo(deal.company, grade, deal.claims, deal.evidence, deal.profile, reviewed["quality_review"])
     db.save_review_artifacts(deal_id, memo, reviewed["quality_review"])
 
 
@@ -377,6 +432,82 @@ def normalize_claim_ids(claims: list[DealClaim]) -> list[DealClaim]:
     return [claim.model_copy(update={"id": f"claim-{index:02d}"}) for index, claim in enumerate(claims, start=1)]
 
 
+def normalize_profile(profile: DealProfile, state: DiligenceState) -> DealProfile:
+    fallback = fallback_deal_profile(state)
+    return DealProfile(
+        sector=profile.sector.strip() or fallback.sector,
+        businessModel=profile.businessModel.strip() or fallback.businessModel,
+        customer=profile.customer.strip() or fallback.customer,
+        stage=profile.stage.strip() or state.get("stage", fallback.stage),
+        materialMix=profile.materialMix or fallback.materialMix,
+    )
+
+
+def fallback_deal_profile(state: DiligenceState) -> DealProfile:
+    materials = state.get("materials", [])
+    combined = " ".join(material.text.lower() for material in materials)
+    material_mix = material_mix_for(materials)
+    return DealProfile(
+        sector=infer_sector(combined),
+        businessModel=infer_business_model(combined),
+        customer=infer_customer(combined),
+        stage=state.get("stage", ""),
+        materialMix=material_mix,
+    )
+
+
+def material_mix_for(materials: list[SourceMaterial]) -> list[str]:
+    counts = Counter(material.kind for material in materials)
+    source_counts = Counter(material.source_type for material in materials)
+    mix = [f"{kind}: {count}" for kind, count in sorted(counts.items())]
+    mix.extend(f"{source}: {count}" for source, count in sorted(source_counts.items()))
+    return mix
+
+
+def infer_sector(text: str) -> str:
+    rules = [
+        ("Healthcare", ["clinic", "patient", "payer", "dental", "medical", "hipaa", "diagnosis"]),
+        ("Marketing technology", ["marketing", "creator", "dm", "campaign", "lead", "conversion", "social"]),
+        ("Fintech", ["payment", "bank", "fintech", "lending", "underwriting", "card", "wallet"]),
+        ("Retail", ["retail", "merchant", "store", "inventory", "merchandise", "ecommerce"]),
+        ("Developer tools", ["developer", "api", "sdk", "repository", "workflow automation"]),
+        ("Enterprise software", ["enterprise", "workflow", "automation", "saas", "seat", "contract"]),
+        ("Consumer", ["consumer", "mobile app", "users", "subscriber"]),
+    ]
+    for sector, terms in rules:
+        if any(term in text for term in terms):
+            return sector
+    return "General software"
+
+
+def infer_business_model(text: str) -> str:
+    if any(term in text for term in ["arr", "mrr", "subscription", "saas", "annual contract", "acv"]):
+        return "B2B SaaS"
+    if any(term in text for term in ["take rate", "marketplace", "gmv"]):
+        return "Marketplace"
+    if any(term in text for term in ["usage-based", "usage based", "per transaction", "transaction fee"]):
+        return "Usage-based"
+    if any(term in text for term in ["services", "implementation fee", "managed service"]):
+        return "Services-enabled software"
+    return "Unclear"
+
+
+def infer_customer(text: str) -> str:
+    rules = [
+        ("dental clinics", ["dental clinic", "clinics", "practice"]),
+        ("creators and brands", ["creator", "influencer", "brand", "dm inbox"]),
+        ("enterprise buyers", ["enterprise", "fortune", "procurement", "department"]),
+        ("SMBs", ["smb", "small business", "merchant", "local business"]),
+        ("retailers", ["retailer", "store", "merchandise"]),
+        ("developers", ["developer", "engineer", "api user"]),
+        ("consumers", ["consumer", "users", "mobile app"]),
+    ]
+    for customer, terms in rules:
+        if any(term in text for term in terms):
+            return customer
+    return "Unclear"
+
+
 def normalize_evidence_ids(claim_id: str, evidence: list[EvidenceItem]) -> list[EvidenceItem]:
     return [
         item.model_copy(update={"id": f"ev-{uuid.uuid4().hex[:10]}", "claimId": claim_id})
@@ -388,89 +519,284 @@ def fallback_claims(materials: list[SourceMaterial]) -> list[DealClaim]:
     claims: list[DealClaim] = []
     seen: set[str] = set()
     for material in materials:
-        for line in material.text.splitlines():
-            match = re.match(r"\s*Claim:\s*(.+)", line, flags=re.IGNORECASE)
-            if not match:
-                continue
-            text = re.sub(r"\s+", " ", match.group(1)).strip()
-            if len(text) < 20 or text.lower() in seen:
-                continue
-            seen.add(text.lower())
-            category = infer_claim_category(text)
-            claims.append(
-                DealClaim(
-                    id=f"claim-{len(claims)+1:02d}",
-                    text=text,
-                    category=category,  # type: ignore[arg-type]
-                    sourceMaterial=material.name,
-                    sourceSnippet=text[:280],
-                    importance="high" if category in {"growth", "market", "customer_roi", "compliance", "financials"} else "medium",
-                )
-            )
+        for text in explicit_claims(material.text):
+            add_fallback_claim(claims, seen, material, text, explicit=True)
 
-    patterns = [
-        ("growth", r"([^.!?]*(?:grow|growth|ARR|revenue|signed|customers|clinics)[^.!?]*[.!?])"),
-        ("customer_roi", r"([^.!?]*(?:save|recover|ROI|hours|collections|improve)[^.!?]*[.!?])"),
-        ("competition", r"([^.!?]*(?:competitor|competition|only|no direct)[^.!?]*[.!?])"),
-        ("market", r"([^.!?]*(?:market|TAM|opportunity|\$[0-9]+[BMK])[^\n.!?]*[.!?])"),
-        ("compliance", r"([^.!?]*(?:compliance|human review|diagnosis|submission|regulatory)[^.!?]*[.!?])"),
-        ("pricing", r"([^.!?]*(?:price|pricing|contract|ACV|ARR)[^.!?]*[.!?])"),
-    ]
     for material in materials:
-        for category, pattern in patterns:
-            for match in re.findall(pattern, material.text, flags=re.IGNORECASE)[:2]:
-                text = re.sub(r"\s+", " ", match).strip()
-                if len(text) < 20 or text.lower() in seen:
-                    continue
-                seen.add(text.lower())
-                claims.append(
-                    DealClaim(
-                        id=f"claim-{len(claims)+1:02d}",
-                        text=text,
-                        category=category,  # type: ignore[arg-type]
-                        sourceMaterial=material.name,
-                        sourceSnippet=text[:280],
-                        importance="high" if category in {"growth", "market", "customer_roi", "compliance"} else "medium",
-                    )
-                )
+        added_for_material = 0
+        for text in candidate_sentences(material.text):
+            if add_fallback_claim(claims, seen, material, text, explicit=False):
+                added_for_material += 1
+            if added_for_material >= 5:
+                break
     return claims[:18]
+
+
+def explicit_claims(text: str) -> list[str]:
+    claims = []
+    for line in text.splitlines():
+        match = re.match(r"\s*(?:claim|assertion|founder claim)\s*:\s*(.+)", line, flags=re.IGNORECASE)
+        if match:
+            claims.append(clean_claim_text(match.group(1)))
+    return claims
+
+
+def candidate_sentences(text: str) -> list[str]:
+    candidates: list[str] = []
+    for line in text.splitlines():
+        clean = re.sub(r"^\s*[-*]\s*", "", line).strip()
+        if not clean or re.match(r"\s*(?:claim|assertion|founder claim)\s*:", clean, flags=re.IGNORECASE):
+            continue
+        parts = re.split(r"(?<=[.!?])\s+", clean)
+        for part in parts:
+            text_part = clean_claim_text(part)
+            if text_part:
+                candidates.append(text_part)
+    return candidates
+
+
+def clean_claim_text(text: str) -> str:
+    text = re.sub(r"\s+", " ", text).strip(" -:\t")
+    return text[:420]
+
+
+def normalize_structured_claim_text(text: str) -> str:
+    parts = [part.strip() for part in text.split(",") if part.strip()]
+    if len(parts) < 3:
+        return text
+    label = parts[0].lower()
+    values = parts[1:]
+    if not any(re.search(r"\d", value) for value in values):
+        return text
+    if label == "arr":
+        return f"ARR grew from {format_money(values[0])} to {format_money(values[-1])} over the reported period."
+    if label == "gross margin":
+        margin_values = sorted(values, key=numeric_value_for_sort)
+        if margin_values[0] == margin_values[-1]:
+            return f"Gross margin was {margin_values[-1]} over the reported period."
+        return f"Gross margin ranged from {margin_values[0]} to {margin_values[-1]} over the reported period."
+    if label == "logo churn":
+        return f"Logo churn was reported as {', '.join(values)} over the reported period."
+    if label == "average contract value":
+        return f"Average contract value was {format_money(values[-1])} in the latest reported period."
+    if label in {"revenue", "mrr", "burn", "cash"}:
+        return f"{parts[0]} changed from {values[0]} to {values[-1]} over the reported period."
+    return text
+
+
+def format_money(value: str) -> str:
+    clean = value.replace("$", "").replace(",", "").strip()
+    if not re.fullmatch(r"\d+(?:\.\d+)?", clean):
+        return value
+    amount = float(clean)
+    if amount >= 1_000_000:
+        return f"${amount / 1_000_000:g}M"
+    if amount >= 1_000:
+        return f"${amount / 1_000:g}k"
+    return f"${amount:g}"
+
+
+def numeric_value_for_sort(value: str) -> float:
+    clean = value.replace("$", "").replace(",", "").replace("%", "").strip()
+    try:
+        return float(clean)
+    except ValueError:
+        return 0
+
+
+def is_low_value_table_header(text: str) -> bool:
+    lower = text.lower()
+    return bool(re.fullmatch(r"(metric|date|month|quarter|year)(?:[,| ].*)?", lower))
+
+
+def add_fallback_claim(
+    claims: list[DealClaim],
+    seen: set[str],
+    material: SourceMaterial,
+    text: str,
+    explicit: bool,
+) -> bool:
+    text = clean_claim_text(text)
+    text = normalize_structured_claim_text(text)
+    if len(text) < 20:
+        return False
+    if is_low_value_table_header(text):
+        return False
+    signature = claim_signature(text)
+    if signature in seen:
+        return False
+    if not explicit and not is_verifiable_claim(text):
+        return False
+    seen.add(signature)
+    category = infer_claim_category(text)
+    claims.append(
+        DealClaim(
+            id=f"claim-{len(claims)+1:02d}",
+            text=text,
+            category=category,  # type: ignore[arg-type]
+            sourceMaterial=material.name,
+            sourceSnippet=text[:280],
+            importance=importance_for_category(category, text),  # type: ignore[arg-type]
+        )
+    )
+    return True
+
+
+def claim_signature(text: str) -> str:
+    return " ".join(re.findall(r"[a-zA-Z0-9$%]+", text.lower())[:16])
+
+
+def is_verifiable_claim(text: str) -> bool:
+    lower = text.lower()
+    metadata_prefixes = [
+        "period of report",
+        "source snapshot",
+        "source:",
+        "snapshot date",
+        "page structure",
+    ]
+    if any(lower.startswith(prefix) for prefix in metadata_prefixes):
+        return False
+    generic_terms = ["world-class", "future of", "delightful", "game-changing", "best-in-class"]
+    concrete_terms = [
+        "arr",
+        "mrr",
+        "revenue",
+        "gross margin",
+        "cash",
+        "burn",
+        "customer",
+        "customers",
+        "clinic",
+        "signed",
+        "contract",
+        "pilot",
+        "retention",
+        "churn",
+        "roi",
+        "save",
+        "hours",
+        "market",
+        "tam",
+        "competitor",
+        "competition",
+        "price",
+        "pricing",
+        "valuation",
+        "pre-money",
+        "post-money",
+        "raise",
+        "round",
+        "automates",
+        "integrates",
+        "launched",
+        "deploy",
+        "platform",
+        "workflow",
+        "founder",
+        "previously",
+        "led",
+        "hired",
+        "sales",
+        "pipeline",
+        "channel",
+        "partner",
+        "soc 2",
+        "hipaa",
+        "patent",
+        "lawsuit",
+        "compliance",
+        "regulatory",
+        "manufacturing",
+        "obligations",
+        "inventory",
+    ]
+    if any(char.isdigit() for char in lower):
+        return True
+    if any(term in lower for term in generic_terms) and not any(term in lower for term in concrete_terms):
+        return False
+    return any(term in lower for term in concrete_terms)
 
 
 def infer_claim_category(text: str) -> str:
     lower = text.lower()
     if any(term in lower for term in ["competitor", "competition"]):
         return "competition"
-    if any(term in lower for term in ["roi", "ltv", "save", "savings", "manual effort"]):
+    if any(term in lower for term in ["roi", "ltv", "save", "savings", "manual effort", "recover", "improve collections"]):
         return "customer_roi"
+    if any(term in lower for term in ["raise", "round", "valuation", "pre-money", "post-money", "safe", "equity", "dilution"]):
+        return "fundraising"
+    if any(term in lower for term in ["lawsuit", "patent", "ip ", "intellectual property", "contractual", "legal"]):
+        return "legal"
     if any(term in lower for term in ["arr", "revenue", "mrr", "gross margin", "cash-flow", "cash flow", "r&d", "expense"]):
         return "financials"
-    if any(term in lower for term in ["valuation", "pre-money", "post-money", "equity", "pricing"]):
+    if any(term in lower for term in ["price", "pricing", "contract", "acv"]):
         return "pricing"
-    if any(term in lower for term in ["tam", "market", "vertical"]):
-        return "market"
     if any(term in lower for term in ["retention", "churn"]):
         return "retention"
     if any(term in lower for term in ["regulatory", "compliance", "audited", "third-party"]):
         return "compliance"
+    if any(term in lower for term in ["grow", "growth", "fastest-growing", "signed", "nrr", "net revenue retention"]):
+        return "growth"
+    if any(term in lower for term in ["automates", "integrates", "platform", "launched", "deploy", "workflow", "ai agent", "product"]):
+        return "product"
+    if any(term in lower for term in ["founder", "team", "hired", "previously", "led ", "ex-"]):
+        return "team"
+    if any(term in lower for term in ["pipeline", "sales", "channel", "partner", "waitlist", "lead", "conversion"]):
+        return "go_to_market"
+    if any(term in lower for term in ["tam", "market", "vertical", "opportunity"]):
+        return "market"
+    if any(term in lower for term in ["manufacturing", "inventory", "supply", "operations", "onboarding", "implementation"]):
+        return "operations"
     return "growth"
 
 
-def fallback_memo(company: str, grade: str, claims: list[DealClaim]) -> RiskMemo:
-    strengths = [
-        f"{claim.text} (confidence: {claim.confidence}, quality: {claim.qualityScore}/100)"
-        for claim in claims
-        if claim.status == "supported" and claim.confidence == "high"
-    ][:3] or ["No claim is ready to treat as fully trusted without additional review."]
+def importance_for_category(category: str, text: str) -> str:
+    high_categories = {"growth", "customer_roi", "compliance", "financials", "fundraising", "legal", "market"}
+    if category in high_categories:
+        return "high"
+    if category == "team" and not any(char.isdigit() for char in text):
+        return "low"
+    return "medium"
+
+
+def fallback_memo(
+    company: str,
+    grade: str,
+    claims: list[DealClaim],
+    evidence: list[EvidenceItem] | None = None,
+    profile: DealProfile | None = None,
+    quality_review: QualityReview | None = None,
+) -> RiskMemo:
+    evidence = evidence or []
+    profile = profile or DealProfile()
+    score, _, counts = score_claims(claims)
+    report_claims = [claim for claim in claims if not is_off_target_public_claim(company, claim)] or claims
+    report_score, _, report_counts = score_claims(report_claims)
+    strength_claims = sorted(
+        [claim for claim in report_claims if claim.status == "supported"],
+        key=strength_sort_key,
+    )
+    strengths = [format_strength_claim(claim, evidence) for claim in strength_claims[:3]] or [
+        "No claim is ready to treat as fully trusted without additional review."
+    ]
+    risk_claims = sorted(
+        [claim for claim in report_claims if claim.status != "supported" or claim.confidence != "high"],
+        key=risk_sort_key,
+    )
     risks = [
         f"{claim.text} ({claim.status}, confidence: {claim.confidence}). {claim.riskRationale}"
-        for claim in claims
-        if claim.status != "supported" or claim.confidence != "high"
-    ][:4] or [
+        for claim in risk_claims
+    ][:5] or [
         "No material red flags were identified from supplied materials, but external validation remains limited."
     ]
-    questions = list(dict.fromkeys(claim.verificationNeed for claim in claims if claim.status in {"weak", "missing", "contradicted"}))[:4] or [
+    questions = list(dict.fromkeys(claim.verificationNeed for claim in report_claims if claim.status in {"weak", "missing", "contradicted"}))[:6] or [
         "Which customer references can validate the strongest claims?"
     ]
+    evidence_map = [evidence_summary_for_claim(claim, evidence) for claim in report_claims[:8]]
+    decision_drivers = decision_drivers_for_claims(report_claims, quality_review)
+    thesis = thesis_assessment_for_grade(grade, report_counts)
+    summary = executive_summary_for_report(company, profile, grade, score, report_score, report_counts, risk_claims)
     return RiskMemo(
         company=company,
         overallGrade=grade,  # type: ignore[arg-type]
@@ -481,4 +807,134 @@ def fallback_memo(company: str, grade: str, claims: list[DealClaim]) -> RiskMemo
         icRecommendation=(
             f"Current grade: {grade}. Proceed only after the team resolves weak, contradicted, and missing-evidence claims with cited support."
         ),
+        executiveSummary=summary,
+        thesisAssessment=thesis,
+        evidenceMap=evidence_map,
+        keyRisks=risks,
+        nextDiligenceRequests=questions,
+        decisionDrivers=decision_drivers,
     )
+
+
+def primary_citation_for_claim(claim: DealClaim, evidence: list[EvidenceItem]) -> str:
+    for item in evidence:
+        if item.claimId == claim.id and item.stance == "supports":
+            return f"Primary citation: {item.citation}."
+    return "Primary citation: not attached."
+
+
+def format_strength_claim(claim: DealClaim, evidence: list[EvidenceItem]) -> str:
+    citation = primary_citation_for_claim(claim, evidence)
+    if claim.confidence == "high":
+        return f"{claim.text} This is supported with high reviewer confidence. {citation}"
+    return f"{claim.text} Directionally supported, but confidence is {claim.confidence}; keep diligence follow-up attached. {citation}"
+
+
+def strength_sort_key(claim: DealClaim) -> tuple[int, int, int]:
+    confidence_rank = {"high": 0, "medium": 1, "low": 2}
+    impact_rank = {"high": 0, "medium": 1, "low": 2}
+    return (
+        confidence_rank.get(claim.confidence, 3),
+        impact_rank.get(claim.decisionImpact, 3),
+        -claim.qualityScore,
+    )
+
+
+def risk_sort_key(claim: DealClaim) -> tuple[int, int, int, int]:
+    status_rank = {"contradicted": 0, "missing": 1, "weak": 2, "supported": 3}
+    impact_rank = {"high": 0, "medium": 1, "low": 2}
+    category_rank = {
+        "customer_roi": 0,
+        "market": 1,
+        "competition": 2,
+        "compliance": 3,
+        "legal": 4,
+        "growth": 5,
+        "fundraising": 6,
+        "financials": 7,
+    }
+    confidence_rank = {"low": 0, "medium": 1, "high": 2}
+    return (
+        status_rank.get(claim.status, 4),
+        impact_rank.get(claim.decisionImpact, 3),
+        category_rank.get(claim.category, 8),
+        confidence_rank.get(claim.confidence, 3),
+    )
+
+
+def executive_summary_for_report(
+    company: str,
+    profile: DealProfile,
+    grade: str,
+    score: int,
+    report_score: int,
+    report_counts: dict[str, int],
+    risk_claims: list[DealClaim],
+) -> str:
+    risk_clause = "No material unresolved target-company claim leads the memo."
+    if risk_claims:
+        lead = risk_claims[0]
+        risk_clause = f"The lead diligence issue is {lead.status}: {lead.text}"
+    return (
+        f"{company} is a {profile.sector} company with a {profile.businessModel} model serving {profile.customer}. "
+        f"The overall diligence grade is {grade} ({score}/100), while the target-company memo focus scores {report_score}/100. "
+        f"The target-company ledger has {report_counts['supported']} supported, {report_counts['weak']} weak, "
+        f"{report_counts['missing']} missing, and {report_counts['contradicted']} contradicted claims. {risk_clause}"
+    )
+
+
+def is_off_target_public_claim(company: str, claim: DealClaim) -> bool:
+    company_tokens = {token for token in re.findall(r"[a-zA-Z0-9]+", company.lower()) if len(token) > 2}
+    text = claim.text.lower()
+    known_public_issuers = {"apple", "target", "microsoft", "amazon", "google", "alphabet", "meta", "tesla", "nvidia"}
+    mentioned_public_issuers = {issuer for issuer in known_public_issuers if re.search(rf"\b{re.escape(issuer)}\b", text)}
+    if not mentioned_public_issuers:
+        return False
+    return not bool(company_tokens & set(re.findall(r"[a-zA-Z0-9]+", text)))
+
+
+def evidence_summary_for_claim(claim: DealClaim, evidence: list[EvidenceItem]) -> str:
+    claim_evidence = [item for item in evidence if item.claimId == claim.id]
+    if not claim_evidence:
+        return f"{claim.id} ({claim.status}): {claim.text} - no evidence item attached."
+    independence = Counter(item.sourceIndependence for item in claim_evidence)
+    stances = Counter(item.stance for item in claim_evidence)
+    citations = list(dict.fromkeys(item.citation for item in claim_evidence))[:3]
+    independence_summary = ", ".join(f"{key}: {value}" for key, value in sorted(independence.items()))
+    stance_summary = ", ".join(f"{key}: {value}" for key, value in sorted(stances.items()))
+    return (
+        f"{claim.id} ({claim.status}): {claim.text} - sources [{independence_summary}], "
+        f"stances [{stance_summary}], citations: {', '.join(citations)}."
+    )
+
+
+def decision_drivers_for_claims(claims: list[DealClaim], quality_review: QualityReview | None = None) -> list[str]:
+    drivers: list[str] = []
+    contradicted = [claim for claim in claims if claim.status == "contradicted" and claim.decisionImpact == "high"]
+    weak_high = [claim for claim in claims if claim.status in {"weak", "missing"} and claim.importance == "high"]
+    if contradicted:
+        drivers.append("Resolve contradicted high-impact claims before IC.")
+    if weak_high:
+        drivers.append("Replace weak or missing high-importance claims with source-level customer, financial, or legal backup.")
+    if quality_review and quality_review.globalWarnings:
+        drivers.extend(quality_review.globalWarnings[:2])
+    if not drivers:
+        drivers.append("Confirm no newer supplied evidence changes the current support status.")
+    return list(dict.fromkeys(drivers))[:5]
+
+
+def thesis_assessment_for_grade(grade: str, counts: dict[str, int] | None = None) -> str:
+    counts = counts or {"supported": 0, "weak": 0, "missing": 0, "contradicted": 0}
+    if counts.get("contradicted", 0):
+        return (
+            "The thesis is not ready to rely on as presented: contradicted claims must be reconciled before IC, "
+            "even where parts of the packet are directionally supported."
+        )
+    if grade == "green":
+        return "The supplied packet is directionally IC-ready, subject to confirming no newer contradictory evidence exists."
+    if grade == "yellow":
+        return (
+            "The thesis has usable supporting evidence, but IC should focus on converting weak or medium-confidence support "
+            "into customer, financial, or third-party proof before relying on the narrative."
+        )
+    return "The current packet is not IC-ready because material claims are contradicted, missing, or insufficiently supported."

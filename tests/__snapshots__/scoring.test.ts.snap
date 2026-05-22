@@ -5,6 +5,18 @@ exports[`DealProof scoring > generates a partner-ready markdown memo 1`] = `
 
 **Overall grade:** YELLOW
 
+## Executive Summary
+CaviClear is a yellow diligence case with mixed support.
+
+## Thesis Assessment
+The core thesis needs stronger customer proof before IC.
+
+## Decision Drivers
+- Resolve high-importance weak claims.
+
+## Evidence Map
+- claim-01: supported by financials.csv.
+
 ## Investment Question
 Is this credible enough for IC?
 
