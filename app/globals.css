@@ -483,11 +483,11 @@ summary:focus-visible {
 /* Artifact panels (claims / evidence / memo) */
 
 .artifactPanel {
-  border: 1px solid var(--line);
+  border: 1px solid rgba(0, 0, 0, 0.07);
   border-radius: 12px;
   background: white;
   margin-top: 10px;
-  padding: 20px;
+  padding: 24px;
 }
 
 .artifactPanelHeader {
@@ -523,10 +523,10 @@ summary:focus-visible {
 .claimGroup h3 {
   color: var(--muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
   margin: 0 0 6px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.03em;
 }
 
 .claimRow {
@@ -538,7 +538,7 @@ summary:focus-visible {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: white;
-  padding: 10px 11px;
+  padding: 9px 11px;
   text-align: left;
   transition: border-color 0.12s, background 0.12s;
 }
@@ -568,7 +568,6 @@ summary:focus-visible {
 }
 
 .statusPill,
-.citationMeta span,
 .answerBox footer span {
   display: inline-flex;
   align-items: center;
@@ -601,39 +600,22 @@ summary:focus-visible {
   background: var(--gray-bg);
 }
 
-.rationale {
-  display: flex;
-  gap: 9px;
-  background: var(--amber-bg);
-  border: 1px solid #fde68a;
-  color: var(--amber);
-  padding: 11px 12px;
-  border-radius: 8px;
-  margin-bottom: 12px;
+.claimSubtitle {
+  color: var(--muted);
   font-size: 13px;
-}
-
-.rationale p {
   line-height: 1.5;
-  margin: 0;
+  margin: 4px 0 0;
 }
 
-.qualityStrip {
+.metricStrip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
   gap: 8px;
-  margin-bottom: 10px;
-}
-
-.citationSummary {
-  display: grid;
-  grid-template-columns: 90px 110px minmax(0, 1fr);
-  gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .metric {
-  border: 1px solid var(--line);
+  background: var(--panel-soft);
   border-radius: 8px;
   padding: 9px 10px;
   min-width: 0;
@@ -671,7 +653,7 @@ summary:focus-visible {
 }
 
 .topGate {
-  border: 1px solid var(--line);
+  background: var(--panel-soft);
   border-radius: 8px;
   padding: 10px 12px;
   min-width: 0;
@@ -727,9 +709,10 @@ summary:focus-visible {
 .readinessGroup h3 {
   color: var(--muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
   margin: 0;
   text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .readinessRows {
@@ -1000,10 +983,14 @@ summary:focus-visible {
 }
 
 .citationMeta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
   margin-top: 4px;
+  color: var(--faint);
+  font-size: 11px;
 }
 
-.citationMeta span,
 .answerBox footer span {
   background: var(--gray-bg);
   color: #4b5563;
@@ -1037,11 +1024,11 @@ summary:focus-visible {
 
 .memoNarrative h3 {
   margin: 0 0 6px;
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 700;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
 }
 
 .memoNarrative p {
@@ -1067,11 +1054,11 @@ summary:focus-visible {
 
 .memoSection h3 {
   margin: 0 0 8px;
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 700;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
 }
 
 .memoSection ul {
