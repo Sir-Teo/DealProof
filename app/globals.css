@@ -419,85 +419,50 @@ summary:focus-visible {
   white-space: pre-wrap;
 }
 
-/* ── Artifact grid (result cards) ── */
+/* ── Grade bar (single-line result summary) ── */
 
-.artifactGrid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0;
+.gradeBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
   margin-top: 14px;
   border-top: 1px solid var(--line);
 }
 
-.artifactCard {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  padding: 12px 0;
-  text-align: left;
-}
-
-.artifactButton {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 150px 110px minmax(0, 1fr);
-  align-items: start;
-  gap: 18px;
-  border-bottom: 1px solid var(--line);
-  padding: 14px 12px;
-  transition: background 0.12s ease;
-}
-
-.artifactButton:hover:not(:disabled) {
-  background: #fafafa;
-}
-
-.artifactButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-/* Eyebrow row: icon + label */
-.artifactKicker {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 10px;
+.gradeBar strong {
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.07em;
   text-transform: uppercase;
-  margin-bottom: 0;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
-/* Large primary metric */
-.artifactPrimary {
-  margin-bottom: 4px;
-}
-
-.artifactButton p {
-  margin-top: 1px;
-}
-
-.artifactPrimary strong {
-  font-size: 18px;
-  font-weight: 650;
-  line-height: 1.1;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  text-transform: capitalize;
-}
-
-.artifactCard p {
+.gradeBar span {
   color: var(--muted);
   font-size: 13px;
-  line-height: 1.45;
-  margin: 0;
+  line-height: 1.4;
 }
 
-.artifactAnchor {
-  scroll-margin-top: 18px;
+.gradeChip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
+
+.card--green { color: var(--green); }
+.card--yellow,
+.card--amber { color: var(--amber); }
+.card--red { color: var(--red); }
+.card--blocked { color: var(--red); }
+
+.gradeChip.card--green { background: var(--green-bg); }
+.gradeChip.card--yellow,
+.gradeChip.card--amber { background: var(--amber-bg); }
+.gradeChip.card--red { background: var(--red-bg); }
+.gradeChip.card--blocked { background: var(--red-bg); }
 
 /* Artifact panels (claims / evidence / memo) */
 
@@ -549,26 +514,36 @@ summary:focus-visible {
 }
 
 .claimRow {
-  width: 100%;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto 16px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
-  border: 0;
   border-top: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
   padding: 12px 4px;
-  text-align: left;
-  transition: background 0.12s ease;
 }
 
-.claimRow + .claimRow {
-  margin-top: 0;
+.claimEvidence {
+  grid-column: 1 / -1;
+  padding: 0 0 4px 0;
 }
 
-.claimRow:hover {
-  background: #fafafa;
+.claimEvidence summary {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  list-style: none;
+}
+
+.claimEvidence summary::before {
+  content: "+ ";
+}
+
+.claimEvidence[open] summary::before {
+  content: "− ";
 }
 
 .claimRow > span:not(.statusPill) {
@@ -619,20 +594,6 @@ summary:focus-visible {
   background: var(--gray-bg);
 }
 
-.claimSubtitle {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 4px 0 0;
-}
-
-.metricStrip {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
 .metric {
   border-top: 1px solid var(--line);
   padding: 11px 4px;
@@ -655,213 +616,6 @@ summary:focus-visible {
   font-weight: 600;
   text-transform: capitalize;
   overflow-wrap: anywhere;
-}
-
-/* ── IC readiness ── */
-
-.readinessPanel {
-  display: grid;
-  gap: 16px;
-}
-
-.readinessSummary {
-  display: grid;
-  grid-template-columns: 120px 100px minmax(0, 1fr);
-  gap: 8px;
-}
-
-.topGate {
-  border-top: 1px solid var(--line);
-  padding: 11px 4px;
-  min-width: 0;
-}
-
-.topGate span {
-  display: block;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  margin-bottom: 3px;
-}
-
-.topGate strong {
-  display: block;
-  color: var(--ink);
-  font-size: 13px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.statusBadge {
-  border-radius: 999px;
-  padding: 4px 9px;
-  color: #374151;
-  background: var(--gray-bg);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: capitalize;
-}
-
-.statusBadge--ready {
-  color: var(--green);
-  background: var(--green-bg);
-}
-
-.statusBadge--conditional {
-  color: var(--amber);
-  background: var(--amber-bg);
-}
-
-.statusBadge--blocked {
-  color: var(--red);
-  background: var(--red-bg);
-}
-
-.readinessGroup {
-  display: grid;
-  gap: 7px;
-}
-
-.readinessGroup h3 {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.readinessRows {
-  display: grid;
-  gap: 7px;
-}
-
-.readinessRow {
-  display: grid;
-  gap: 8px;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
-  padding: 14px 4px;
-}
-
-.readinessClaim {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  text-align: left;
-}
-
-.readinessClaim > span:not(.statusPill) {
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.readinessClaim small {
-  grid-column: 2;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.readinessMeta,
-.readinessActions {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-wrap: wrap;
-}
-
-.readinessMeta span {
-  color: var(--muted);
-  border-right: 1px solid var(--line);
-  border-radius: 0;
-  padding: 0 7px 0 0;
-  font-size: 11px;
-  text-transform: capitalize;
-}
-
-.readinessActions label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.readinessActions select {
-  min-height: 30px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: white;
-  color: var(--ink);
-  padding: 4px 8px;
-  font-size: 12px;
-}
-
-.emptyReadiness {
-  border: 1px dashed var(--line);
-  border-radius: 8px;
-  color: var(--muted);
-  font-size: 13px;
-  margin: 0;
-  padding: 10px 12px;
-}
-
-.qualityIssues {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
-.qualityIssues span {
-  background: var(--gray-bg);
-  border-radius: 999px;
-  color: #4b5563;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 8px;
-}
-
-.reviewControls,
-.reviewNotes {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-
-.reviewControls label {
-  display: inline-grid;
-  gap: 3px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.reviewControls select,
-.reviewNotes input {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: white;
-  color: var(--ink);
-  min-height: 34px;
-  padding: 6px 9px;
-}
-
-.reviewNotes input {
-  flex: 1 1 240px;
-  min-width: 0;
 }
 
 .evidenceList {
@@ -1341,19 +1095,6 @@ summary:focus-visible {
     height: 26px;
   }
 
-  .artifactGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .artifactButton {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-
-  .artifactButton p {
-    margin-top: 0;
-  }
-
   .artifactPanel {
     padding: 16px;
   }
@@ -1368,10 +1109,6 @@ summary:focus-visible {
 
   .qualityStrip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .readinessSummary {
-    grid-template-columns: 1fr;
   }
 
   .citationSummary {
@@ -1390,10 +1127,6 @@ summary:focus-visible {
   .claimRow small {
     grid-column: 2;
     white-space: normal;
-  }
-
-  .claimRow svg:last-child {
-    display: none;
   }
 
   .toolCall summary {
