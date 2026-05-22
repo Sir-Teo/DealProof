@@ -609,7 +609,7 @@ function ClaimsArtifact({ claims, evidence, onSelectClaim }: { claims: DealClaim
                   <button key={claim.id} type="button" className="claimRow" onClick={() => onSelectClaim(claim)}>
                     <StatusPill status={claim.status} />
                     <span>{claim.text}</span>
-                    <small>{claim.confidence} confidence / {claim.qualityScore}% / {count} {UI_COPY.evidenceLabel}</small>
+                    <small>{count} {UI_COPY.evidenceLabel}</small>
                     <PanelRightOpen size={14} />
                   </button>
                 );
@@ -720,11 +720,6 @@ function ReadinessRow({
         <span>{item.claim.text}</span>
         <small>{item.reason}</small>
       </button>
-      <div className="readinessMeta">
-        <span>{item.independentEvidenceCount} independent</span>
-        <span>{item.evidenceCount} evidence</span>
-        <span>{item.claim.reviewerStatus.replaceAll("_", " ")}</span>
-      </div>
       <div className="readinessActions">
         <label>
           Status
@@ -766,20 +761,17 @@ function EvidenceArtifact({
   return (
     <section className="artifactPanel">
       <div className="artifactPanelHeader">
-        <h2>{claim.text}</h2>
+        <div>
+          <h2>{claim.text}</h2>
+          {claim.riskRationale && <p className="claimSubtitle">{claim.riskRationale}</p>}
+        </div>
         <StatusPill status={claim.status} />
       </div>
-      <div className="qualityStrip">
+      <div className="metricStrip">
         <Metric label="Confidence" value={claim.confidence} />
         <Metric label="Quality" value={`${claim.qualityScore}%`} />
         <Metric label="Decision impact" value={claim.decisionImpact} />
         <Metric label="Reviewer" value={claim.reviewerStatus.replaceAll("_", " ")} />
-      </div>
-      <div className="rationale">
-        <AlertTriangle size={16} />
-        <p>{claim.riskRationale} {claim.verificationNeed}</p>
-      </div>
-      <div className="citationSummary">
         <Metric label="Citations" value={`${evidence.length}`} />
         <Metric label="Independent" value={`${independentSourceCount}`} />
         <Metric label="Primary source" value={strongestEvidence ? sourceLabel(strongestEvidence) : "None"} />
@@ -840,12 +832,9 @@ function EvidenceArtifact({
               <p>{item.quoteSpan || item.snippet}</p>
             </blockquote>
             {item.quoteSpan && item.snippet && item.snippet !== item.quoteSpan && <p className="contextSnippet">{item.snippet}</p>}
-            <div className="citationReason">Used to {stanceVerb(item.stance)} this claim.</div>
             <footer className="citationMeta">
               <span>{item.citation}</span>
               <span>{item.sourceType.replace("_", " ")}</span>
-              <span>{item.sourceIndependence.replace("_", " ")}</span>
-              <span>{item.reliability} reliability</span>
               <span>{Math.round(item.relevanceScore * 100)}% relevance</span>
             </footer>
           </article>
