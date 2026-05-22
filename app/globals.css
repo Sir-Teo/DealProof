@@ -955,6 +955,7 @@ summary:focus-visible {
   color: var(--ink);
   font-size: 15px;
   line-height: 1.65;
+  white-space: pre-line;
 }
 
 .answerBox footer {

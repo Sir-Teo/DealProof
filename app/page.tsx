@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import {
   AlertTriangle,
@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { API_BASE_URL, DEFAULT_DEAL, UI_COPY } from "@/lib/app-config";
-import { evidenceForClaim, generateMemoMarkdown, scoreClaims } from "@/lib/scoring";
+import { evidenceForClaim, scoreClaims } from "@/lib/scoring";
 import type { ChatTurn, ClaimStatus, DealAnalysis, DealClaim, EvidenceItem } from "@/lib/types";
 
 const emptyCounts = { supported: 0, weak: 0, contradicted: 0, missing: 0 };
@@ -91,14 +91,18 @@ export default function Home() {
     }
   ]);
   const feedWrapRef = useRef<HTMLElement>(null);
+  const feedBottomRef = useRef<HTMLDivElement>(null);
 
   const claims = useMemo(() => deal?.claims ?? [], [deal?.claims]);
   const scoring = useMemo(() => (claims.length ? scoreClaims(claims) : { overall: 0, grade: "red" as const, counts: emptyCounts }), [claims]);
-  const memoMarkdown = deal?.memo ? generateMemoMarkdown(deal.memo) : "";
   const exportUrl = deal ? `${API_BASE_URL}/deals/${deal.id}/export-memo` : "#";
   const suggestedQuestions = useMemo(() => buildSuggestedQuestions(claims), [claims]);
   const isAnalyzing = busy === "analyze" || busy === "demo";
   const canRunAgent = Boolean(deal?.materials.length) && !isAnalyzing;
+
+  useEffect(() => {
+    feedBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [feedNotes.length, deal?.chatHistory?.length, isAnalyzing]);
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${API_BASE_URL}${path}`, init);
@@ -311,10 +315,10 @@ export default function Home() {
             <AgentOutput
               deal={deal}
               scoring={scoring}
-              memoMarkdown={memoMarkdown}
               exportUrl={exportUrl}
             />
           )}
+          <div ref={feedBottomRef} />
         </div>
       </section>
 
@@ -550,10 +554,9 @@ function formatWebEventMeta(event: AgentEvent) {
   return "";
 }
 
-function AgentOutput({ deal, scoring, memoMarkdown, exportUrl }: {
+function AgentOutput({ deal, scoring, exportUrl }: {
   deal: DealAnalysis;
   scoring: ReturnType<typeof scoreClaims>;
-  memoMarkdown: string;
   exportUrl: string;
 }) {
   if (!deal.materials.length) return null;
@@ -636,7 +639,7 @@ function AgentOutput({ deal, scoring, memoMarkdown, exportUrl }: {
                           <details className="claimEvidence">
                             <summary>View</summary>
                             <div className="claimEvidencePanel">
-                              {claimEvidence.slice(0, 2).map((item) => (
+                              {claimEvidence.map((item) => (
                                 <article key={item.id} className={clsx("evidenceItem", `evidenceItem--${item.stance}`)}>
                                   <header className="citationHeader">
                                     <div className="citationTitle">
