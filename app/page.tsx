@@ -124,7 +124,13 @@ export default function Home() {
     const savedId = localStorage.getItem(DEAL_ID_KEY);
     if (savedId) {
       api<DealAnalysis>(`/deals/${savedId}`)
-        .then((d) => { setDeal(d); setAgentEvents([]); })
+        .then((d) => {
+          setDeal(d);
+          setAgentEvents([]);
+          if (d.materials.length > 0 && !d.claims.length) {
+            setQuestion(`Run full diligence analysis on ${d.company}`);
+          }
+        })
         .catch(() => localStorage.removeItem(DEAL_ID_KEY));
     }
     void loadDealList();
@@ -257,12 +263,11 @@ export default function Home() {
     try {
       const created = await api<DealAnalysis>("/deals/demo", { method: "POST" });
       persistDeal(created);
-      setPendingQuestion(null);
-      setQuestion("");
       setAgentEvents([]);
       setFeedNotes([]);
       void loadDealList();
-      await runAnalysisForDeal(created);
+      setQuestion("Run full diligence analysis on Harvey AI");
+      setPendingQuestion(null);
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
     } finally {
@@ -333,6 +338,11 @@ export default function Home() {
     if (!deal) return;
     const trimmed = nextQuestion.trim();
     if (!trimmed) return;
+    if (deal.materials.length > 0 && !deal.claims.length) {
+      setQuestion("");
+      await analyzeDeal();
+      return;
+    }
     setQuestion(trimmed);
     setBusy("chat");
     setPendingQuestion(trimmed);
@@ -482,6 +492,16 @@ export default function Home() {
             </div>
           )}
           <div className="composerCard">
+            {deal && deal.materials.length > 0 && !deal.claims.length && !isAnalyzing && (
+              <div className="attachedChips">
+                {deal.materials.map((m) => (
+                  <span key={m.id} className="attachedChip">
+                    <FileText size={11} />
+                    {m.name}
+                  </span>
+                ))}
+              </div>
+            )}
             {attachOpen && (
               <div className="attachDrawer">
                 <div className="attachRow">
