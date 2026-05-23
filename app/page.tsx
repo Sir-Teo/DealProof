@@ -275,6 +275,25 @@ export default function Home() {
     }
   }
 
+  async function runDemoEndToEnd() {
+    setBusy("demo");
+    setError(null);
+    setAgentEvents([]);
+    setFeedNotes([]);
+    setPendingQuestion(null);
+    setQuestion("");
+    try {
+      const created = await api<DealAnalysis>("/deals/demo", { method: "POST" });
+      persistDeal(created);
+      void loadDealList();
+      await runAnalysisForDeal(created);
+    } catch (exc) {
+      setError(String(exc instanceof Error ? exc.message : exc));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function updateUrl(index: number, value: string) {
     setUrls((prev) => prev.map((u, i) => (i === index ? value : u)));
   }
@@ -575,7 +594,7 @@ export default function Home() {
               </button>
             </div>
             <div className="composerHint">
-              <button className="hintLink" type="button" onClick={() => void loadDemoPacket()} disabled={Boolean(busy)}>
+              <button className="hintLink" type="button" onClick={() => void runDemoEndToEnd()} disabled={Boolean(busy)}>
                 {busy === "demo" ? <Loader2 className="spin" size={11} /> : null}
                 Try demo
               </button>
