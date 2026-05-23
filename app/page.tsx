@@ -401,6 +401,31 @@ export default function Home() {
             </article>
           )}
 
+          {!deal && !isAnalyzing && agentEvents.length === 0 && feedNotes.length === 0 && (
+            <article className="message agentMessage">
+              <div className={clsx("avatar", "done")}>
+                <Bot size={14} />
+              </div>
+              <div className="messageBody welcomeState">
+                <div className="messageMeta">
+                  <strong>{UI_COPY.appName}</strong>
+                </div>
+                <p className="messageTitle">{UI_COPY.welcomeTitle}</p>
+                <p className="messageCopy">{UI_COPY.welcomeBody}</p>
+                <div className="welcomeActions">
+                  <button className="primaryButton" type="button" onClick={() => void loadDemoPacket()} disabled={Boolean(busy)}>
+                    {busy === "demo" ? <Loader2 className="spin" size={13} /> : <ShieldCheck size={13} />}
+                    {UI_COPY.seedDemoButton}
+                  </button>
+                  <button className="secondaryButton" type="button" onClick={() => setAttachOpen(true)}>
+                    <Upload size={13} />
+                    {UI_COPY.uploadButton}
+                  </button>
+                </div>
+              </div>
+            </article>
+          )}
+
           {feedNotes.map((note) => (
             <ChatBubble key={note.id} role={note.role} title={note.title} body={note.body} />
           ))}
@@ -719,7 +744,10 @@ function AgentOutput({ deal, scoring, exportUrl, onReviewClaim }: {
       {memo && (
         <section className="artifactPanel memoArtifact">
           <div className="artifactPanelHeader">
-            <h2>{UI_COPY.memoTitle}</h2>
+            <div>
+              <p className="eyebrow">{UI_COPY.memoEyebrow}</p>
+              <h2>{UI_COPY.memoTitle}</h2>
+            </div>
             <a className="primaryButton" href={exportUrl}>
               <ArrowDownToLine size={14} />
               {UI_COPY.exportMarkdownButton}
@@ -758,7 +786,10 @@ function AgentOutput({ deal, scoring, exportUrl, onReviewClaim }: {
       {claims.length > 0 && (
         <section className="artifactPanel">
           <div className="artifactPanelHeader">
-            <h2>{claims.length} diligence claims</h2>
+            <div>
+              <p className="eyebrow">{UI_COPY.claimsEyebrow}</p>
+              <h2>{claims.length} diligence claims</h2>
+            </div>
             <span className={clsx("gradeChip", `card--${scoring.grade}`)}>
               {scoring.counts.weak + scoring.counts.contradicted + scoring.counts.missing} {UI_COPY.exceptionsNeedReview}
             </span>

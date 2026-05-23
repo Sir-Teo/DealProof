@@ -1,5 +1,7 @@
 :root {
+  /* ── Ink + neutrals ── */
   --ink: #0d0d0d;
+  --ink-soft: #1f2937;
   --muted: #6b7280;
   --faint: #9ca3af;
   --line: #e5e7eb;
@@ -7,16 +9,44 @@
   --panel: #ffffff;
   --panel-soft: #f7f7f8;
   --canvas: #ffffff;
+  --gray-bg: #f3f4f6;
+  --gray-fg: #46515f;
+
+  /* ── Brand ── */
   --dark: #111827;
+  --brand: #111827;
+  --brand-strong: #000000;
   --blue: #111827;
   --blue-dark: #000000;
+
+  /* ── Accent (used very sparingly — spinner, active dot only) ── */
+  --accent: #4f6ef7;
+
+  /* ── Semantic: claim grades ── */
   --green: #047857;
   --green-bg: #ecfdf5;
   --amber: #92400e;
   --amber-bg: #fffbeb;
   --red: #b91c1c;
   --red-bg: #fef2f2;
-  --gray-bg: #f3f4f6;
+
+  /* ── Web-research badge colors ── */
+  --web-evidence: #16794c;
+  --web-query: #3156d4;
+
+  /* ── Editorial palette (memo / investor-facing surfaces) ── */
+  --ed-canvas:      #f7f4ee;
+  --ed-paper:       #fbf9f4;
+  --ed-canvas-2:    #efeadf;
+  --ed-ink:         #14130f;
+  --ed-ink-soft:    #2a2724;
+  --ed-muted:       #6b6760;
+  --ed-faint:       #a39d92;
+  --ed-rule:        #d8d2c4;
+  --ed-rule-strong: #c4bcab;
+  --ed-accent:      #8c3a2c;
+  --ed-accent-soft: #f0d9d0;
+  --ed-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.078 0 0 0 0 0.075 0 0 0 0 0.062 0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
 * {
@@ -29,7 +59,7 @@ body {
   min-height: 100%;
   background: var(--canvas);
   color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
   letter-spacing: 0;
   font-size: 15px;
 }
@@ -407,7 +437,7 @@ summary:focus-visible {
 
 .toolCall dd {
   color: #263241;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono, "SFMono-Regular", Consolas, "Liberation Mono", monospace);
   font-size: 11px;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -1485,4 +1515,138 @@ summary:focus-visible {
   .composerInner {
     padding: 0 4px;
   }
+}
+
+/* ── Editorial surface (memo / investor-facing) ── */
+
+.editorial {
+  background-color: var(--ed-canvas);
+  background-image: var(--ed-grain);
+  color: var(--ed-ink);
+}
+
+/* ── Memo artifact editorial styling ── */
+
+.memoArtifact {
+  background-color: var(--ed-canvas);
+  background-image: var(--ed-grain);
+  border-top: none;
+  border-radius: 10px;
+  padding: 28px 32px 24px;
+  margin-top: 18px;
+}
+
+.memoArtifact .artifactPanelHeader {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ed-rule);
+  margin-bottom: 0;
+}
+
+.memoArtifact .artifactPanelHeader h2 {
+  color: var(--ed-ink);
+}
+
+.memoArtifact .eyebrow {
+  color: var(--ed-muted);
+}
+
+.memoArtifact .profileGrid {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--ed-rule);
+  margin-bottom: 0;
+}
+
+.memoArtifact .metric {
+  border-top: none;
+  padding: 0;
+}
+
+.memoArtifact .metric span {
+  color: var(--ed-muted);
+}
+
+.memoArtifact .metric strong {
+  color: var(--ed-ink);
+}
+
+.memoArtifact .memoNarrative {
+  border-top: 1px solid var(--ed-rule);
+  padding-top: 18px;
+  margin-bottom: 0;
+}
+
+.memoArtifact .memoNarrative h3 {
+  color: var(--ed-muted);
+}
+
+.memoArtifact .memoNarrative p {
+  color: var(--ed-ink-soft);
+}
+
+.memoArtifact .memoQuestion {
+  color: var(--ed-ink);
+  padding-top: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--ed-rule);
+  border-top: 1px solid var(--ed-rule);
+  margin-top: 0;
+  margin-bottom: 0;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+.memoArtifact .memoColumns {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--ed-rule);
+  margin-bottom: 0;
+}
+
+.memoArtifact .memoSection {
+  border-top: none;
+  padding-top: 0;
+}
+
+.memoArtifact .memoSection h3 {
+  color: var(--ed-muted);
+}
+
+.memoArtifact .memoSection ul {
+  color: var(--ed-ink-soft);
+}
+
+.memoArtifact .memoSection.danger li::marker {
+  color: var(--red);
+}
+
+.memoArtifact .recommendation {
+  border-top: none;
+  padding-top: 18px;
+  margin-top: 0;
+  color: var(--ed-ink);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ── Grade bar editorial treatment ── */
+
+.memoArtifact + .gradeBar,
+.gradeBar + .memoArtifact {
+  border-radius: 10px;
+}
+
+/* ── Welcome state ── */
+
+.welcomeState {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.welcomeActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
 }
