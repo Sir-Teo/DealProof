@@ -985,75 +985,99 @@ summary:focus-visible {
   position: sticky;
   bottom: 0;
   z-index: 10;
-  background: rgba(255, 255, 255, 0.96);
-  padding: 10px 20px 14px;
-  backdrop-filter: blur(8px);
+  background: linear-gradient(to bottom, transparent, white 28px);
+  padding: 20px 20px 14px;
 }
 
 .composerInner {
-  width: min(760px, 100%);
+  width: min(680px, 100%);
   margin: 0 auto;
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 /* Sample questions above the card */
 .sampleQuestions {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   flex-wrap: wrap;
 }
 
 .sampleQuestions button {
-  min-height: 28px;
-  padding: 4px 10px;
-  font-size: 12px;
+  min-height: 26px;
+  padding: 3px 10px;
+  font-size: 11.5px;
   border-radius: 999px;
 }
 
 .composerCard {
   background: white;
-  border-top: 1px solid var(--line-strong);
-  border-bottom: 1px solid var(--line-strong);
-  border-radius: 0;
-  box-shadow: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.07);
   overflow: hidden;
 }
 
-.promptArea {
+.promptRow {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px 10px 14px;
+  gap: 2px;
+  padding: 6px 6px 6px 4px;
 }
 
-.promptArea input {
+.promptRow input {
   flex: 1;
   border: none;
   background: transparent;
   color: var(--ink);
-  font-size: 15px;
+  font-size: 14px;
   min-width: 0;
   outline: none;
-  padding: 0;
+  padding: 4px 6px;
 }
 
-.promptArea input::placeholder {
+.promptRow input::placeholder {
   color: var(--faint);
 }
 
-.sendButton {
-  flex: 0 0 auto;
-  width: 34px;
-  min-width: 34px;
-  padding: 6px;
-  border-radius: 8px;
+.composerHint {
+  padding: 0 10px 7px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.composerDivider {
-  height: 1px;
-  background: var(--line);
-  margin: 0 12px;
+.hintLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.hintLink:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.hintLink:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.iconButton--send {
+  color: var(--ink);
+}
+
+.iconButton--run {
+  color: var(--blue);
+}
+
+.iconButton--disabled {
+  opacity: 0.35;
 }
 
 .attachDrawer {
@@ -1146,18 +1170,6 @@ summary:focus-visible {
   border-radius: 50%;
   background: #4f6ef7;
   border: 1.5px solid white;
-}
-
-.composerActions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  flex-wrap: wrap;
-}
-
-.composerActions .spacer {
-  flex: 1;
 }
 
 .fileButton input {
@@ -1271,14 +1283,6 @@ summary:focus-visible {
   }
 
   .composer {
-    padding: 8px 14px 12px;
-  }
-
-  .composerActions {
-    flex-wrap: wrap;
-  }
-
-  .urlField {
-    min-width: 80px;
+    padding: 16px 12px 12px;
   }
 }

@@ -82,14 +82,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
   const [attachOpen, setAttachOpen] = useState(false);
-  const [feedNotes, setFeedNotes] = useState<FeedNote[]>([
-    {
-      id: "welcome",
-      role: "agent",
-      title: UI_COPY.welcomeTitle,
-      body: UI_COPY.welcomeBody
-    }
-  ]);
+  const [feedNotes, setFeedNotes] = useState<FeedNote[]>([]);
   const feedWrapRef = useRef<HTMLElement>(null);
   const feedBottomRef = useRef<HTMLDivElement>(null);
 
@@ -338,18 +331,6 @@ export default function Home() {
             </div>
           )}
           <div className="composerCard">
-            <div className="promptArea">
-              <input
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                placeholder={UI_COPY.questionPlaceholder}
-                disabled={!deal || Boolean(busy)}
-              />
-              <button className="sendButton" type="submit" disabled={!deal || Boolean(busy)}>
-                {busy === "chat" ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
-              </button>
-            </div>
-            <div className="composerDivider" />
             {attachOpen && (
               <div className="attachDrawer">
                 <div className="attachRow">
@@ -386,7 +367,7 @@ export default function Home() {
                 </button>
               </div>
             )}
-            <div className="composerActions">
+            <div className="promptRow">
               <button
                 className={clsx("iconButton", (files?.length || urls.some((u) => u.trim())) && "iconButton--active")}
                 type="button"
@@ -395,14 +376,34 @@ export default function Home() {
               >
                 <Paperclip size={15} />
               </button>
-              <button className="secondaryButton" type="button" onClick={() => void loadDemoPacket()} disabled={Boolean(busy)}>
-                {busy === "demo" ? <Loader2 className="spin" size={13} /> : null}
-                {UI_COPY.seedDemoButton}
+              <input
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                placeholder={UI_COPY.questionPlaceholder}
+                disabled={!deal || Boolean(busy)}
+              />
+              <button
+                className={clsx("iconButton", "iconButton--send")}
+                type="submit"
+                disabled={!deal || Boolean(busy)}
+                title="Send"
+              >
+                {busy === "chat" ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
               </button>
-              <div className="spacer" />
-              <button className="primaryButton" type="button" onClick={() => void analyzeDeal()} disabled={!canRunAgent}>
-                {isAnalyzing ? <Loader2 className="spin" size={13} /> : <Bot size={13} />}
-                {UI_COPY.runAgentButton}
+              <button
+                className={clsx("iconButton", "iconButton--run", !canRunAgent && "iconButton--disabled")}
+                type="button"
+                onClick={() => void analyzeDeal()}
+                disabled={!canRunAgent}
+                title={UI_COPY.runAgentButton}
+              >
+                {isAnalyzing ? <Loader2 className="spin" size={15} /> : <Bot size={15} />}
+              </button>
+            </div>
+            <div className="composerHint">
+              <button className="hintLink" type="button" onClick={() => void loadDemoPacket()} disabled={Boolean(busy)}>
+                {busy === "demo" ? <Loader2 className="spin" size={11} /> : null}
+                Try demo
               </button>
             </div>
           </div>
