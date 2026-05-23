@@ -15,6 +15,7 @@ const MOCK_DEAL_SEEDED = {
   memo: null,
   profile: null,
   qualityReview: null,
+  score: null,
   chatHistory: []
 };
 
@@ -67,6 +68,12 @@ const MOCK_DEAL_ANALYZED = {
     recommendedFollowUpEvidence: ["Provide audited P&L"],
     overconfidenceWarnings: []
   },
+  score: {
+    overall: 72,
+    grade: "yellow",
+    counts: { supported: 1, weak: 1, contradicted: 0, missing: 1 },
+    drivers: ["High-importance missing evidence prevents a green score."]
+  },
   generatedAt: "2026-05-22T12:00:00Z",
   status: "completed"
 };
@@ -110,7 +117,7 @@ test("composer and empty state render correctly", async ({ page }) => {
   await expect(page.locator(".brandMark")).toBeVisible();
   await expect(page.getByText("Add deal materials to begin.")).toBeVisible();
   await expect(page.locator(".composerCard")).toBeVisible();
-  await expect(page.locator(".promptArea input")).toBeDisabled();
+  await expect(page.getByRole("textbox", { name: "Ask about the deal evidence..." })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Run agent", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: /Seed demo/i })).toBeEnabled();
 });
@@ -131,9 +138,11 @@ test("post-analysis panels show memo, claims, and evidence", async ({ page }) =>
   await page.goto("/");
   await page.getByRole("button", { name: /Seed demo/i }).click();
 
-  await expect(page.locator(".messageTitle").filter({ hasText: /Seeded/ })).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator(".messageTitle").filter({ hasText: /Analysis complete/i })).toBeVisible({ timeout: 5_000 });
   await expect(page.locator(".agentOutput")).toBeVisible({ timeout: 10_000 });
   await expect(page.locator(".gradeBar")).toHaveClass(/card--yellow/);
+  await expect(page.locator(".gradeBar strong")).toHaveText("yellow · 72/100");
+  await expect(page.locator(".scoreDrivers")).toContainText("High-importance missing evidence prevents a green score.");
   await expect(page.locator(".memoArtifact")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Red team memo" })).toBeVisible();
   await expect(page.locator(".profileGrid .metric")).toHaveCount(4);

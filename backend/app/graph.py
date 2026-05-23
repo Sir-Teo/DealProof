@@ -10,7 +10,7 @@ from langgraph.graph import END, StateGraph
 
 from . import db
 from .config import AGENT_ROLE, APP_NAME
-from .llm import get_llm_client
+from .llm import DeepSeekClient
 from .models import (
     ClaimExtraction,
     DealClaim,
@@ -45,6 +45,10 @@ class DiligenceState(TypedDict, total=False):
 
 
 ProgressCallback = Callable[[str, str, dict[str, int | str] | None], None]
+
+
+def get_llm_client() -> DeepSeekClient:
+    return DeepSeekClient()
 GraphStep = tuple[str, str, str]
 
 GRAPH_STEPS: list[GraphStep] = [
@@ -417,7 +421,8 @@ def duplicated_claims(claims: list[DealClaim]) -> list[str]:
 
 def generate_memo(state: DiligenceState) -> DiligenceState:
     llm = get_llm_client()
-    _, grade, _ = score_claims(state["claims"])
+    score_summary = score_claims(state["claims"], state.get("evidence", []), state.get("quality_review"))
+    grade = score_summary.grade
     profile = state.get("profile", DealProfile())
     claim_context = "\n".join(
         f"- [{claim.status}/{claim.importance}/{claim.category}/confidence={claim.confidence}/quality={claim.qualityScore}] "
@@ -436,6 +441,7 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
         )
         user = (
             f"Company: {state['company']}\nProfile: {profile.model_dump_json()}\nOverall grade from scoring rules: {grade}\n"
+            f"IC readiness score: {score_summary.overall}/100\nScore drivers: {score_summary.drivers}\n"
             f"Quality review: {quality_context}\n\nClaims:\n{claim_context}\n\nEvidence summaries:\n{evidence_context}\n\n"
             "Return shape: {\"memo\":{\"company\":\"...\",\"overallGrade\":\"green|yellow|red\",\"investmentQuestion\":\"...\","
             "\"keyStrengths\":[...],\"materialRisks\":[...],\"followUpQuestions\":[...],\"icRecommendation\":\"...\","
@@ -506,7 +512,8 @@ def refresh_review_artifacts(deal_id: str) -> None:
         "evidence": deal.evidence,
     }
     reviewed = review_quality(state)
-    _, grade, _ = score_claims(deal.claims)
+    score_summary = score_claims(deal.claims, deal.evidence, reviewed["quality_review"])
+    grade = score_summary.grade
     memo = fallback_memo(deal.company, grade, deal.claims, deal.evidence, deal.profile, reviewed["quality_review"])
     db.save_review_artifacts(deal_id, memo, reviewed["quality_review"])
 
@@ -947,9 +954,12 @@ def fallback_memo(
 ) -> RiskMemo:
     evidence = evidence or []
     profile = profile or DealProfile()
-    score, _, counts = score_claims(claims)
     report_claims = [claim for claim in claims if not is_off_target_public_claim(company, claim)] or claims
-    report_score, _, report_counts = score_claims(report_claims)
+    score_summary = score_claims(claims, evidence, quality_review)
+    report_score_summary = score_claims(report_claims, evidence, quality_review)
+    score = score_summary.overall
+    report_score = report_score_summary.overall
+    report_counts = report_score_summary.counts
     strength_claims = sorted(
         [claim for claim in report_claims if claim.status == "supported"],
         key=strength_sort_key,

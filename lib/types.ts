@@ -1,6 +1,7 @@
 export type ClaimStatus = "supported" | "weak" | "contradicted" | "missing";
 export type Confidence = "high" | "medium" | "low";
 export type ReviewerStatus = "unreviewed" | "verified" | "needs_evidence";
+export type ScoreGrade = "green" | "yellow" | "red";
 
 export type DealClaim = {
   id: string;
@@ -55,7 +56,7 @@ export type EvidenceItem = {
 
 export type RiskMemo = {
   company: string;
-  overallGrade: "green" | "yellow" | "red";
+  overallGrade: ScoreGrade;
   investmentQuestion: string;
   keyStrengths: string[];
   materialRisks: string[];
@@ -84,6 +85,13 @@ export type QualityReview = {
   lowValueClaims: string[];
   recommendedFollowUpEvidence: string[];
   overconfidenceWarnings: string[];
+};
+
+export type ScoreSummary = {
+  overall: number;
+  grade: ScoreGrade;
+  counts: Record<ClaimStatus, number>;
+  drivers: string[];
 };
 
 export type ChatTurn = {
@@ -121,6 +129,7 @@ export type DealAnalysis = {
   profile: DealProfile | null;
   memo: RiskMemo | null;
   qualityReview: QualityReview | null;
+  score: ScoreSummary | null;
   generatedAt: string | null;
   chatHistory: ChatTurn[];
 };

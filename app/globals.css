@@ -548,6 +548,30 @@ summary:focus-visible {
   line-height: 1.4;
 }
 
+.scoreDrivers {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 12px 0 16px;
+  background: var(--panel-soft);
+}
+
+.scoreDrivers strong {
+  display: block;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.scoreDrivers ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .gradeChip {
   font-size: 11px;
   font-weight: 600;

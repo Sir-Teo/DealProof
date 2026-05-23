@@ -1,8 +1,6 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import DealClaim
-from app.scoring import score_claims
 
 
 def disable_llm(monkeypatch):
@@ -43,9 +41,8 @@ def test_seeded_agent_output_is_concrete_and_memo_grade_matches(monkeypatch):
     assert any("ARR grew from $82k to $235k" in text for text in claim_texts)
     assert all(item["citation"] for item in deal["evidence"])
 
-    _, expected_grade, counts = score_claims([DealClaim.model_validate(claim) for claim in deal["claims"]])
-    assert deal["memo"]["overallGrade"] == expected_grade
-    assert counts["weak"] + counts["missing"] + counts["supported"] + counts["contradicted"] == len(deal["claims"])
+    assert deal["memo"]["overallGrade"] == deal["score"]["grade"]
+    assert sum(deal["score"]["counts"].values()) == len(deal["claims"])
 
 
 def test_direct_numeric_support_can_be_supported(monkeypatch):
@@ -140,8 +137,8 @@ def test_richer_memo_export_and_grade_are_consistent(monkeypatch):
         exported = client.get(f"/deals/{deal_id}/export-memo")
         assert exported.status_code == 200
 
-    _, expected_grade, _ = score_claims([DealClaim.model_validate(claim) for claim in deal["claims"]])
-    assert deal["memo"]["overallGrade"] == expected_grade
+    assert deal["memo"]["overallGrade"] == deal["score"]["grade"]
+    assert f"**IC readiness score:** {deal['score']['overall']}/100" in exported.text
     assert deal["profile"]["sector"]
     assert deal["memo"]["executiveSummary"]
     assert deal["memo"]["thesisAssessment"]

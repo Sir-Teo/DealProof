@@ -24,7 +24,7 @@ import {
 import clsx from "clsx";
 import { API_BASE_URL, DEFAULT_DEAL, UI_COPY } from "@/lib/app-config";
 import { evidenceForClaim, scoreClaims } from "@/lib/scoring";
-import type { ChatTurn, ClaimStatus, DealAnalysis, DealClaim, EvidenceItem } from "@/lib/types";
+import type { ChatTurn, ClaimStatus, DealAnalysis, DealClaim, EvidenceItem, ScoreSummary } from "@/lib/types";
 
 const emptyCounts = { supported: 0, weak: 0, contradicted: 0, missing: 0 };
 const DEAL_ID_KEY = "dealproofDealId";
@@ -102,7 +102,15 @@ export default function Home() {
   const feedBottomRef = useRef<HTMLDivElement>(null);
 
   const claims = useMemo(() => deal?.claims ?? [], [deal?.claims]);
-  const scoring = useMemo(() => (claims.length ? scoreClaims(claims) : { overall: 0, grade: "red" as const, counts: emptyCounts }), [claims]);
+  const scoring = useMemo<ScoreSummary>(
+    () => deal?.score ?? (claims.length ? scoreClaims(claims, deal?.evidence ?? [], deal?.qualityReview) : {
+      overall: 0,
+      grade: "red",
+      counts: emptyCounts,
+      drivers: ["No diligence claims were scored."]
+    }),
+    [claims, deal?.evidence, deal?.qualityReview, deal?.score]
+  );
   const exportUrl = deal ? `${API_BASE_URL}/deals/${deal.id}/export-memo` : "#";
   const suggestedQuestions = useMemo(() => buildSuggestedQuestions(claims), [claims]);
   const isAnalyzing = busy === "analyze" || busy === "demo";
@@ -735,8 +743,8 @@ function AgentOutput({ deal, scoring, exportUrl, onReviewClaim }: {
   return (
     <div className="agentOutput">
       {memo && (
-        <div className={clsx("gradeBar", `card--${memo.overallGrade?.toLowerCase()}`)}>
-          <strong>{memo.overallGrade}</strong>
+        <div className={clsx("gradeBar", `card--${scoring.grade}`)}>
+          <strong>{scoring.grade} · {scoring.overall}/100</strong>
           <span>{memo.icRecommendation}</span>
         </div>
       )}
@@ -774,6 +782,16 @@ function AgentOutput({ deal, scoring, exportUrl, onReviewClaim }: {
             </section>
           )}
           {memo.investmentQuestion && <p className="memoQuestion">{memo.investmentQuestion}</p>}
+          {scoring.drivers.length > 0 && (
+            <div className="scoreDrivers">
+              <strong>IC readiness drivers</strong>
+              <ul>
+                {scoring.drivers.map((driver) => (
+                  <li key={driver}>{driver}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="memoColumns">
             <MemoSection title={UI_COPY.keyStrengthsTitle} items={memo.keyStrengths} />
             <MemoSection title={UI_COPY.materialRisksTitle} items={risks} danger />
@@ -791,7 +809,7 @@ function AgentOutput({ deal, scoring, exportUrl, onReviewClaim }: {
               <h2>{claims.length} diligence claims</h2>
             </div>
             <span className={clsx("gradeChip", `card--${scoring.grade}`)}>
-              {scoring.counts.weak + scoring.counts.contradicted + scoring.counts.missing} {UI_COPY.exceptionsNeedReview}
+              {scoring.overall}/100 · {scoring.counts.weak + scoring.counts.contradicted + scoring.counts.missing} {UI_COPY.exceptionsNeedReview}
             </span>
           </div>
           <div className="claimGroups">

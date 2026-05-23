@@ -28,6 +28,7 @@ Confidence = Literal["high", "medium", "low"]
 DecisionImpact = Literal["high", "medium", "low"]
 ReviewerStatus = Literal["unreviewed", "verified", "needs_evidence"]
 SourceIndependence = Literal["founder_supplied", "internal", "third_party", "derived"]
+ScoreGrade = Literal["green", "yellow", "red"]
 
 
 class SourceMaterial(BaseModel):
@@ -152,6 +153,13 @@ class QualityReview(BaseModel):
     overconfidenceWarnings: list[str] = Field(default_factory=list)
 
 
+class ScoreSummary(BaseModel):
+    overall: int
+    grade: ScoreGrade
+    counts: dict[str, int]
+    drivers: list[str] = Field(default_factory=list)
+
+
 class ChatTurn(BaseModel):
     id: str
     dealId: str
@@ -176,6 +184,7 @@ class DealAnalysis(BaseModel):
     profile: DealProfile | None = None
     memo: RiskMemo | None = None
     qualityReview: QualityReview | None = None
+    score: ScoreSummary | None = None
     chatHistory: list[ChatTurn] = Field(default_factory=list)
 
 

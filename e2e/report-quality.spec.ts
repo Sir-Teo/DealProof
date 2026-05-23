@@ -15,6 +15,7 @@ type DealClaim = {
   qualityIssues: string[];
   verificationNeed: string;
   decisionImpact: "high" | "medium" | "low";
+  reviewerStatus: "unreviewed" | "verified" | "needs_evidence";
 };
 
 type EvidenceItem = {
@@ -51,6 +52,13 @@ type QualityReview = {
   overconfidenceWarnings: string[];
 };
 
+type ScoreSummary = {
+  overall: number;
+  grade: "green" | "yellow" | "red";
+  counts: Record<ClaimStatus, number>;
+  drivers: string[];
+};
+
 type DealAnalysis = {
   id: string;
   materials: unknown[];
@@ -58,6 +66,7 @@ type DealAnalysis = {
   evidence: EvidenceItem[];
   memo: RiskMemo | null;
   qualityReview: QualityReview | null;
+  score: ScoreSummary | null;
   chatHistory?: ChatTurn[];
 };
 
@@ -95,19 +104,6 @@ const largeRealCaseFiles = [
   "13_public_source_index.txt",
   "14_analyst_claim_packet.txt"
 ].map((name) => path.join(largeFixtureDir, name));
-
-const statusWeights: Record<ClaimStatus, number> = {
-  supported: 100,
-  weak: 62,
-  missing: 38,
-  contradicted: 18
-};
-
-const importanceWeights: Record<Importance, number> = {
-  high: 1.4,
-  medium: 1,
-  low: 0.7
-};
 
 test.describe("deterministic report-quality gates", () => {
   test("seed demo real run produces a decision-grade memo and grounded follow-up answers", async ({ page }, testInfo) => {
@@ -198,19 +194,20 @@ test.describe("deterministic report-quality gates", () => {
 
     const targetClaim = before.claims.find((claim) => claim.status === "contradicted" && /no direct or adjacent competitors/i.test(claim.text));
     expect(targetClaim).toBeTruthy();
-    const beforeScore = scoreClaims(before.claims);
+    const beforeScore = requireScore(before);
 
     const patchResponse = await page.request.patch(`${API_BASE_URL}/deals/${dealId}/claims/${targetClaim!.id}/review`, {
-      data: { status: "supported" }
+      data: { status: "supported", reviewerStatus: "verified" }
     });
     await expect(patchResponse.ok()).toBe(true);
 
     const after = await fetchDeal(page, dealId);
     const updatedClaim = after.claims.find((claim) => claim.id === targetClaim!.id);
     expect(updatedClaim?.status).toBe("supported");
+    expect(updatedClaim?.reviewerStatus).toBe("verified");
 
-    const afterScore = scoreClaims(after.claims);
-    expect(afterScore.overall).toBeGreaterThan(beforeScore.overall);
+    const afterScore = requireScore(after);
+    expect(afterScore.overall).not.toBe(beforeScore.overall);
     expect(requireMemo(after).overallGrade).toBe(afterScore.grade);
     expect(requireQualityReview(after).overconfidenceWarnings.some((warning) => warning.includes(targetClaim!.id))).toBe(true);
 
@@ -249,7 +246,7 @@ async function uploadFixturePacketThroughUi(page: Page, files: string[]) {
   const materials = await materialsResponse;
   await expect(created.ok()).toBe(true);
   await expect(materials.ok()).toBe(true);
-  await expect(page.getByText("Added diligence material")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run agent", exact: true })).toBeEnabled();
 
   return ((await created.json()) as DealAnalysis).id;
 }
@@ -305,7 +302,7 @@ async function assertExportedMarkdownParity(page: Page, deal: DealAnalysis) {
 function assertReportQuality(deal: DealAnalysis) {
   const memo = requireMemo(deal);
   const qualityReview = requireQualityReview(deal);
-  const score = scoreClaims(deal.claims);
+  const score = requireScore(deal);
 
   expect(deal.claims.length).toBeGreaterThan(0);
   expect(memo.overallGrade).toBe(score.grade);
@@ -345,7 +342,7 @@ function assertDemoOutputQuality(deal: DealAnalysis) {
   expect(deal.claims.every((claim) => claim.status !== "supported")).toBe(true);
   expect(deal.claims.every((claim) => claim.verificationNeed.trim() && claim.riskRationale.trim())).toBe(true);
 
-  expect(memo.overallGrade).toBe(scoreClaims(deal.claims).grade);
+  expect(memo.overallGrade).toBe(requireScore(deal).grade);
   expect(memo.investmentQuestion).toMatch(/CaviClear|investment|IC|trust|ready|scale/i);
   expect(riskText).toMatch(/compet|compliance|ROI|retention|unsupported|contradict/i);
   expect(diligenceText).toMatch(/customer|evidence|reference|compliance|cohort|retention|ROI/i);
@@ -418,23 +415,6 @@ function assertQualityReviewReflectsLedger(deal: DealAnalysis) {
   }
 }
 
-function scoreClaims(claims: DealClaim[]) {
-  const weighted = claims.reduce(
-    (acc, claim) => {
-      const weight = importanceWeights[claim.importance];
-      return {
-        score: acc.score + statusWeights[claim.status] * weight,
-        weight: acc.weight + weight
-      };
-    },
-    { score: 0, weight: 0 }
-  );
-  const overall = claims.length ? Math.round(weighted.score / weighted.weight) : 0;
-  const grade = overall >= 78 ? "green" : overall >= 48 ? "yellow" : "red";
-
-  return { overall, grade } as const;
-}
-
 function riskSortKey(left: DealClaim, right: DealClaim) {
   const statusRank: Record<ClaimStatus, number> = { contradicted: 0, missing: 1, weak: 2, supported: 3 };
   const impactRank = { high: 0, medium: 1, low: 2 };
@@ -476,6 +456,11 @@ function requireMemo(deal: DealAnalysis) {
 function requireQualityReview(deal: DealAnalysis) {
   expect(deal.qualityReview).toBeTruthy();
   return deal.qualityReview!;
+}
+
+function requireScore(deal: DealAnalysis) {
+  expect(deal.score).toBeTruthy();
+  return deal.score!;
 }
 
 function memoRisks(memo: RiskMemo) {

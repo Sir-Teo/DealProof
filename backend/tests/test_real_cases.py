@@ -6,8 +6,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import DealClaim
-from app.scoring import score_claims
 
 FIXTURES = Path(__file__).parent / "fixtures" / "real_cases"
 
@@ -141,8 +139,7 @@ def test_five_real_case_quality_gate(monkeypatch, case_id):
     assert answer.status_code == 200
     assert answer.json()["citations"]
 
-    _, expected_grade, _ = score_claims([DealClaim.model_validate(claim) for claim in claims])
-    assert memo["overallGrade"] == expected_grade
+    assert memo["overallGrade"] == payload["score"]["grade"]
     for claim in claims:
         if claim["status"] in {"weak", "missing", "contradicted"}:
             assert claim["text"][:56] not in strengths
@@ -168,9 +165,8 @@ def test_real_case_agent_output_has_supported_weak_and_contradicted_claims(monke
     assert any("no direct" in claim["text"].lower() and claim["status"] == "contradicted" for claim in payload["claims"])
     assert any("75.4%" in claim["text"] and claim["status"] == "supported" for claim in payload["claims"])
 
-    _, expected_grade, counts = score_claims([DealClaim.model_validate(claim) for claim in payload["claims"]])
-    assert payload["memo"]["overallGrade"] == expected_grade
-    assert sum(counts.values()) == len(payload["claims"])
+    assert payload["memo"]["overallGrade"] == payload["score"]["grade"]
+    assert sum(payload["score"]["counts"].values()) == len(payload["claims"])
 
 
 def test_real_case_chat_returns_citations(monkeypatch):
@@ -219,8 +215,7 @@ def test_large_real_case_data_room_output_quality(monkeypatch):
     assert any(claim["status"] == "contradicted" and "no manufacturing purchase obligations" in claim["text"] for claim in claims)
     assert len(citations) >= 8
 
-    _, expected_grade, _ = score_claims([DealClaim.model_validate(claim) for claim in claims])
-    assert payload["memo"]["overallGrade"] == expected_grade
+    assert payload["memo"]["overallGrade"] == payload["score"]["grade"]
     assert payload["memo"]["materialRisks"]
     assert payload["memo"]["followUpQuestions"]
 

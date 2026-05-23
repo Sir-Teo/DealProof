@@ -271,7 +271,7 @@ def export_memo(deal_id: str) -> PlainTextResponse:
     if not deal.memo:
         raise HTTPException(status_code=404, detail="Memo has not been generated")
     return PlainTextResponse(
-        memo_to_markdown(deal.memo),
+        memo_to_markdown(deal.memo, deal.score),
         headers={"Content-Disposition": f'attachment; filename="{EXPORT_MEMO_FILENAME}"'},
     )
 

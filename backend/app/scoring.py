@@ -2,22 +2,101 @@ from __future__ import annotations
 
 from collections import Counter
 
-from .models import DealClaim, EvidenceItem, RiskMemo
+from .models import DealClaim, EvidenceItem, QualityReview, RiskMemo, ScoreSummary
 from .config import MEMO_TITLE
 
-STATUS_SCORE = {"supported": 100, "weak": 62, "missing": 38, "contradicted": 18}
-IMPORTANCE_WEIGHT = {"high": 1.4, "medium": 1.0, "low": 0.7}
+STATUS_SCORE = {"supported": 88, "weak": 55, "missing": 24, "contradicted": 8}
+IMPORTANCE_WEIGHT = {"high": 1.5, "medium": 1.0, "low": 0.7}
+DECISION_IMPACT_WEIGHT = {"high": 1.25, "medium": 1.0, "low": 0.85}
+HIGH_RISK_CATEGORIES = {"customer_roi", "competition", "market", "growth", "financials", "retention", "compliance", "fundraising", "legal"}
+COUNT_KEYS = ["supported", "weak", "contradicted", "missing"]
 
 
-def score_claims(claims: list[DealClaim]) -> tuple[int, str, dict[str, int]]:
+def score_claims(
+    claims: list[DealClaim],
+    evidence: list[EvidenceItem] | None = None,
+    quality_review: QualityReview | None = None,
+) -> ScoreSummary:
+    evidence = evidence or []
+    counts = status_counts(claims)
     if not claims:
-      return 0, "red", {"supported": 0, "weak": 0, "contradicted": 0, "missing": 0}
-    score = sum(STATUS_SCORE[c.status] * IMPORTANCE_WEIGHT[c.importance] for c in claims)
-    weight = sum(IMPORTANCE_WEIGHT[c.importance] for c in claims)
-    overall = round(score / weight)
-    grade = "green" if overall >= 78 else "yellow" if overall >= 48 else "red"
+        return ScoreSummary(overall=0, grade="red", counts=counts, drivers=["No diligence claims were scored."])
+
+    evidence_by_claim = {claim.id: [item for item in evidence if item.claimId == claim.id] for claim in claims}
+    weighted_score = 0.0
+    total_weight = 0.0
+    for claim in claims:
+        weight = IMPORTANCE_WEIGHT[claim.importance] * DECISION_IMPACT_WEIGHT[claim.decisionImpact]
+        weighted_score += claim_readiness_score(claim, evidence_by_claim.get(claim.id, [])) * weight
+        total_weight += weight
+
+    raw_score = round(weighted_score / total_weight) if total_weight else 0
+    drivers: list[str] = []
+    score = raw_score
+
+    if evidence and not any(item.sourceIndependence == "third_party" for item in evidence):
+        score -= 8
+        drivers.append("No third-party validation is attached; score is capped below green.")
+
+    if quality_review:
+        if quality_review.memoReadinessScore < 60:
+            score -= 8
+            drivers.append(f"Memo readiness is low at {quality_review.memoReadinessScore}/100.")
+        if quality_review.globalWarnings:
+            penalty = min(12, len(quality_review.globalWarnings) * 4)
+            score -= penalty
+            drivers.extend(quality_review.globalWarnings[:2])
+
+    score_cap = 100
+    unresolved = [claim for claim in claims if claim.reviewerStatus != "verified"]
+    if any(claim.status == "contradicted" and claim.decisionImpact == "high" for claim in unresolved):
+        score_cap = min(score_cap, 59)
+        drivers.append("Unresolved high-impact contradiction blocks IC readiness.")
+    if any(claim.status == "missing" and claim.importance == "high" for claim in unresolved):
+        score_cap = min(score_cap, 84)
+        drivers.append("High-importance missing evidence prevents a green score.")
+    if evidence and not any(item.sourceIndependence == "third_party" for item in evidence):
+        score_cap = min(score_cap, 84)
+
+    overall = clamp_score(min(score, score_cap))
+    grade = "green" if overall >= 85 else "yellow" if overall >= 60 else "red"
+    if not drivers:
+        drivers.append("Claim quality, materiality, and evidence support are strong enough for this band.")
+
+    return ScoreSummary(overall=overall, grade=grade, counts=counts, drivers=unique_items(drivers)[:4])
+
+
+def status_counts(claims: list[DealClaim]) -> dict[str, int]:
     counts = Counter(c.status for c in claims)
-    return overall, grade, {key: counts.get(key, 0) for key in ["supported", "weak", "contradicted", "missing"]}
+    return {key: counts.get(key, 0) for key in COUNT_KEYS}
+
+
+def claim_readiness_score(claim: DealClaim, evidence: list[EvidenceItem]) -> int:
+    quality_score = claim.qualityScore if claim.qualityScore > 0 else STATUS_SCORE[claim.status]
+    score = round(STATUS_SCORE[claim.status] * 0.35 + quality_score * 0.65)
+    if claim.reviewerStatus == "verified":
+        score = max(score, 90)
+    elif claim.reviewerStatus == "needs_evidence":
+        score -= 12
+    if claim.status != "supported" and claim.category in HIGH_RISK_CATEGORIES:
+        score -= 6
+    if any(item.sourceIndependence == "third_party" and item.stance == "supports" for item in evidence):
+        score += 6
+    elif any(item.stance in {"supports", "partially_supports"} and item.sourceIndependence == "founder_supplied" for item in evidence):
+        score -= 8
+    if evidence and not any(item.sourceIndependence == "third_party" for item in evidence):
+        score -= 4
+    if any(item.stance == "contradicts" for item in evidence):
+        score -= 12
+    return clamp_score(score)
+
+
+def clamp_score(score: int | float) -> int:
+    return max(0, min(100, round(score)))
+
+
+def unique_items(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(item for item in items if item))
 
 
 def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> DealClaim:
@@ -140,12 +219,21 @@ def decision_impact_for_claim(claim: DealClaim) -> str:
     return "low"
 
 
-def memo_to_markdown(memo: RiskMemo) -> str:
+def memo_to_markdown(memo: RiskMemo, score: ScoreSummary | None = None) -> str:
     sections = [
         f"# {MEMO_TITLE}: {memo.company}",
         "",
         f"**Overall grade:** {memo.overallGrade.upper()}",
     ]
+    if score:
+        sections.extend(
+            [
+                f"**IC readiness score:** {score.overall}/100",
+                "",
+                "## Score Drivers",
+                markdown_bullets(score.drivers),
+            ]
+        )
     if memo.executiveSummary:
         sections.extend(["", "## Executive Summary", memo.executiveSummary])
     if memo.thesisAssessment:

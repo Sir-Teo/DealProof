@@ -87,14 +87,102 @@ def test_missing_status_from_no_evidence():
     assert updated.status == "missing"
 
 
-def test_score_claims_yellow():
+def test_score_claims_counts_statuses():
     claims = [
         claim().model_copy(update={"status": "supported"}),
         claim().model_copy(update={"id": "claim-02", "status": "missing"}),
     ]
 
-    _, grade, counts = score_claims(claims)
+    score = score_claims(claims)
 
-    assert grade == "yellow"
-    assert counts["supported"] == 1
-    assert counts["missing"] == 1
+    assert score.grade == "red"
+    assert score.counts["supported"] == 1
+    assert score.counts["missing"] == 1
+
+
+def test_high_impact_contradiction_forces_red_score():
+    claims = [
+        claim().model_copy(update={"status": "supported", "qualityScore": 94, "decisionImpact": "high"}),
+        claim().model_copy(update={"id": "claim-02", "status": "contradicted", "qualityScore": 15, "decisionImpact": "high"}),
+    ]
+
+    score = score_claims(claims)
+
+    assert score.grade == "red"
+    assert score.overall <= 59
+    assert "Unresolved high-impact contradiction blocks IC readiness." in score.drivers
+
+
+def test_high_importance_missing_claim_prevents_green_score():
+    claims = [
+        claim().model_copy(update={"status": "supported", "qualityScore": 96, "decisionImpact": "high"}),
+        claim().model_copy(update={"id": "claim-02", "status": "missing", "qualityScore": 20, "importance": "high", "decisionImpact": "medium"}),
+    ]
+
+    score = score_claims(claims)
+
+    assert score.grade != "green"
+    assert score.overall <= 84
+    assert "High-importance missing evidence prevents a green score." in score.drivers
+
+
+def test_independent_supported_claims_can_be_green():
+    claims = [
+        claim().model_copy(update={"status": "supported", "qualityScore": 94, "decisionImpact": "high"}),
+        claim().model_copy(update={"id": "claim-02", "status": "supported", "qualityScore": 91, "decisionImpact": "medium"}),
+    ]
+    evidence = [
+        EvidenceItem(
+            id="ev-01",
+            claimId="claim-01",
+            title="ARR table",
+            sourceType="uploaded",
+            citation="financials.csv",
+            snippet="ARR doubled",
+            stance="supports",
+            reliability="high",
+            sourceIndependence="third_party",
+            quoteSpan="ARR doubled in Q1.",
+        ),
+        EvidenceItem(
+            id="ev-02",
+            claimId="claim-02",
+            title="Customer cohort",
+            sourceType="uploaded",
+            citation="cohort.csv",
+            snippet="ARR doubled",
+            stance="supports",
+            reliability="high",
+            sourceIndependence="third_party",
+            quoteSpan="ARR doubled in Q1.",
+        ),
+    ]
+
+    score = score_claims(claims, evidence)
+
+    assert score.grade == "green"
+    assert score.overall >= 85
+
+
+def test_founder_only_or_no_third_party_support_does_not_over_score():
+    claims = [claim().model_copy(update={"status": "supported", "qualityScore": 92, "decisionImpact": "high"})]
+    evidence = [
+        EvidenceItem(
+            id="ev-01",
+            claimId="claim-01",
+            title="Founder deck",
+            sourceType="uploaded",
+            citation="deck.txt",
+            snippet="ARR doubled",
+            stance="supports",
+            reliability="high",
+            sourceIndependence="founder_supplied",
+            quoteSpan="ARR doubled in Q1.",
+        )
+    ]
+
+    score = score_claims(claims, evidence)
+
+    assert score.grade != "green"
+    assert score.overall <= 84
+    assert "No third-party validation is attached; score is capped below green." in score.drivers

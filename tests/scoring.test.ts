@@ -107,14 +107,84 @@ const memo: RiskMemo = {
 };
 
 describe("DealProof scoring", () => {
-  it("scores the demo packet as a yellow risk deal", () => {
+  it("scores the demo packet as a red IC readiness case", () => {
     const result = scoreClaims(claims);
 
-    expect(result.grade).toBe("yellow");
+    expect(result.grade).toBe("red");
     expect(result.counts.supported).toBe(1);
     expect(result.counts.weak).toBe(1);
     expect(result.counts.contradicted).toBe(1);
     expect(result.counts.missing).toBe(1);
+  });
+
+  it("caps high-impact contradictions at red", () => {
+    const result = scoreClaims(claims.map((claim) => (claim.id === "claim-03" ? { ...claim, decisionImpact: "high" } : claim)), evidence);
+
+    expect(result.grade).toBe("red");
+    expect(result.overall).toBeLessThanOrEqual(59);
+    expect(result.drivers).toContain("Unresolved high-impact contradiction blocks IC readiness.");
+  });
+
+  it("caps high-importance missing claims below green", () => {
+    const result = scoreClaims(
+      [
+        { ...claims[0], status: "supported", qualityScore: 96 },
+        { ...claims[3], status: "missing", qualityScore: 20, importance: "high", decisionImpact: "medium" }
+      ],
+      evidence
+    );
+
+    expect(result.grade).not.toBe("green");
+    expect(result.overall).toBeLessThanOrEqual(84);
+    expect(result.drivers).toContain("High-importance missing evidence prevents a green score.");
+  });
+
+  it("allows independently supported high-quality claims to score green", () => {
+    const greenClaims = [
+      { ...claims[0], status: "supported", qualityScore: 94, decisionImpact: "high" },
+      { ...claims[1], id: "claim-02", status: "supported", qualityScore: 91, decisionImpact: "medium" }
+    ] satisfies DealClaim[];
+    const greenEvidence = greenClaims.map((claim, index) => ({
+      id: `ev-green-${index}`,
+      claimId: claim.id,
+      title: "Third-party support",
+      sourceType: "uploaded" as const,
+      citation: "support.csv",
+      snippet: "Supported claim.",
+      stance: "supports" as const,
+      reliability: "high" as const,
+      sourceIndependence: "third_party" as const,
+      relevanceScore: 0.9,
+      quoteSpan: "Supported claim."
+    }));
+
+    const result = scoreClaims(greenClaims, greenEvidence);
+
+    expect(result.grade).toBe("green");
+    expect(result.overall).toBeGreaterThanOrEqual(85);
+  });
+
+  it("does not let founder-only support score green", () => {
+    const result = scoreClaims(
+      [{ ...claims[0], status: "supported", qualityScore: 92 }],
+      [{
+        id: "ev-founder",
+        claimId: "claim-01",
+        title: "Founder deck",
+        sourceType: "uploaded",
+        citation: "deck.pdf",
+        snippet: "ARR grew.",
+        stance: "supports",
+        reliability: "high",
+        sourceIndependence: "founder_supplied",
+        relevanceScore: 0.82,
+        quoteSpan: "ARR grew."
+      }]
+    );
+
+    expect(result.grade).not.toBe("green");
+    expect(result.overall).toBeLessThanOrEqual(84);
+    expect(result.drivers).toContain("No third-party validation is attached; score is capped below green.");
   });
 
   it("returns evidence for a selected claim", () => {

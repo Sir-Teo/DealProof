@@ -7,6 +7,7 @@ from typing import Any
 
 from .config import DATABASE_FILENAME, DEFAULT_STAGE, DEFAULT_TAGLINE
 from .models import ChatTurn, DealAnalysis, DealClaim, DealProfile, EvidenceItem, QualityReview, RiskMemo, SourceMaterial
+from .scoring import score_claims
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
@@ -15,8 +16,10 @@ DB_PATH = DATA_DIR / DATABASE_FILENAME
 
 def connect() -> sqlite3.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("pragma busy_timeout = 30000")
+    conn.execute("pragma journal_mode = wal")
     return conn
 
 
@@ -349,6 +352,48 @@ def get_deal(deal_id: str) -> DealAnalysis:
         profile_row = conn.execute("select payload from deal_profiles where deal_id = ?", (deal_id,)).fetchone()
         memo_row = conn.execute("select payload from memos where deal_id = ?", (deal_id,)).fetchone()
         review_row = conn.execute("select payload from quality_reviews where deal_id = ?", (deal_id,)).fetchone()
+    parsed_claims = [
+        DealClaim(
+            id=row["id"],
+            text=row["text"],
+            category=row["category"],
+            sourceMaterial=row["source_material"],
+            sourceSnippet=row["source_snippet"],
+            importance=row["importance"],
+            status=row["status"],
+            riskRationale=row["risk_rationale"],
+            confidence=row["confidence"],
+            qualityScore=row["quality_score"],
+            qualityIssues=json.loads(row["quality_issues"]),
+            verificationNeed=row["verification_need"],
+            decisionImpact=row["decision_impact"],
+            reviewerStatus=row["reviewer_status"],
+            reviewerNotes=row["reviewer_notes"],
+        )
+        for row in claims
+    ]
+    parsed_evidence = [
+        EvidenceItem(
+            id=row["id"],
+            claimId=row["claim_id"],
+            title=row["title"],
+            sourceType=row["source_type"],
+            citation=row["citation"],
+            snippet=row["snippet"],
+            stance=row["stance"],
+            reliability=row["reliability"],
+            sourceIndependence=row["source_independence"],
+            relevanceScore=row["relevance_score"],
+            quoteSpan=row["quote_span"],
+            sourceMaterialId=row["source_material_id"],
+            sourceName=row["source_name"],
+            sourceUrl=row["source_url"],
+            chunkIndex=row["chunk_index"],
+            retrievedAt=row["retrieved_at"],
+        )
+        for row in evidence
+    ]
+    quality_review = QualityReview.model_validate(json.loads(review_row["payload"])) if review_row else None
     return DealAnalysis(
         id=deal["id"],
         company=deal["company"],
@@ -358,50 +403,12 @@ def get_deal(deal_id: str) -> DealAnalysis:
         error=deal["error"],
         generatedAt=deal["generated_at"],
         materials=get_materials(deal_id),
-        claims=[
-            DealClaim(
-                id=row["id"],
-                text=row["text"],
-                category=row["category"],
-                sourceMaterial=row["source_material"],
-                sourceSnippet=row["source_snippet"],
-                importance=row["importance"],
-                status=row["status"],
-                riskRationale=row["risk_rationale"],
-                confidence=row["confidence"],
-                qualityScore=row["quality_score"],
-                qualityIssues=json.loads(row["quality_issues"]),
-                verificationNeed=row["verification_need"],
-                decisionImpact=row["decision_impact"],
-                reviewerStatus=row["reviewer_status"],
-                reviewerNotes=row["reviewer_notes"],
-            )
-            for row in claims
-        ],
-        evidence=[
-            EvidenceItem(
-                id=row["id"],
-                claimId=row["claim_id"],
-                title=row["title"],
-                sourceType=row["source_type"],
-                citation=row["citation"],
-                snippet=row["snippet"],
-                stance=row["stance"],
-                reliability=row["reliability"],
-                sourceIndependence=row["source_independence"],
-                relevanceScore=row["relevance_score"],
-                quoteSpan=row["quote_span"],
-                sourceMaterialId=row["source_material_id"],
-                sourceName=row["source_name"],
-                sourceUrl=row["source_url"],
-                chunkIndex=row["chunk_index"],
-                retrievedAt=row["retrieved_at"],
-            )
-            for row in evidence
-        ],
+        claims=parsed_claims,
+        evidence=parsed_evidence,
         profile=DealProfile.model_validate(json.loads(profile_row["payload"])) if profile_row else None,
         memo=RiskMemo.model_validate(json.loads(memo_row["payload"])) if memo_row else None,
-        qualityReview=QualityReview.model_validate(json.loads(review_row["payload"])) if review_row else None,
+        qualityReview=quality_review,
+        score=score_claims(parsed_claims, parsed_evidence, quality_review) if parsed_claims else None,
         chatHistory=get_chats(deal_id),
     )
 

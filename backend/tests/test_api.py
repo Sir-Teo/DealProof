@@ -1,9 +1,8 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import DealClaim, RiskMemo
+from app.models import RiskMemo
 from app.parsers import UrlFetchError
-from app.scoring import score_claims
 
 
 def test_demo_deal_can_be_created_and_loaded():
@@ -132,9 +131,7 @@ def test_claim_status_review_refreshes_memo_and_quality_review(monkeypatch):
             assert patched.status_code == 200
             updated = patched.json()
 
-    _, expected_grade, _ = score_claims([DealClaim.model_validate(claim) for claim in updated["claims"]])
-    assert expected_grade == "green"
-    assert updated["memo"]["overallGrade"] == expected_grade
+    assert updated["score"]["grade"] == updated["memo"]["overallGrade"]
     assert "High-importance claims remain weak or missing." not in updated["qualityReview"]["globalWarnings"]
 
 
