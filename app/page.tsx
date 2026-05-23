@@ -75,7 +75,7 @@ const statusIcon: Record<ClaimStatus, typeof CheckCircle2> = {
 export default function Home() {
   const [deal, setDeal] = useState<DealAnalysis | null>(null);
   const [files, setFiles] = useState<FileList | null>(null);
-  const [url, setUrl] = useState("");
+  const [urls, setUrls] = useState<string[]>([""]);
   const [question, setQuestion] = useState("");
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -170,7 +170,6 @@ export default function Home() {
     setDeal(created);
     setAgentEvents([]);
     setPendingQuestion(null);
-    addFeedNote({ role: "user", title: `${UI_COPY.createdDealPrefix} ${created.company}`, body: created.tagline });
     return created;
   }
 
@@ -183,14 +182,7 @@ export default function Home() {
       setPendingQuestion(null);
       setQuestion("");
       setAgentEvents([]);
-      setFeedNotes([
-        {
-          id: `seed-${created.id}`,
-          role: "user",
-          title: `${UI_COPY.seededDealPrefix} ${created.company}`,
-          body: `${created.materials.length} ${UI_COPY.sourceMaterialsLoaded}`
-        }
-      ]);
+      setFeedNotes([]);
       await runAnalysisForDeal(created);
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
@@ -199,25 +191,38 @@ export default function Home() {
     }
   }
 
+  function updateUrl(index: number, value: string) {
+    setUrls((prev) => prev.map((u, i) => (i === index ? value : u)));
+  }
+
+  function addUrl() {
+    setUrls((prev) => [...prev, ""]);
+  }
+
+  function removeUrl(index: number) {
+    setUrls((prev) => prev.length === 1 ? [""] : prev.filter((_, i) => i !== index));
+  }
+
   async function uploadMaterials(event?: FormEvent) {
     event?.preventDefault();
-    if (!files?.length && !url.trim()) return;
+    const nonEmptyUrls = urls.filter((u) => u.trim());
+    if (!files?.length && !nonEmptyUrls.length) return;
     setBusy("upload");
     setError(null);
     try {
       const targetDeal = await ensureDeal();
       const form = new FormData();
       Array.from(files ?? []).forEach((file) => form.append("files", file));
-      if (url.trim()) form.append("url", url.trim());
-      const updated = await api<DealAnalysis>(`/deals/${targetDeal.id}/materials`, { method: "POST", body: form });
+      if (nonEmptyUrls[0]) form.append("url", nonEmptyUrls[0]);
+      let updated = await api<DealAnalysis>(`/deals/${targetDeal.id}/materials`, { method: "POST", body: form });
+      for (const urlItem of nonEmptyUrls.slice(1)) {
+        const extra = new FormData();
+        extra.append("url", urlItem);
+        updated = await api<DealAnalysis>(`/deals/${targetDeal.id}/materials`, { method: "POST", body: extra });
+      }
       setDeal(updated);
-      addFeedNote({
-        role: "user",
-        title: UI_COPY.addedMaterialTitle,
-        body: `${Array.from(files ?? []).map((file) => file.name).join(", ") || url.trim()}`
-      });
       setFiles(null);
-      setUrl("");
+      setUrls([""]);
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
     } finally {
@@ -231,7 +236,6 @@ export default function Home() {
     setError(null);
     setPendingQuestion(null);
     setAgentEvents([]);
-    addFeedNote({ role: "user", title: UI_COPY.runAgentTitle, body: `${deal.materials.length} ${UI_COPY.materialsQueued}` });
     try {
       await runAnalysisForDeal(deal);
     } catch (exc) {
@@ -348,21 +352,35 @@ export default function Home() {
             <div className="composerDivider" />
             {attachOpen && (
               <div className="attachDrawer">
-                <label className="secondaryButton fileButton">
-                  <Upload size={13} />
-                  {UI_COPY.uploadButton}
-                  <input
-                    type="file"
-                    multiple
-                    accept=".pdf,.txt,.csv,.docx"
-                    onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(event.target.files)}
-                  />
-                </label>
-                <div className="urlField">
-                  <Link size={12} />
-                  <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={UI_COPY.addUrlPlaceholder} />
+                <div className="attachRow">
+                  <label className="secondaryButton fileButton">
+                    <Upload size={13} />
+                    {files?.length ? `${files.length} file${files.length > 1 ? "s" : ""} selected` : UI_COPY.uploadButton}
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.txt,.csv,.docx"
+                      onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(event.target.files)}
+                    />
+                  </label>
                 </div>
-                <button className="secondaryButton" type="button" onClick={() => void uploadMaterials()} disabled={busy === "upload" || (!files?.length && !url.trim())}>
+                <div className="urlList">
+                  {urls.map((urlVal, idx) => (
+                    <div key={idx} className="urlField">
+                      <Link size={12} />
+                      <input
+                        value={urlVal}
+                        onChange={(event) => updateUrl(idx, event.target.value)}
+                        placeholder={UI_COPY.addUrlPlaceholder}
+                      />
+                      {urls.length > 1 && (
+                        <button type="button" className="urlRemoveBtn" onClick={() => removeUrl(idx)} title="Remove">×</button>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" className="addUrlBtn" onClick={addUrl}>+ URL</button>
+                </div>
+                <button className="secondaryButton" type="button" onClick={() => void uploadMaterials()} disabled={busy === "upload" || (!files?.length && !urls.some((u) => u.trim()))}>
                   {busy === "upload" ? <Loader2 className="spin" size={13} /> : <FileText size={13} />}
                   {UI_COPY.addMaterialButton}
                 </button>
@@ -370,7 +388,7 @@ export default function Home() {
             )}
             <div className="composerActions">
               <button
-                className={clsx("iconButton", (files?.length || url) && "iconButton--active")}
+                className={clsx("iconButton", (files?.length || urls.some((u) => u.trim())) && "iconButton--active")}
                 type="button"
                 onClick={() => setAttachOpen((o) => !o)}
                 title="Attach files or URL"

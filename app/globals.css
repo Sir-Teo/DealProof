@@ -1058,11 +1058,53 @@ summary:focus-visible {
 
 .attachDrawer {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--line);
   animation: slideDown 0.12s ease;
+}
+
+.attachRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.urlList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.urlRemoveBtn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+  flex: 0 0 auto;
+}
+
+.urlRemoveBtn:hover {
+  color: var(--ink);
+}
+
+.addUrlBtn {
+  background: none;
+  border: none;
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 0;
+  text-align: left;
+  width: fit-content;
+}
+
+.addUrlBtn:hover {
+  opacity: 0.75;
 }
 
 @keyframes slideDown {
@@ -1130,9 +1172,6 @@ summary:focus-visible {
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 0 8px;
-  flex: 1;
-  min-width: 120px;
-  max-width: 200px;
   min-height: 32px;
 }
 
