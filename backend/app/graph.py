@@ -447,8 +447,9 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
             fallback = fallback_memo(state["company"], grade, state["claims"], state.get("evidence", []), profile, state.get("quality_review"))
             memo = fill_missing_memo_sections(generated.memo.model_copy(update={"overallGrade": grade}), fallback)
             return {**state, "memo": memo, **with_llm_output(state, "generate_memo", raw_output)}
-        except Exception as exc:
-            raise RuntimeError("DeepSeek memo step failed.") from exc
+        except Exception:
+            memo = fallback_memo(state["company"], grade, state["claims"], state.get("evidence", []), profile, state.get("quality_review"))
+            return {**state, "memo": memo}
     else:
         memo = fallback_memo(state["company"], grade, state["claims"], state.get("evidence", []), profile, state.get("quality_review"))
     return {**state, "memo": memo}

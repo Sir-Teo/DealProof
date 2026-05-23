@@ -145,11 +145,6 @@ export default function Home() {
     if (streamError) throw new Error(streamError);
     const analyzed = await api<DealAnalysis>(`/deals/${targetDeal.id}`);
     setDeal(analyzed);
-    addFeedNote({
-      role: "agent",
-      title: UI_COPY.analysisCompleteTitle,
-      body: `${analyzed.claims.length} claims, ${analyzed.evidence.length} evidence items, ${scoreClaims(analyzed.claims).grade.toUpperCase()} risk.`
-    });
     return analyzed;
   }
 
@@ -216,6 +211,7 @@ export default function Home() {
       setDeal(updated);
       setFiles(null);
       setUrls([""]);
+      setAttachOpen(false);
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
     } finally {
@@ -290,6 +286,14 @@ export default function Home() {
 
           {(isAnalyzing || agentEvents.length > 0) && <AgentActivity events={agentEvents} running={isAnalyzing} />}
 
+          {deal && !isAnalyzing && (
+            <AgentOutput
+              deal={deal}
+              scoring={scoring}
+              exportUrl={exportUrl}
+            />
+          )}
+
           {(deal?.chatHistory ?? []).map((turn) => (
             <ChatTurnMessage key={turn.id} turn={turn} />
           ))}
@@ -306,14 +310,6 @@ export default function Home() {
                 <p className="messageTitle">{UI_COPY.answeringTitle}</p>
               </div>
             </article>
-          )}
-
-          {deal && !isAnalyzing && (
-            <AgentOutput
-              deal={deal}
-              scoring={scoring}
-              exportUrl={exportUrl}
-            />
           )}
           <div ref={feedBottomRef} />
         </div>
@@ -379,7 +375,7 @@ export default function Home() {
               <input
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
-                placeholder={UI_COPY.questionPlaceholder}
+                placeholder={deal?.claims.length ? "Ask a follow-up question..." : UI_COPY.questionPlaceholder}
                 disabled={!deal || Boolean(busy)}
               />
               <button
