@@ -47,7 +47,51 @@ def parse_file(path: Path) -> str:
         data = path.read_text(errors="ignore")
         rows = list(csv.reader(io.StringIO(data)))
         return "\n".join(" | ".join(cell.strip() for cell in row) for row in rows)
+    if suffix in {".xlsx", ".xls"}:
+        return _parse_xlsx(path)
+    if suffix in {".pptx", ".ppt"}:
+        return _parse_pptx(path)
     return path.read_text(errors="ignore")
+
+
+def _parse_xlsx(path: Path) -> str:
+    try:
+        import openpyxl
+    except ImportError:
+        return ""
+    wb = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
+    parts: list[str] = []
+    for sheet in wb.worksheets:
+        parts.append(f"## {sheet.title}")
+        for row in sheet.iter_rows(values_only=True):
+            cells = [str(cell) if cell is not None else "" for cell in row]
+            if any(c.strip() for c in cells):
+                parts.append(" | ".join(cells))
+    wb.close()
+    return "\n".join(parts)
+
+
+def _parse_pptx(path: Path) -> str:
+    try:
+        from pptx import Presentation
+    except ImportError:
+        return ""
+    prs = Presentation(str(path))
+    parts: list[str] = []
+    for i, slide in enumerate(prs.slides, 1):
+        slide_parts: list[str] = [f"## Slide {i}"]
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                text = "\n".join(p.text for p in shape.text_frame.paragraphs if p.text.strip())
+                if text:
+                    slide_parts.append(text)
+            if hasattr(shape, "notes") and shape.notes and shape.notes.text_frame:
+                notes = shape.notes.text_frame.text.strip()
+                if notes:
+                    slide_parts.append(f"[Notes: {notes}]")
+        if len(slide_parts) > 1:
+            parts.append("\n".join(slide_parts))
+    return "\n\n".join(parts)
 
 
 async def fetch_url_text(url: str) -> str:

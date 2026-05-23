@@ -138,6 +138,39 @@ def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition:
         conn.execute(f"alter table {table} add column {column} {definition}")
 
 
+def list_deals_summary() -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            select d.id, d.company, d.stage, d.status, d.generated_at,
+                   m.payload as memo_payload,
+                   (select count(*) from materials where deal_id = d.id) as material_count
+            from deals d
+            left join memos m on m.deal_id = d.id
+            order by d.created_at desc
+            limit 50
+            """
+        ).fetchall()
+    result = []
+    for row in rows:
+        grade = None
+        if row["memo_payload"]:
+            try:
+                grade = json.loads(row["memo_payload"]).get("overallGrade")
+            except Exception:
+                pass
+        result.append({
+            "id": row["id"],
+            "company": row["company"] or "Untitled",
+            "stage": row["stage"],
+            "status": row["status"],
+            "generatedAt": row["generated_at"],
+            "grade": grade,
+            "materialCount": row["material_count"],
+        })
+    return result
+
+
 def create_deal(deal_id: str, company: str, tagline: str = DEFAULT_TAGLINE, stage: str = DEFAULT_STAGE) -> None:
     with connect() as conn:
         conn.execute(

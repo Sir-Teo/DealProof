@@ -10,7 +10,7 @@ from langgraph.graph import END, StateGraph
 
 from . import db
 from .config import AGENT_ROLE, APP_NAME
-from .llm import DeepSeekClient
+from .llm import get_llm_client
 from .models import (
     ClaimExtraction,
     DealClaim,
@@ -208,7 +208,7 @@ def stream_llm_chunk(state: DiligenceState, step_id: str):
         on_progress(
             "tool_delta",
             step_id,
-            {"label": "Streaming DeepSeek response", "toolName": step_id, "rawOutput": chunk},
+            {"label": "Streaming LLM response", "toolName": step_id, "rawOutput": chunk},
         )
 
     return emit
@@ -231,7 +231,7 @@ def chunk_materials(state: DiligenceState) -> DiligenceState:
 
 
 def profile_deal(state: DiligenceState) -> DiligenceState:
-    llm = DeepSeekClient()
+    llm = get_llm_client()
     context = format_material_context(state["materials"], max_chars=9_000)
     if llm.enabled:
         system = (
@@ -249,12 +249,12 @@ def profile_deal(state: DiligenceState) -> DiligenceState:
             generated, raw_output = llm.complete_json_with_raw(system, user, DealProfileGeneration, on_chunk=stream_llm_chunk(state, "profile_deal"))
             return {**state, "profile": normalize_profile(generated.profile, state), **with_llm_output(state, "profile_deal", raw_output)}
         except Exception as exc:
-            raise RuntimeError("DeepSeek profile step failed.") from exc
+            raise RuntimeError("LLM profile step failed.") from exc
     return {**state, "profile": fallback_deal_profile(state)}
 
 
 def extract_claims(state: DiligenceState) -> DiligenceState:
-    llm = DeepSeekClient()
+    llm = get_llm_client()
     context = format_material_context(state["materials"], max_chars=18_000)
     profile = state.get("profile", DealProfile())
     if llm.enabled:
@@ -416,7 +416,7 @@ def duplicated_claims(claims: list[DealClaim]) -> list[str]:
 
 
 def generate_memo(state: DiligenceState) -> DiligenceState:
-    llm = DeepSeekClient()
+    llm = get_llm_client()
     _, grade, _ = score_claims(state["claims"])
     profile = state.get("profile", DealProfile())
     claim_context = "\n".join(
@@ -533,7 +533,7 @@ def answer_question(deal_id: str, question: str, chat_history=None):
     claims = [claim for _, __, claim in sorted(relevant, key=lambda item: (item[0], item[1]), reverse=True)[:4]] or deal.claims[:4]
     evidence = [item for item in deal.evidence if item.claimId in {claim.id for claim in claims}]
     citations = list(dict.fromkeys(item.citation for item in evidence))[:5]
-    llm = DeepSeekClient()
+    llm = get_llm_client()
     if llm.enabled:
         system = (
             f"You are {APP_NAME}, a {AGENT_ROLE}. Answer only from stored claims and evidence. "

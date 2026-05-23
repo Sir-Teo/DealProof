@@ -12,7 +12,9 @@ import {
   FileText,
   Link,
   Loader2,
+  NotebookPen,
   Paperclip,
+  Plus,
   Quote,
   Send,
   ShieldCheck,
@@ -25,6 +27,17 @@ import { evidenceForClaim, scoreClaims } from "@/lib/scoring";
 import type { ChatTurn, ClaimStatus, DealAnalysis, DealClaim, EvidenceItem } from "@/lib/types";
 
 const emptyCounts = { supported: 0, weak: 0, contradicted: 0, missing: 0 };
+const DEAL_ID_KEY = "dealproofDealId";
+
+type DealSummary = {
+  id: string;
+  company: string;
+  stage: string;
+  status: string;
+  generatedAt: string | null;
+  grade: "green" | "yellow" | "red" | null;
+  materialCount: number;
+};
 
 type AgentEventStatus = "running" | "done" | "error";
 type AgentEvent = {
@@ -83,6 +96,8 @@ export default function Home() {
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
   const [attachOpen, setAttachOpen] = useState(false);
   const [feedNotes, setFeedNotes] = useState<FeedNote[]>([]);
+  const [dealList, setDealList] = useState<DealSummary[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const feedWrapRef = useRef<HTMLElement>(null);
   const feedBottomRef = useRef<HTMLDivElement>(null);
 
@@ -96,6 +111,17 @@ export default function Home() {
   useEffect(() => {
     feedBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [feedNotes.length, deal?.chatHistory?.length, isAnalyzing]);
+
+  useEffect(() => {
+    const savedId = localStorage.getItem(DEAL_ID_KEY);
+    if (savedId) {
+      api<DealAnalysis>(`/deals/${savedId}`)
+        .then((d) => { setDeal(d); setAgentEvents([]); })
+        .catch(() => localStorage.removeItem(DEAL_ID_KEY));
+    }
+    void loadDealList();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${API_BASE_URL}${path}`, init);
@@ -127,6 +153,61 @@ export default function Home() {
     }
   }
 
+  async function loadDealList() {
+    try {
+      const list = await api<DealSummary[]>("/deals");
+      setDealList(list);
+    } catch { /* sidebar is non-critical */ }
+  }
+
+  function persistDeal(d: DealAnalysis) {
+    localStorage.setItem(DEAL_ID_KEY, d.id);
+    setDeal(d);
+  }
+
+  function newDeal() {
+    localStorage.removeItem(DEAL_ID_KEY);
+    setDeal(null);
+    setAgentEvents([]);
+    setFeedNotes([]);
+    setPendingQuestion(null);
+    setQuestion("");
+    setFiles(null);
+    setUrls([""]);
+    setError(null);
+    setSidebarOpen(false);
+  }
+
+  async function switchDeal(id: string) {
+    try {
+      const d = await api<DealAnalysis>(`/deals/${id}`);
+      localStorage.setItem(DEAL_ID_KEY, id);
+      setDeal(d);
+      setAgentEvents([]);
+      setFeedNotes([]);
+      setPendingQuestion(null);
+      setQuestion("");
+      setError(null);
+      setSidebarOpen(false);
+    } catch (exc) {
+      setError(String(exc instanceof Error ? exc.message : exc));
+    }
+  }
+
+  async function reviewClaim(claimId: string, reviewerStatus: "verified" | "needs_evidence" | "unreviewed", reviewerNotes?: string) {
+    if (!deal) return;
+    try {
+      const updated = await api<DealAnalysis>(`/deals/${deal.id}/claims/${claimId}/review`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewerStatus, ...(reviewerNotes !== undefined && { reviewerNotes }) }),
+      });
+      setDeal(updated);
+    } catch (exc) {
+      setError(String(exc instanceof Error ? exc.message : exc));
+    }
+  }
+
   function addFeedNote(note: Omit<FeedNote, "id">) {
     setFeedNotes((notes) => [...notes.filter((item) => item.id !== "welcome"), { ...note, id: `${Date.now()}-${notes.length}` }]);
   }
@@ -155,9 +236,10 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ company: DEFAULT_DEAL.fallbackCompany, tagline: DEFAULT_DEAL.tagline, stage: DEFAULT_DEAL.stage })
     });
-    setDeal(created);
+    persistDeal(created);
     setAgentEvents([]);
     setPendingQuestion(null);
+    void loadDealList();
     return created;
   }
 
@@ -166,11 +248,12 @@ export default function Home() {
     setError(null);
     try {
       const created = await api<DealAnalysis>("/deals/demo", { method: "POST" });
-      setDeal(created);
+      persistDeal(created);
       setPendingQuestion(null);
       setQuestion("");
       setAgentEvents([]);
       setFeedNotes([]);
+      void loadDealList();
       await runAnalysisForDeal(created);
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
@@ -261,13 +344,49 @@ export default function Home() {
   }
 
   return (
-    <main className="chatShell">
+    <div className="appWrap">
+      {sidebarOpen && (
+        <nav className="dealSidebar">
+          <div className="sidebarHeader">
+            <span className="sidebarTitle">Deals</span>
+            <button className="iconButton" type="button" onClick={newDeal} title="New deal">
+              <Plus size={15} />
+            </button>
+          </div>
+          <ul className="dealList">
+            {dealList.map((item) => (
+              <li key={item.id}>
+                <button
+                  className={clsx("dealListItem", deal?.id === item.id && "dealListItem--active")}
+                  type="button"
+                  onClick={() => void switchDeal(item.id)}
+                >
+                  <span className="dealListCompany">{item.company}</span>
+                  {item.grade && <span className={clsx("gradeChip gradeChip--sm", `card--${item.grade}`)}>{item.grade.toUpperCase()}</span>}
+                </button>
+              </li>
+            ))}
+            {dealList.length === 0 && <li className="dealListEmpty">No deals yet</li>}
+          </ul>
+        </nav>
+      )}
+      <main className="chatShell">
       <header className="appHeader">
         <div className="brandLine">
+          <button className="iconButton sidebarToggle" type="button" onClick={() => setSidebarOpen((o) => !o)} title="Toggle deal list">
+            <NotebookPen size={15} />
+          </button>
           <span className="brandMark">
             <ShieldCheck size={16} />
           </span>
           <strong>{UI_COPY.appName}</strong>
+        </div>
+        <div className="headerActions">
+          {deal && (
+            <button className="iconButton" type="button" onClick={newDeal} title="New deal">
+              <Plus size={15} />
+            </button>
+          )}
         </div>
       </header>
 
@@ -291,6 +410,7 @@ export default function Home() {
               deal={deal}
               scoring={scoring}
               exportUrl={exportUrl}
+              onReviewClaim={reviewClaim}
             />
           )}
 
@@ -336,7 +456,7 @@ export default function Home() {
                     <input
                       type="file"
                       multiple
-                      accept=".pdf,.txt,.csv,.docx"
+                      accept=".pdf,.txt,.csv,.docx,.xlsx,.xls,.pptx,.ppt"
                       onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(event.target.files)}
                     />
                   </label>
@@ -405,7 +525,8 @@ export default function Home() {
           </div>
         </div>
       </form>
-    </main>
+      </main>
+    </div>
   );
 }
 
@@ -569,10 +690,11 @@ function formatWebEventMeta(event: AgentEvent) {
   return "";
 }
 
-function AgentOutput({ deal, scoring, exportUrl }: {
+function AgentOutput({ deal, scoring, exportUrl, onReviewClaim }: {
   deal: DealAnalysis;
   scoring: ReturnType<typeof scoreClaims>;
   exportUrl: string;
+  onReviewClaim: (claimId: string, status: "verified" | "needs_evidence" | "unreviewed", notes?: string) => void;
 }) {
   if (!deal.materials.length) return null;
   const memo = deal.memo;
@@ -650,6 +772,20 @@ function AgentOutput({ deal, scoring, exportUrl }: {
                         <StatusPill status={claim.status} />
                         <span className="claimText" title={claim.text}>{claim.text}</span>
                         <small>{claimEvidence.length} {UI_COPY.evidenceLabel}</small>
+                        <div className="reviewButtons">
+                          <button
+                            type="button"
+                            className={clsx("reviewBtn", claim.reviewerStatus === "verified" && "reviewBtn--active reviewBtn--verified")}
+                            onClick={() => onReviewClaim(claim.id, claim.reviewerStatus === "verified" ? "unreviewed" : "verified")}
+                            title="Mark verified"
+                          >✓ Verified</button>
+                          <button
+                            type="button"
+                            className={clsx("reviewBtn", claim.reviewerStatus === "needs_evidence" && "reviewBtn--active reviewBtn--needs")}
+                            onClick={() => onReviewClaim(claim.id, claim.reviewerStatus === "needs_evidence" ? "unreviewed" : "needs_evidence")}
+                            title="Needs more evidence"
+                          >? Needs evidence</button>
+                        </div>
                         {claimEvidence.length > 0 && (
                           <details className="claimEvidence">
                             <summary>View</summary>

@@ -3,8 +3,10 @@ from __future__ import annotations
 import os
 import re
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Callable
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
@@ -43,16 +45,19 @@ def collect_public_web_evidence(
     emit_web_progress(
         on_progress,
         "web_start",
-        {"label": f"Researching {len(selected_claims)} priority claims", "claims": len(selected_claims)},
+        {"label": f"Researching {len(selected_claims)} priority claims in parallel", "claims": len(selected_claims)},
     )
     evidence: list[EvidenceItem] = []
     seen_urls: set[str] = set()
-    with httpx.Client(
-        timeout=httpx.Timeout(WEB_SEARCH_TIMEOUT_SECONDS, connect=4),
-        follow_redirects=True,
-        headers={"User-Agent": "DealProof/0.1 public diligence research"},
-    ) as client:
-        for claim in selected_claims:
+    seen_lock = Lock()
+
+    def research_claim(claim: DealClaim) -> list[EvidenceItem]:
+        claim_evidence: list[EvidenceItem] = []
+        with httpx.Client(
+            timeout=httpx.Timeout(WEB_SEARCH_TIMEOUT_SECONDS, connect=4),
+            follow_redirects=True,
+            headers={"User-Agent": "DealProof/0.1 public diligence research"},
+        ) as client:
             emit_web_progress(
                 on_progress,
                 "web_claim",
@@ -60,9 +65,12 @@ def collect_public_web_evidence(
             )
             for result in search_claim_sources(client, company, profile, claim, on_progress=on_progress):
                 normalized = normalize_url(result.url)
-                if not normalized or normalized in seen_urls:
+                if not normalized:
                     continue
-                seen_urls.add(normalized)
+                with seen_lock:
+                    if normalized in seen_urls:
+                        continue
+                    seen_urls.add(normalized)
                 emit_web_progress(
                     on_progress,
                     "web_fetch",
@@ -70,7 +78,7 @@ def collect_public_web_evidence(
                 )
                 item = evidence_from_result(client, company, claim, result)
                 if item:
-                    evidence.append(item)
+                    claim_evidence.append(item)
                     emit_web_progress(
                         on_progress,
                         "web_evidence",
@@ -81,9 +89,20 @@ def collect_public_web_evidence(
                             "sourceName": item.sourceName or "",
                             "stance": item.stance,
                             "relevanceScore": f"{item.relevanceScore:.2f}",
-                            "webEvidence": len(evidence),
+                            "webEvidence": 0,
                         },
                     )
+        return claim_evidence
+
+    max_workers = min(len(selected_claims), WEB_SEARCH_MAX_CLAIMS)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(research_claim, claim): claim for claim in selected_claims}
+        for future in as_completed(futures):
+            try:
+                evidence.extend(future.result())
+            except Exception:
+                pass
+
     emit_web_progress(on_progress, "web_complete", {"label": f"Attached {len(evidence)} public web evidence items", "webEvidence": len(evidence)})
     return evidence
 

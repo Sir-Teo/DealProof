@@ -1286,3 +1286,187 @@ summary:focus-visible {
     padding: 16px 12px 12px;
   }
 }
+
+/* ── App wrapper + sidebar ── */
+
+.appWrap {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.appWrap .chatShell {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.dealSidebar {
+  width: 220px;
+  flex: 0 0 220px;
+  border-right: 1px solid var(--line);
+  background: var(--panel-soft);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--line);
+  gap: 8px;
+}
+
+.sidebarTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dealList {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.dealListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 14px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0;
+  font-size: 13px;
+  color: var(--ink);
+  transition: background 0.1s;
+}
+
+.dealListItem:hover {
+  background: var(--line);
+}
+
+.dealListItem--active {
+  background: var(--line);
+  font-weight: 500;
+}
+
+.dealListCompany {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dealListEmpty {
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.gradeChip--sm {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.headerActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sidebarToggle {
+  margin-right: 4px;
+}
+
+/* ── Claim review buttons ── */
+
+.reviewButtons {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.reviewBtn {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--line-strong);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.reviewBtn:hover {
+  background: var(--panel-soft);
+  color: var(--ink);
+}
+
+.reviewBtn--active {
+  border-color: transparent;
+  font-weight: 500;
+}
+
+.reviewBtn--verified {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+.reviewBtn--needs {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+/* ── Mobile breakpoints ── */
+
+@media (max-width: 600px) {
+  .feedWrap {
+    padding: 16px 12px 16px;
+  }
+
+  .messageFeed {
+    gap: 12px;
+  }
+
+  .message {
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .avatar {
+    width: 22px;
+    height: 22px;
+  }
+
+  .claimRow {
+    grid-template-columns: auto 1fr auto;
+    flex-wrap: wrap;
+  }
+
+  .reviewButtons {
+    flex-wrap: wrap;
+  }
+
+  .composerInner {
+    padding: 0 4px;
+  }
+}

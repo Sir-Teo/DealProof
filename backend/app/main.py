@@ -75,6 +75,11 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/deals")
+def list_deals() -> list[dict]:
+    return db.list_deals_summary()
+
+
 @app.post("/deals")
 def create_deal(payload: DealCreate) -> DealAnalysis:
     deal_id = f"deal-{uuid.uuid4().hex[:10]}"
