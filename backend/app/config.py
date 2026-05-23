@@ -5,6 +5,7 @@ from pathlib import Path
 
 APP_NAME = os.getenv("DEALPROOF_APP_NAME", "DealProof")
 API_TITLE = os.getenv("DEALPROOF_API_TITLE", f"{APP_NAME} Backend")
+HTTP_USER_AGENT = os.getenv("DEALPROOF_HTTP_USER_AGENT", f"{APP_NAME}/0.1 contact@dealproof.local")
 AGENT_ROLE = os.getenv("DEALPROOF_AGENT_ROLE", "VC diligence red-team analyst")
 DEFAULT_COMPANY = os.getenv("DEALPROOF_DEFAULT_COMPANY", "Untitled Deal")
 DEFAULT_TAGLINE = os.getenv("DEALPROOF_DEFAULT_TAGLINE", "AI diligence target")

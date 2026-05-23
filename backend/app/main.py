@@ -26,7 +26,7 @@ from .config import (
 )
 from .graph import answer_question, refresh_review_artifacts, run_diligence
 from .models import ChatTurn, ClaimStatus, DealAnalysis, ReviewerStatus, SourceMaterial
-from .parsers import fetch_url_text, infer_kind, parse_file, summarize
+from .parsers import UrlFetchError, fetch_url_text, infer_kind, parse_file, summarize
 from .scoring import memo_to_markdown
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -136,7 +136,10 @@ async def add_materials(
             )
         )
     if url:
-        text = await fetch_url_text(url)
+        try:
+            text = await fetch_url_text(url)
+        except UrlFetchError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
         summary, excerpt = summarize(text)
         db.add_material(
             SourceMaterial(
@@ -157,7 +160,10 @@ async def add_materials(
 @app.post("/deals/{deal_id}/urls")
 async def add_url(deal_id: str, payload: UrlCreate) -> DealAnalysis:
     ensure_deal(deal_id)
-    text = await fetch_url_text(payload.url)
+    try:
+        text = await fetch_url_text(payload.url)
+    except UrlFetchError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     summary, excerpt = summarize(text)
     db.add_material(
         SourceMaterial(
