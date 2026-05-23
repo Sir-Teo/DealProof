@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models import DealClaim, RiskMemo
+from app.parsers import UrlFetchError
 from app.scoring import score_claims
 
 
@@ -18,6 +19,26 @@ def test_demo_deal_can_be_created_and_loaded():
         loaded = client.get(f"/deals/{deal['id']}")
         assert loaded.status_code == 200
         assert len(loaded.json()["materials"]) >= 3
+
+
+def test_add_url_returns_readable_fetch_failure(monkeypatch):
+    async def fail_fetch(_url: str) -> str:
+        raise UrlFetchError("Failed to fetch URL: upstream returned HTTP 403.")
+
+    monkeypatch.setattr("app.main.fetch_url_text", fail_fetch)
+
+    with TestClient(app) as client:
+        created = client.post("/deals", json={})
+        assert created.status_code == 200
+        deal_id = created.json()["id"]
+
+        response = client.post(
+            f"/deals/{deal_id}/urls",
+            json={"url": "https://www.sec.gov/Archives/edgar/data/1387222/000095010326007678/xslF345X06/ownership.xml"},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Failed to fetch URL: upstream returned HTTP 403."
 
 
 def test_risk_memo_accepts_structured_evidence_map_items():

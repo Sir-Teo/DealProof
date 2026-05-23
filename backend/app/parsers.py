@@ -10,6 +10,22 @@ from bs4 import BeautifulSoup
 from docx import Document
 from pypdf import PdfReader
 
+from .config import HTTP_USER_AGENT
+
+
+class UrlFetchError(RuntimeError):
+    pass
+
+
+def request_headers_for_url(url: str) -> dict[str, str]:
+    headers = {
+        "User-Agent": HTTP_USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
+    }
+    if "sec.gov" in url.lower():
+        headers["Accept-Encoding"] = "gzip, deflate"
+    return headers
+
 
 def summarize(text: str) -> tuple[str, str]:
     clean = re.sub(r"\s+", " ", text).strip()
@@ -36,8 +52,14 @@ def parse_file(path: Path) -> str:
 
 async def fetch_url_text(url: str) -> str:
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-        response = await client.get(url)
-        response.raise_for_status()
+        try:
+            response = await client.get(url, headers=request_headers_for_url(url))
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            raise UrlFetchError(f"Failed to fetch URL: upstream returned HTTP {status}.") from exc
+        except httpx.HTTPError as exc:
+            raise UrlFetchError(f"Failed to fetch URL: {exc}") from exc
     soup = BeautifulSoup(response.text, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
