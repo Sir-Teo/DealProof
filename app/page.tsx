@@ -278,6 +278,8 @@ export default function Home() {
     event?.preventDefault();
     const nonEmptyUrls = urls.filter((u) => u.trim());
     if (!files?.length && !nonEmptyUrls.length) return;
+    const invalidUrl = nonEmptyUrls.find((u) => !/^https?:\/\/.+/.test(u));
+    if (invalidUrl) { setError(`Invalid URL — must start with http:// or https://`); return; }
     setBusy("upload");
     setError(null);
     try {
@@ -475,8 +477,11 @@ export default function Home() {
                       )}
                     </div>
                   ))}
-                  <button type="button" className="addUrlBtn" onClick={addUrl}>+ URL</button>
+                  <button type="button" className="addUrlBtn" onClick={addUrl}><Plus size={11} />Add URL</button>
                 </div>
+                {error && busy !== "upload" && (
+                  <p className="drawerError"><XCircle size={13} />{error}</p>
+                )}
                 <button className="secondaryButton" type="button" onClick={() => void uploadMaterials()} disabled={busy === "upload" || (!files?.length && !urls.some((u) => u.trim()))}>
                   {busy === "upload" ? <Loader2 className="spin" size={13} /> : <FileText size={13} />}
                   {UI_COPY.addMaterialButton}

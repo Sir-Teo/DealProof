@@ -1117,6 +1117,9 @@ summary:focus-visible {
 }
 
 .addUrlBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   background: none;
   border: none;
   color: var(--blue);
@@ -1129,6 +1132,19 @@ summary:focus-visible {
 
 .addUrlBtn:hover {
   opacity: 0.75;
+}
+
+.drawerError {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--red-tint, #fef2f2);
+  color: var(--red, #dc2626);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 @keyframes slideDown {
