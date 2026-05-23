@@ -236,51 +236,50 @@ def chunk_materials(state: DiligenceState) -> DiligenceState:
 
 def profile_deal(state: DiligenceState) -> DiligenceState:
     llm = get_llm_client()
+    if not llm.enabled:
+        raise RuntimeError("DEEPSEEK_API_KEY is not configured. Add it to backend/.env.")
     context = format_material_context(state["materials"], max_chars=9_000)
-    if llm.enabled:
-        system = (
-            "You profile private-market diligence packets. Return JSON only. "
-            "Infer sector, businessModel, customer, stage, and materialMix from the supplied materials. "
-            "Use concise phrases and do not invent facts that are not implied by the packet."
-        )
-        user = (
-            f"Company: {state['company']}\nStage from deal record: {state.get('stage', '')}\n\n"
-            "Return shape: {\"profile\":{\"sector\":\"...\",\"businessModel\":\"...\",\"customer\":\"...\","
-            "\"stage\":\"...\",\"materialMix\":[\"deck\",\"financials\",\"customer references\"]}}\n\n"
-            f"Materials:\n{context}"
-        )
-        try:
-            generated, raw_output = llm.complete_json_with_raw(system, user, DealProfileGeneration, on_chunk=stream_llm_chunk(state, "profile_deal"))
-            return {**state, "profile": normalize_profile(generated.profile, state), **with_llm_output(state, "profile_deal", raw_output)}
-        except Exception as exc:
-            raise RuntimeError("LLM profile step failed.") from exc
-    return {**state, "profile": fallback_deal_profile(state)}
+    system = (
+        "You profile private-market diligence packets. Return JSON only. "
+        "Infer sector, businessModel, customer, stage, and materialMix from the supplied materials. "
+        "Use concise phrases and do not invent facts that are not implied by the packet."
+    )
+    user = (
+        f"Company: {state['company']}\nStage from deal record: {state.get('stage', '')}\n\n"
+        "Return shape: {\"profile\":{\"sector\":\"...\",\"businessModel\":\"...\",\"customer\":\"...\","
+        "\"stage\":\"...\",\"materialMix\":[\"deck\",\"financials\",\"customer references\"]}}\n\n"
+        f"Materials:\n{context}"
+    )
+    try:
+        generated, raw_output = llm.complete_json_with_raw(system, user, DealProfileGeneration, on_chunk=stream_llm_chunk(state, "profile_deal"))
+        return {**state, "profile": normalize_profile(generated.profile, state), **with_llm_output(state, "profile_deal", raw_output)}
+    except Exception as exc:
+        raise RuntimeError("LLM profile step failed.") from exc
 
 
 def extract_claims(state: DiligenceState) -> DiligenceState:
     llm = get_llm_client()
+    if not llm.enabled:
+        raise RuntimeError("DEEPSEEK_API_KEY is not configured. Add it to backend/.env.")
     context = format_material_context(state["materials"], max_chars=18_000)
     profile = state.get("profile", DealProfile())
-    if llm.enabled:
-        system = (
-            "You extract investor diligence claims from deal materials. Return JSON only. "
-            "Extract concrete, verifiable VC/PE diligence claims about market, growth, ROI, competition, pricing, retention, "
-            "compliance, financials, product, team, go-to-market, fundraising, legal, and operations. "
-            "Every claim must include a sourceMaterial and direct sourceSnippet from the supplied context. "
-            "Prefer specific claims with metrics, named customers, dates, cohorts, fundraising terms, product capabilities, legal status, "
-            "or explicit assertions that would affect an IC decision. Initial status must be missing and riskRationale can be empty."
-        )
-        user = (
-            f"Company: {state['company']}\nProfile: {profile.model_dump_json()}\n\n"
-            "Return shape: {\"claims\":[{\"id\":\"claim-01\",\"text\":\"...\",\"category\":\"market|growth|customer_roi|competition|pricing|retention|compliance|financials|product|team|go_to_market|fundraising|legal|operations\","
-            "\"sourceMaterial\":\"...\",\"sourceSnippet\":\"...\",\"importance\":\"high|medium|low\",\"status\":\"missing\",\"riskRationale\":\"\"}]}\n\n"
-            f"Materials:\n{context}"
-        )
-        extracted, raw_output = llm.complete_json_with_raw(system, user, ClaimExtraction, on_chunk=stream_llm_chunk(state, "extract_claims"))
-        claims = normalize_claim_ids(extracted.claims)
-        state = {**state, **with_llm_output(state, "extract_claims", raw_output)}
-    else:
-        claims = fallback_claims(state["materials"])
+    system = (
+        "You extract investor diligence claims from deal materials. Return JSON only. "
+        "Extract concrete, verifiable VC/PE diligence claims about market, growth, ROI, competition, pricing, retention, "
+        "compliance, financials, product, team, go-to-market, fundraising, legal, and operations. "
+        "Every claim must include a sourceMaterial and direct sourceSnippet from the supplied context. "
+        "Prefer specific claims with metrics, named customers, dates, cohorts, fundraising terms, product capabilities, legal status, "
+        "or explicit assertions that would affect an IC decision. Initial status must be missing and riskRationale can be empty."
+    )
+    user = (
+        f"Company: {state['company']}\nProfile: {profile.model_dump_json()}\n\n"
+        "Return shape: {\"claims\":[{\"id\":\"claim-01\",\"text\":\"...\",\"category\":\"market|growth|customer_roi|competition|pricing|retention|compliance|financials|product|team|go_to_market|fundraising|legal|operations\","
+        "\"sourceMaterial\":\"...\",\"sourceSnippet\":\"...\",\"importance\":\"high|medium|low\",\"status\":\"missing\",\"riskRationale\":\"\"}]}\n\n"
+        f"Materials:\n{context}"
+    )
+    extracted, raw_output = llm.complete_json_with_raw(system, user, ClaimExtraction, on_chunk=stream_llm_chunk(state, "extract_claims"))
+    claims = normalize_claim_ids(extracted.claims)
+    state = {**state, **with_llm_output(state, "extract_claims", raw_output)}
     if not claims:
         raise ValueError("No diligence claims were extracted from the supplied materials.")
     return {**state, "claims": claims[:18]}
@@ -421,6 +420,8 @@ def duplicated_claims(claims: list[DealClaim]) -> list[str]:
 
 def generate_memo(state: DiligenceState) -> DiligenceState:
     llm = get_llm_client()
+    if not llm.enabled:
+        raise RuntimeError("DEEPSEEK_API_KEY is not configured. Add it to backend/.env.")
     score_summary = score_claims(state["claims"], state.get("evidence", []), state.get("quality_review"))
     grade = score_summary.grade
     profile = state.get("profile", DealProfile())
@@ -431,34 +432,25 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
     )
     evidence_context = "\n".join(evidence_summary_for_claim(claim, state.get("evidence", [])) for claim in state["claims"])
     quality_context = state.get("quality_review", QualityReview()).model_dump_json()
-    if llm.enabled:
-        system = (
-            "You write concise partner-ready VC/PE IC diligence memos. Return JSON only. "
-            "Use decision-oriented sections: executive summary, thesis assessment, evidence map, what can be trusted, "
-            "material risks, decision drivers, next diligence requests, open questions, and recommendation. "
-            "Do not present weak, missing, contradicted, or low-confidence claims as strengths. Do not invent facts. "
-            "The overallGrade must match the scoring rules supplied by the caller."
-        )
-        user = (
-            f"Company: {state['company']}\nProfile: {profile.model_dump_json()}\nOverall grade from scoring rules: {grade}\n"
-            f"IC readiness score: {score_summary.overall}/100\nScore drivers: {score_summary.drivers}\n"
-            f"Quality review: {quality_context}\n\nClaims:\n{claim_context}\n\nEvidence summaries:\n{evidence_context}\n\n"
-            "Return shape: {\"memo\":{\"company\":\"...\",\"overallGrade\":\"green|yellow|red\",\"investmentQuestion\":\"...\","
-            "\"keyStrengths\":[...],\"materialRisks\":[...],\"followUpQuestions\":[...],\"icRecommendation\":\"...\","
-            "\"executiveSummary\":\"...\",\"thesisAssessment\":\"...\",\"evidenceMap\":[...],\"keyRisks\":[...],"
-            "\"nextDiligenceRequests\":[...],\"decisionDrivers\":[...]}}"
-        )
-        try:
-            generated, raw_output = llm.complete_json_with_raw(system, user, MemoGeneration, on_chunk=stream_llm_chunk(state, "generate_memo"))
-            fallback = fallback_memo(state["company"], grade, state["claims"], state.get("evidence", []), profile, state.get("quality_review"))
-            memo = fill_missing_memo_sections(generated.memo.model_copy(update={"overallGrade": grade}), fallback)
-            return {**state, "memo": memo, **with_llm_output(state, "generate_memo", raw_output)}
-        except Exception:
-            memo = fallback_memo(state["company"], grade, state["claims"], state.get("evidence", []), profile, state.get("quality_review"))
-            return {**state, "memo": memo}
-    else:
-        memo = fallback_memo(state["company"], grade, state["claims"], state.get("evidence", []), profile, state.get("quality_review"))
-    return {**state, "memo": memo}
+    system = (
+        "You write concise partner-ready VC/PE IC diligence memos. Return JSON only. "
+        "Use decision-oriented sections: executive summary, thesis assessment, evidence map, what can be trusted, "
+        "material risks, decision drivers, next diligence requests, open questions, and recommendation. "
+        "Do not present weak, missing, contradicted, or low-confidence claims as strengths. Do not invent facts. "
+        "The overallGrade must match the scoring rules supplied by the caller."
+    )
+    user = (
+        f"Company: {state['company']}\nProfile: {profile.model_dump_json()}\nOverall grade from scoring rules: {grade}\n"
+        f"IC readiness score: {score_summary.overall}/100\nScore drivers: {score_summary.drivers}\n"
+        f"Quality review: {quality_context}\n\nClaims:\n{claim_context}\n\nEvidence summaries:\n{evidence_context}\n\n"
+        "Return shape: {\"memo\":{\"company\":\"...\",\"overallGrade\":\"green|yellow|red\",\"investmentQuestion\":\"...\","
+        "\"keyStrengths\":[...],\"materialRisks\":[...],\"followUpQuestions\":[...],\"icRecommendation\":\"...\","
+        "\"executiveSummary\":\"...\",\"thesisAssessment\":\"...\",\"evidenceMap\":[...],\"keyRisks\":[...],"
+        "\"nextDiligenceRequests\":[...],\"decisionDrivers\":[...]}}"
+    )
+    generated, raw_output = llm.complete_json_with_raw(system, user, MemoGeneration, on_chunk=stream_llm_chunk(state, "generate_memo"))
+    memo = generated.memo.model_copy(update={"overallGrade": grade})
+    return {**state, "memo": memo, **with_llm_output(state, "generate_memo", raw_output)}
 
 
 def fill_missing_memo_sections(memo: RiskMemo, fallback: RiskMemo) -> RiskMemo:
@@ -514,8 +506,9 @@ def refresh_review_artifacts(deal_id: str) -> None:
     reviewed = review_quality(state)
     score_summary = score_claims(deal.claims, deal.evidence, reviewed["quality_review"])
     grade = score_summary.grade
-    memo = fallback_memo(deal.company, grade, deal.claims, deal.evidence, deal.profile, reviewed["quality_review"])
-    db.save_review_artifacts(deal_id, memo, reviewed["quality_review"])
+    reviewed["on_progress"] = None
+    memo_state = generate_memo({**reviewed, "deal_id": deal_id, "company": deal.company, "stage": deal.stage})
+    db.save_review_artifacts(deal_id, memo_state["memo"], reviewed["quality_review"])
 
 
 def answer_question(deal_id: str, question: str, chat_history=None):
@@ -541,42 +534,28 @@ def answer_question(deal_id: str, question: str, chat_history=None):
     evidence = [item for item in deal.evidence if item.claimId in {claim.id for claim in claims}]
     citations = list(dict.fromkeys(item.citation for item in evidence))[:5]
     llm = get_llm_client()
-    if llm.enabled:
-        system = (
-            f"You are {APP_NAME}, a {AGENT_ROLE}. Answer only from stored claims and evidence. "
-            "Use recent chat turns only to resolve follow-up references, not as evidence. "
-            "If evidence is insufficient, say so directly. Return JSON only with answer, citations, confidence."
-        )
-        history_context = "\n".join(
-            f"Q: {turn.question}\nA: {turn.answer}\nCitations: {', '.join(turn.citations)}" for turn in chat_history[-6:]
-        )
-        user = (
-            f"Question: {question}\n\nClaims:\n"
-            + "\n".join(claim.model_dump_json() for claim in claims)
-            + "\n\nEvidence:\n"
-            + "\n".join(item.model_dump_json() for item in evidence)
-            + (f"\n\nRecent chat turns:\n{history_context}" if history_context else "")
-        )
-        try:
-            answer = llm.complete_json(system, user, ChatAnswer)
-            known_citations = [item.citation for item in evidence]
-            if not answer.citations or any(citation not in known_citations for citation in answer.citations):
-                answer = answer.model_copy(update={"citations": list(dict.fromkeys(known_citations))[:5]})
-            return answer
-        except Exception:
-            pass
-    weak = [claim for claim in claims if claim.status != "supported"]
-    if weak:
-        lines = ["The evidence is not strong enough to fully trust this yet.\n"]
-        for claim in weak:
-            lines.append(f"• {claim.text} — {claim.status}: {claim.riskRationale}")
-        answer = "\n".join(lines)
-    else:
-        lines = ["The stored evidence supports this directionally.\n"]
-        for claim in claims:
-            lines.append(f"• {claim.text}: {claim.riskRationale}")
-        answer = "\n".join(lines)
-    return ChatAnswer(answer=answer, citations=citations, confidence="medium" if weak else "high")
+    if not llm.enabled:
+        raise RuntimeError("DEEPSEEK_API_KEY is not configured. Add it to backend/.env.")
+    system = (
+        f"You are {APP_NAME}, a {AGENT_ROLE}. Answer only from stored claims and evidence. "
+        "Use recent chat turns only to resolve follow-up references, not as evidence. "
+        "If evidence is insufficient, say so directly. Return JSON only with answer, citations, confidence."
+    )
+    history_context = "\n".join(
+        f"Q: {turn.question}\nA: {turn.answer}\nCitations: {', '.join(turn.citations)}" for turn in chat_history[-6:]
+    )
+    user = (
+        f"Question: {question}\n\nClaims:\n"
+        + "\n".join(claim.model_dump_json() for claim in claims)
+        + "\n\nEvidence:\n"
+        + "\n".join(item.model_dump_json() for item in evidence)
+        + (f"\n\nRecent chat turns:\n{history_context}" if history_context else "")
+    )
+    answer = llm.complete_json(system, user, ChatAnswer)
+    known_citations = [item.citation for item in evidence]
+    if not answer.citations or any(citation not in known_citations for citation in answer.citations):
+        answer = answer.model_copy(update={"citations": list(dict.fromkeys(known_citations))[:5]})
+    return answer
 
 
 def expand_question_terms(terms: set[str]) -> set[str]:
