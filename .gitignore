@@ -6,6 +6,7 @@ playwright-report/
 test-results/
 generated_reports/
 .env*.local
+backend/.env
 *.tsbuildinfo
 dist/
 backend/.venv/
