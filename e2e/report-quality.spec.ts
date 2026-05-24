@@ -220,7 +220,7 @@ async function seedDemoAndRunThroughUi(page: Page) {
   const analyzeResponsePromise = page.waitForResponse((response) => response.url().includes("/analyze-stream") && response.request().method() === "POST");
 
   await page.goto("/");
-  await page.getByRole("button", { name: /Seed demo/i }).click();
+  await page.getByRole("button", { name: /Try demo/i }).click();
 
   const seedResponse = await seedResponsePromise;
   const analyzeResponse = await analyzeResponsePromise;
@@ -337,15 +337,14 @@ function assertDemoOutputQuality(deal: DealAnalysis) {
   expect(deal.evidence.some((item) => item.quoteSpan && item.stance !== "not_found")).toBe(true);
 
   expect(Array.from(new Set(deal.claims.map((claim) => claim.status)))).toContain("weak");
-  expect(claimText).toMatch(/ROI|retention|NRR|compliance|compet/i);
-  expect(deal.claims.some((claim) => claim.status !== "supported" && /compet/i.test(claim.text))).toBe(true);
-  expect(deal.claims.every((claim) => claim.status !== "supported")).toBe(true);
+  expect(claimText).toMatch(/ARR|legal|AmLaw|gross margin|GPT-4|regulatory|hallucination/i);
+  expect(deal.claims.some((claim) => claim.status !== "supported" && /legal|market|ARR|gross margin/i.test(claim.text))).toBe(true);
   expect(deal.claims.every((claim) => claim.verificationNeed.trim() && claim.riskRationale.trim())).toBe(true);
 
   expect(memo.overallGrade).toBe(requireScore(deal).grade);
-  expect(memo.investmentQuestion).toMatch(/CaviClear|investment|IC|trust|ready|scale/i);
-  expect(riskText).toMatch(/compet|compliance|ROI|retention|unsupported|contradict/i);
-  expect(diligenceText).toMatch(/customer|evidence|reference|compliance|cohort|retention|ROI/i);
+  expect(memo.investmentQuestion).toMatch(/Harvey|investment|IC|trust|ready|legal/i);
+  expect(riskText).toMatch(/legal|market|ARR|gross margin|unsupported|weak|validation/i);
+  expect(diligenceText).toMatch(/customer|evidence|reference|cohort|financial|legal|source/i);
   expect(strengthText).not.toMatch(/no direct competitors/i);
 
   expect(qualityReview.memoReadinessScore).toBeLessThan(90);

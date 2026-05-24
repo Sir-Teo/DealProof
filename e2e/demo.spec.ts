@@ -6,9 +6,8 @@ test("runs the gold-path DealProof chat demo", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByText("Add deal materials to begin.")).toBeVisible();
-  await page.getByRole("button", { name: /Seed demo/i }).click();
+  await page.getByRole("button", { name: /Try demo/i }).click();
   await expect((await seedResponse).ok()).toBe(true);
-  await expect(page.getByText(/Seeded CaviClear AI/)).toBeVisible();
   await expect((await analyzeResponse).ok()).toBe(true);
   await expect(page.getByText("Analysis complete", { exact: true }).first()).toBeVisible({ timeout: 90_000 });
 
@@ -37,10 +36,10 @@ test("runs the gold-path DealProof chat demo", async ({ page }) => {
   await expect(page.locator(".chatCitationChip").first()).toBeVisible();
 
   const followUpResponse = page.waitForResponse((response) => response.url().includes("/chat") && response.request().method() === "POST");
-  await page.locator(".promptArea input").fill("What about retention?");
-  await page.locator(".sendButton").click();
+  await page.locator(".promptRow input").fill("What about retention?");
+  await page.locator(".iconButton--send").click();
   await expect((await followUpResponse).ok()).toBe(true);
   await expect(page.locator(".answerBox")).toHaveCount(2, { timeout: 60_000 });
-  await expect(page.getByText("What about retention?")).toBeVisible();
+  await expect(page.getByText("What about retention?")).toHaveCount(1);
   await expect(page.locator(".chatCitationChip").nth(1)).toBeVisible();
 });

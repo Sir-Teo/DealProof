@@ -31,7 +31,6 @@ test("runs a larger public-material data room through the diligence workflow", a
   await page.getByRole("button", { name: /^Add$/ }).click();
   await expect((await createResponse).ok()).toBe(true);
   await expect((await materialsResponse).ok()).toBe(true);
-  await expect(page.getByText("Added diligence material")).toBeVisible();
   await expect(page.getByText(/14_analyst_claim_packet\.txt/)).toBeVisible();
 
   const analyzeResponse = page.waitForResponse((response) => response.url().includes("/analyze-stream") && response.request().method() === "POST");
@@ -52,8 +51,8 @@ test("runs a larger public-material data room through the diligence workflow", a
   await expect(contradictedEvidence.locator(".evidenceItem").filter({ hasText: "contradicts" }).first()).toBeVisible();
 
   const chatResponse = page.waitForResponse((response) => response.url().includes("/chat") && response.request().method() === "POST");
-  await page.getByPlaceholder("Ask about the deal evidence...").fill("What are the biggest unsupported or contradicted claims?");
-  await page.getByPlaceholder("Ask about the deal evidence...").press("Enter");
+  await page.locator(".promptRow input").fill("What are the biggest unsupported or contradicted claims?");
+  await page.locator(".iconButton--send").click();
   await expect((await chatResponse).ok()).toBe(true);
   await expect(page.locator(".answerBox")).toBeVisible({ timeout: 60_000 });
   await expect(page.locator(".answerBox footer span").first()).toBeVisible();

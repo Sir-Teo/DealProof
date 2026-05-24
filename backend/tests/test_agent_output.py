@@ -37,8 +37,8 @@ def test_seeded_agent_output_is_concrete_and_memo_grade_matches(monkeypatch):
     assert len(claim_texts) >= 6
     assert len(claim_texts) == len(set(claim_texts))
     assert all(len(text) >= 20 for text in claim_texts)
-    assert "ARR,82000,118000,167000,235000" not in claim_texts
-    assert any("ARR grew from $82k to $235k" in text for text in claim_texts)
+    assert "ARR,0,0,500000,500000,1120000" not in claim_texts
+    assert any("ARR grew from $500k to $1.12M" in text for text in claim_texts)
     assert all(item["citation"] for item in deal["evidence"])
 
     assert deal["memo"]["overallGrade"] == deal["score"]["grade"]

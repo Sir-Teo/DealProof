@@ -21,7 +21,7 @@ test("runs a real-world public-material diligence case", async ({ page }, testIn
   await page.getByRole("button", { name: /^Add$/ }).click();
   await expect((await createResponse).ok()).toBe(true);
   await expect((await materialsResponse).ok()).toBe(true);
-  await expect(page.getByText("Added diligence material")).toBeVisible();
+  await expect(page.getByText(/real_case_claim_packet\.txt/)).toBeVisible();
 
   const analyzeResponse = page.waitForResponse((response) => response.url().includes("/analyze-stream") && response.request().method() === "POST");
   await page.getByRole("button", { name: "Run agent", exact: true }).click();
@@ -43,8 +43,8 @@ test("runs a real-world public-material diligence case", async ({ page }, testIn
   await expect(firstEvidence.locator(".quoteBlock").first()).toBeVisible();
 
   const chatResponse = page.waitForResponse((response) => response.url().includes("/chat") && response.request().method() === "POST");
-  await page.getByPlaceholder("Ask about the deal evidence...").fill("Can we trust the ROI and no-competitor claims?");
-  await page.getByPlaceholder("Ask about the deal evidence...").press("Enter");
+  await page.locator(".promptRow input").fill("Can we trust the ROI and no-competitor claims?");
+  await page.locator(".iconButton--send").click();
   await expect((await chatResponse).ok()).toBe(true);
   await expect(page.locator(".answerBox")).toBeVisible({ timeout: 60_000 });
   await expect(page.locator(".chatCitationChip").first()).toBeVisible();

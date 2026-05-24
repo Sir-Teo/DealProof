@@ -119,7 +119,7 @@ test("composer and empty state render correctly", async ({ page }) => {
   await expect(page.locator(".composerCard")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Ask about the deal evidence..." })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Run agent", exact: true })).toBeDisabled();
-  await expect(page.getByRole("button", { name: /Seed demo/i })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /Load demo deal/i })).toBeEnabled();
 });
 
 test("attach drawer opens and closes on paperclip click", async ({ page }) => {
@@ -136,7 +136,7 @@ test("attach drawer opens and closes on paperclip click", async ({ page }) => {
 test("post-analysis panels show memo, claims, and evidence", async ({ page }) => {
   await setupAnalyzedMocks(page);
   await page.goto("/");
-  await page.getByRole("button", { name: /Seed demo/i }).click();
+  await page.getByRole("button", { name: /Try demo/i }).click();
 
   await expect(page.locator(".messageTitle").filter({ hasText: /Analysis complete/i })).toBeVisible({ timeout: 5_000 });
   await expect(page.locator(".agentOutput")).toBeVisible({ timeout: 10_000 });
@@ -169,7 +169,7 @@ test("agent stream renders web-search research details", async ({ page }) => {
 
   await setupAnalyzedMocks(page, streamBody);
   await page.goto("/");
-  await page.getByRole("button", { name: /Seed demo/i }).click();
+  await page.getByRole("button", { name: /Try demo/i }).click();
 
   const webTool = page.locator(".toolCall").filter({ hasText: "search public web" }).first();
   await expect(webTool).toBeVisible({ timeout: 10_000 });
@@ -184,7 +184,7 @@ test("mobile keeps composer and artifact panels usable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await setupAnalyzedMocks(page);
   await page.goto("/");
-  await page.getByRole("button", { name: /Seed demo/i }).click();
+  await page.getByRole("button", { name: /Try demo/i }).click();
 
   await expect(page.locator(".composerCard")).toBeVisible();
   await expect(page.locator(".agentOutput")).toBeVisible({ timeout: 10_000 });
