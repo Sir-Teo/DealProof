@@ -1,0 +1,26 @@
+services:
+  # Backend — FastAPI on Render (free tier works for demo)
+  - type: web
+    name: dealproof-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DEEPSEEK_API_KEY
+        sync: false          # set manually in Render dashboard
+      - key: DEALPROOF_CORS_ORIGINS
+        value: "https://dealproof.vercel.app,https://localhost:3000"
+      - key: DEALPROOF_CORS_ORIGIN_REGEX
+        value: "https://.*\\.vercel\\.app"
+      - key: DEALPROOF_DATA_DIR
+        value: /app/data
+    disk:
+      name: dealproof-db
+      mountPath: /app/data
+      sizeGB: 1
+
+  # Frontend — deploy to Vercel separately (see below)
+  # 1. Push repo to GitHub
+  # 2. Import into vercel.com → Framework: Next.js
+  # 3. Set env var: NEXT_PUBLIC_API_BASE_URL=https://dealproof-backend.onrender.com

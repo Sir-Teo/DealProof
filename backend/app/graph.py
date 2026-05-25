@@ -611,18 +611,39 @@ def normalize_claim_ids(claims: list[DealClaim]) -> list[DealClaim]:
 
 
 _ARTIFACT_PREFIX = re.compile(
-    r"^(?:Slide\s*\d+\s*[:–\-]\s*|##\s*|###\s*|Source\s*:\s*|Note\s*:\s*|Claim\s*:\s*)",
+    r"^(?:"
+    r"Slide\s*\d+\s*(?:[:–\-—]\s*)?"      # Slide 7: / Slide 7 -
+    r"|Page\s*\d+\s*[:–\-—]\s*"            # Page 3:
+    r"|Section\s*\d*\s*[:–\-—]\s*"         # Section 2:
+    r"|##?\s*"                              # ## or ###
+    r"|Source\s*:\s*"                       # Source:
+    r"|Note\s*:\s*"                         # Note:
+    r"|Claim\s*:\s*"                        # Claim:
+    r"|Key\s+Claim\s*:\s*"                  # Key Claim:
+    r"|Finding\s*:\s*"                      # Finding:
+    r"|Assertion\s*:\s*"                    # Assertion:
+    r"|Evidence\s*:\s*"                     # Evidence:
+    r")",
     re.IGNORECASE,
 )
 
+_TRAILING_SOURCE = re.compile(r"\s*[\(\[]\s*(?:source|from|see|ref|slide|page)\s*[:\d][^\)\]]*[\)\]]\.?$", re.IGNORECASE)
+
 
 def clean_claim_text(claims: list[DealClaim]) -> list[DealClaim]:
-    """Strip source-navigation prefixes like 'Slide 7:' or 'Claim:' from claim text."""
     cleaned = []
     for claim in claims:
-        if _ARTIFACT_PREFIX.match(claim.text):
-            cleaned_text = _ARTIFACT_PREFIX.sub("", claim.text).strip()
-            cleaned.append(claim.model_copy(update={"text": cleaned_text}))
+        text = claim.text
+        # Strip leading artifact prefixes (possibly repeated, e.g. "Slide 4: Slide 4: ...")
+        for _ in range(3):
+            if _ARTIFACT_PREFIX.match(text):
+                text = _ARTIFACT_PREFIX.sub("", text).strip()
+            else:
+                break
+        # Strip trailing source annotations like "(Source: deck slide 4)"
+        text = _TRAILING_SOURCE.sub("", text).strip()
+        if text != claim.text:
+            cleaned.append(claim.model_copy(update={"text": text}))
         else:
             cleaned.append(claim)
     return cleaned

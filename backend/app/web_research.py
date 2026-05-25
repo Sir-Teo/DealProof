@@ -161,26 +161,51 @@ def emit_web_progress(on_progress: WebProgress | None, event: str, payload: dict
 
 def web_queries(company: str, profile: DealProfile, claim: DealClaim) -> list[str]:
     claim_terms = " ".join(list(keywords(claim.text))[:8])
+    sector = profile.sector.lower()
+    customer = profile.customer.lower()
+
+    if claim.category == "competition":
+        # Surface actual competitors rather than asking about the company itself
+        sector_context = f"{sector} {customer}" if customer != "unknown" else sector
+        return list(dict.fromkeys([
+            f"{sector_context} software competitors alternatives 2024",
+            f'"{company}" competitors "alternative to" OR "versus" OR "vs"',
+            f"{sector_context} vendors list comparison",
+        ]))
+
+    if claim.category == "market":
+        return list(dict.fromkeys([
+            f"{sector} market size TAM {customer} 2024 report",
+            f'"{company}" {sector} market opportunity billion',
+            f"{sector} {customer} industry analysts forecast",
+        ]))
+
+    if claim.category == "customer_roi":
+        return list(dict.fromkeys([
+            f'"{company}" customer case study ROI results',
+            f'"{company}" customer testimonial savings hours',
+            f"{sector} {customer} ROI benchmark study",
+        ]))
+
     category_context = {
-        "competition": "competitors alternatives",
-        "market": "market size report",
         "financials": "annual report filing revenue gross margin",
-        "growth": "customers revenue growth",
-        "customer_roi": "customer case study ROI",
-        "compliance": "security compliance regulatory",
-        "legal": "lawsuit patent legal",
-        "fundraising": "funding round valuation",
-        "product": "product documentation customers",
+        "growth": "customers revenue growth traction",
+        "compliance": "security compliance regulatory audit",
+        "legal": "lawsuit patent legal risk",
+        "fundraising": "funding round valuation investors",
+        "product": "product review customers integration",
+        "team": "founder background LinkedIn experience",
+        "go_to_market": "go to market sales channel partners",
+        "retention": "churn NRR net revenue retention",
+        "pricing": "pricing model contract value",
+        "operations": "operations infrastructure scalability",
     }.get(claim.category, profile.sector)
-    return list(
-        dict.fromkeys(
-            [
-                f'"{company}" {category_context} {claim_terms}',
-                f'"{company}" {claim.category.replace("_", " ")} evidence',
-                f'"{company}" {profile.sector} {category_context}',
-            ]
-        )
-    )
+
+    return list(dict.fromkeys([
+        f'"{company}" {category_context} {claim_terms}',
+        f'"{company}" {claim.category.replace("_", " ")} evidence',
+        f'"{company}" {profile.sector} {category_context}',
+    ]))
 
 
 def duckduckgo_search(client: httpx.Client, query: str, limit: int = 3) -> list[SearchResult]:
@@ -290,8 +315,11 @@ def web_stance_for_claim(company: str, claim: DealClaim, chunk: MaterialChunk) -
     local_stance = evidence_stance_for_chunk(claim, chunk)
     if local_stance == "contradicts":
         return local_stance
-    if claim.category == "competition" and denies_competition(claim.text) and names_competitor(company, chunk.text):
-        return "contradicts"
+    # When the claim denies competition and the web page names actual competitors,
+    # that's a contradiction even if the company name isn't mentioned.
+    if claim.category == "competition" and denies_competition(claim.text):
+        if names_competitor(company, chunk.text) or competitor_list_page(chunk.text):
+            return "contradicts"
     if local_stance == "supports" and company_or_metric_matches(company, claim, chunk.text):
         return "supports"
     return "partially_supports"
@@ -327,10 +355,20 @@ def names_competitor(company: str, text: str) -> bool:
     return bool(capitalized_names - company_tokens)
 
 
+def competitor_list_page(text: str) -> bool:
+    lower = text.lower()
+    list_signals = ["top 10", "top 5", "best alternatives", "alternatives to", "compare", "vs.", "compared to", "similar tools", "similar software", "other options", "also consider"]
+    return any(signal in lower for signal in list_signals) and len(re.findall(r"\b[A-Z][A-Za-z0-9]{2,}\b", text)) >= 4
+
+
 def minimum_relevance_for_claim(claim: DealClaim) -> float:
-    if claim.category in {"competition", "market", "financials"}:
+    # Competition and market queries target the sector, not just the company —
+    # allow lower bar so we capture contradictory industry evidence.
+    if claim.category in {"competition", "market"}:
+        return 0.12
+    if claim.category in {"financials", "customer_roi"}:
         return 0.18
-    return 0.24
+    return 0.22
 
 
 def web_title_for_stance(stance: str) -> str:

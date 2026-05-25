@@ -9,8 +9,10 @@ from .config import DATABASE_FILENAME, DEFAULT_STAGE, DEFAULT_TAGLINE
 from .models import ChatTurn, DealAnalysis, DealClaim, DealProfile, EvidenceItem, QualityReview, RiskMemo, SourceMaterial
 from .scoring import score_claims
 
+import os as _os
 ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = ROOT / "data"
+# Allow DEALPROOF_DATA_DIR env var so deployed instances can point at a persistent disk mount.
+DATA_DIR = Path(_os.getenv("DEALPROOF_DATA_DIR", str(ROOT / "data")))
 DB_PATH = DATA_DIR / DATABASE_FILENAME
 
 

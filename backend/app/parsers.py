@@ -35,11 +35,34 @@ def summarize(text: str) -> tuple[str, str]:
     return " ".join(sentences[:2])[:280], clean[:520]
 
 
+def _parse_pdf(path: Path) -> str:
+    reader = PdfReader(str(path))
+    pages: list[str] = []
+    image_page_count = 0
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        text = text.strip()
+        if text:
+            pages.append(text)
+        else:
+            image_page_count += 1
+    extracted = "\n".join(pages)
+    # If more than half the pages yielded no text, the PDF is likely image-based.
+    # Surface a clear warning so the user knows to upload a text version or transcript.
+    total_pages = len(reader.pages)
+    if total_pages > 0 and image_page_count / total_pages > 0.5:
+        note = (
+            f"[NOTE: {image_page_count} of {total_pages} pages are image-only and could not be read. "
+            "For best results, upload the original editable file or a plain-text transcript alongside this PDF.]"
+        )
+        extracted = f"{note}\n\n{extracted}" if extracted else note
+    return extracted
+
+
 def parse_file(path: Path) -> str:
     suffix = path.suffix.lower()
     if suffix == ".pdf":
-        reader = PdfReader(str(path))
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
+        return _parse_pdf(path)
     if suffix == ".docx":
         doc = Document(str(path))
         return "\n".join(p.text for p in doc.paragraphs)

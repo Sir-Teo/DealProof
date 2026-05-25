@@ -23,6 +23,7 @@ from .config import (
     DEFAULT_STAGE,
     DEFAULT_TAGLINE,
     DEMO_PACKET_PATH,
+    DEMO_PACKET_PATH_2,
     EXPORT_MEMO_FILENAME,
     LOCAL_FRONTEND_ORIGIN_REGEX,
     LOCAL_FRONTEND_ORIGINS,
@@ -92,8 +93,17 @@ def create_deal(payload: DealCreate) -> DealAnalysis:
 
 @app.post("/deals/demo")
 def create_demo_deal() -> DealAnalysis:
+    return _seed_deal_from_packet(DEMO_PACKET_PATH)
+
+
+@app.post("/deals/demo2")
+def create_demo_deal_2() -> DealAnalysis:
+    return _seed_deal_from_packet(DEMO_PACKET_PATH_2)
+
+
+def _seed_deal_from_packet(packet_path) -> DealAnalysis:
     deal_id = f"deal-{uuid.uuid4().hex[:10]}"
-    packet = load_demo_packet()
+    packet = json.loads(packet_path.read_text())
     db.create_deal(deal_id, packet["company"], packet["tagline"], packet["stage"])
     for material in packet["materials"]:
         add_text_material(deal_id, material["name"], material["text"], "seed")

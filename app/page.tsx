@@ -257,16 +257,15 @@ export default function Home() {
     return created;
   }
 
-  async function loadDemoPacket() {
+  async function loadDemoPacket(route: "/deals/demo" | "/deals/demo2" = "/deals/demo") {
     setBusy("demo");
     setError(null);
     try {
-      const created = await api<DealAnalysis>("/deals/demo", { method: "POST" });
+      const created = await api<DealAnalysis>(route, { method: "POST" });
       persistDeal(created);
       setAgentEvents([]);
       setFeedNotes([]);
       void loadDealList();
-      setQuestion("Run full diligence analysis on Harvey AI");
       setPendingQuestion(null);
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
@@ -450,9 +449,13 @@ export default function Home() {
                 <p className="messageTitle">{UI_COPY.welcomeTitle}</p>
                 <p className="messageCopy">{UI_COPY.welcomeBody}</p>
                 <div className="welcomeActions">
-                  <button className="primaryButton" type="button" onClick={() => void loadDemoPacket()} disabled={Boolean(busy)}>
+                  <button className="primaryButton" type="button" onClick={() => void loadDemoPacket("/deals/demo")} disabled={Boolean(busy)}>
                     {busy === "demo" ? <Loader2 className="spin" size={13} /> : <ShieldCheck size={13} />}
                     {UI_COPY.seedDemoButton}
+                  </button>
+                  <button className="primaryButton" type="button" onClick={() => void loadDemoPacket("/deals/demo2")} disabled={Boolean(busy)}>
+                    {busy === "demo" ? <Loader2 className="spin" size={13} /> : <ShieldCheck size={13} />}
+                    {UI_COPY.seedDemo2Button}
                   </button>
                   <button className="secondaryButton" type="button" onClick={() => setAttachOpen(true)}>
                     <Upload size={13} />

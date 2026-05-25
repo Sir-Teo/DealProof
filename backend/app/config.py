@@ -22,3 +22,4 @@ LOCAL_FRONTEND_ORIGINS = tuple(
 )
 LOCAL_FRONTEND_ORIGIN_REGEX = os.getenv("DEALPROOF_CORS_ORIGIN_REGEX", r"http://(127\.0\.0\.1|localhost):\d+")
 DEMO_PACKET_PATH = Path(os.getenv("DEALPROOF_DEMO_PACKET_PATH", Path(__file__).with_name("demo_packet.json")))
+DEMO_PACKET_PATH_2 = Path(os.getenv("DEALPROOF_DEMO_PACKET_PATH_2", Path(__file__).with_name("synthpay_packet.json")))

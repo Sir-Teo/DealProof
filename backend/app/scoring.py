@@ -105,11 +105,22 @@ def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> D
         item.stance == "supports" and item.sourceIndependence != "founder_supplied" and has_audit_citation(item)
         for item in evidence
     )
-    founder_only_support = any(item.stance in {"supports", "partially_supports"} for item in evidence) and not independent_support
+    # Internal financial/operating documents (CSV models, data rooms) with matching numbers are authoritative
+    # even when same-source, as long as they are not founder-deck narrative (sourceIndependence != founder_supplied).
+    internal_doc_support = (
+        claim.category in {"financials", "growth", "pricing", "retention", "fundraising", "operations"}
+        and any(
+            item.sourceIndependence == "internal"
+            and item.stance in {"supports", "partially_supports"}
+            and has_audit_citation(item)
+            for item in evidence
+        )
+    )
+    founder_only_support = any(item.stance in {"supports", "partially_supports"} for item in evidence) and not independent_support and not internal_doc_support
     contradiction = any(item.stance == "contradicts" and has_audit_citation(item) for item in evidence)
     if contradiction:
         status = "contradicted"
-    elif independent_support:
+    elif independent_support or internal_doc_support:
         status = "supported"
     elif "partially_supports" in stances or founder_only_support:
         status = "weak"
@@ -121,8 +132,13 @@ def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> D
     confidence = "high" if quality_score >= 82 else "medium" if quality_score >= 55 else "low"
     verification_need = verification_need_for_claim(claim, evidence, status)
     has_public_web = any(item.sourceType == "public_web" for item in evidence)
+    has_internal_doc = any(item.sourceIndependence == "internal" for item in evidence)
     rationale = {
-        "supported": "The claim is supported by quote-backed public web evidence." if has_public_web else "The claim is supported by cited material supplied for this deal.",
+        "supported": (
+            "The claim is supported by quote-backed public web evidence." if has_public_web
+            else "The claim is supported by internal financial or operating data supplied for this deal." if has_internal_doc
+            else "The claim is supported by cited material supplied for this deal."
+        ),
         "weak": "The claim has partial support, but methodology, cohort, or external validation is incomplete.",
         "contradicted": "The claim conflicts with cited public web evidence." if has_public_web else "The claim conflicts with cited material or supplied source evidence.",
         "missing": "No reliable uploaded or supplied-URL evidence supports this claim.",
@@ -220,48 +236,53 @@ def decision_impact_for_claim(claim: DealClaim) -> str:
 
 
 def memo_to_markdown(memo: RiskMemo, score: ScoreSummary | None = None) -> str:
+    grade_emoji = {"GREEN": "🟢", "YELLOW": "🟡", "RED": "🔴"}.get(memo.overallGrade.upper(), "")
     sections = [
         f"# {MEMO_TITLE}: {memo.company}",
         "",
-        f"**Overall grade:** {memo.overallGrade.upper()}",
+        f"**Overall grade:** {grade_emoji} {memo.overallGrade.upper()}",
     ]
     if score:
-        sections.extend(
-            [
-                f"**IC readiness score:** {score.overall}/100",
-                "",
-                "## Score Drivers",
-                markdown_bullets(score.drivers),
-            ]
+        counts = score.counts
+        count_line = (
+            f"**Claim breakdown:** {counts.get('supported', 0)} supported · "
+            f"{counts.get('weak', 0)} weak · "
+            f"{counts.get('contradicted', 0)} contradicted · "
+            f"{counts.get('missing', 0)} missing"
         )
+        sections.extend([
+            f"**IC readiness:** {score.overall}/100",
+            count_line,
+        ])
+        if score.drivers:
+            sections.extend(["", "## Key Score Drivers", markdown_bullets(score.drivers)])
     if memo.executiveSummary:
         sections.extend(["", "## Executive Summary", memo.executiveSummary])
     if memo.thesisAssessment:
         sections.extend(["", "## Thesis Assessment", memo.thesisAssessment])
+    sections.extend([
+        "",
+        "## Investment Question",
+        f"> {memo.investmentQuestion}",
+    ])
+    if memo.keyStrengths:
+        sections.extend(["", "## What We Can Trust", markdown_bullets(memo.keyStrengths)])
+    risks = memo.keyRisks or memo.materialRisks
+    if risks:
+        sections.extend(["", "## Material Risks", markdown_bullets(risks)])
     if memo.decisionDrivers:
         sections.extend(["", "## Decision Drivers", markdown_bullets(memo.decisionDrivers)])
     if memo.evidenceMap:
         sections.extend(["", "## Evidence Map", markdown_bullets(memo.evidenceMap)])
-    sections.extend(
-        [
-            "",
-            "## Investment Question",
-            memo.investmentQuestion,
-            "",
-            "## What We Can Trust",
-            markdown_bullets(memo.keyStrengths),
-            "",
-            "## What Remains Unproven",
-            markdown_bullets(memo.keyRisks or memo.materialRisks),
-            "",
-            "## What Would Change the Decision",
-            markdown_bullets(memo.nextDiligenceRequests or memo.followUpQuestions),
-            "",
-            "## Recommendation",
-            memo.icRecommendation,
-            "",
-        ]
-    )
+    diligence = memo.nextDiligenceRequests or memo.followUpQuestions
+    if diligence:
+        sections.extend(["", "## Next Diligence Requests", markdown_bullets(diligence)])
+    sections.extend([
+        "",
+        "## Recommendation",
+        memo.icRecommendation,
+        "",
+    ])
     return "\n".join(sections)
 
 
