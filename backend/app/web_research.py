@@ -245,7 +245,7 @@ def evidence_from_result(
     if score < minimum_relevance_for_claim(claim):
         return None
     stance = web_stance_for_claim(company, claim, chunk)
-    quote = quote_span_for_claim(claim, chunk)
+    quote = quote_span_for_claim(claim, chunk, stance=stance)
     if stance in {"supports", "contradicts"} and not quote:
         return None
     return EvidenceItem(

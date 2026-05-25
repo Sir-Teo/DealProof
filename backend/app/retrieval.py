@@ -264,17 +264,24 @@ def evidence_title_for_stance(stance: str) -> str:
     return "Relevant supplied material"
 
 
-def quote_span_for_claim(claim: DealClaim, chunk: MaterialChunk) -> str:
+_CONTRADICTION_WORDS = {"not", "lacks", "missing", "instead", "however", "does not", "did not", "no direct", "not supported", "not independently", "not include"}
+
+
+def quote_span_for_claim(claim: DealClaim, chunk: MaterialChunk, stance: str = "") -> str:
     candidates = [part.strip() for part in re.split(r"(?<=[.!?])\s+|\n+", chunk.text) if part.strip()]
     if not candidates:
         return chunk.text[:420].strip()
     claim_terms = keywords(claim.text)
     claim_numbers = normalized_numbers(claim.text)
 
-    def candidate_score(candidate: str) -> tuple[int, int, int]:
-        candidate_terms = keywords(candidate)
+    def candidate_score(candidate: str) -> tuple[int, int, int, int]:
+        candidate_lower = candidate.lower()
         number_matches = len(claim_numbers & normalized_numbers(candidate))
-        return (number_matches, len(claim_terms & candidate_terms), len(candidate))
+        term_matches = len(claim_terms & keywords(candidate))
+        contradiction_bonus = (
+            1 if stance == "contradicts" and any(w in candidate_lower for w in _CONTRADICTION_WORDS) else 0
+        )
+        return (contradiction_bonus, number_matches, term_matches, len(candidate))
 
     quote = max(candidates, key=candidate_score)
     if len(quote) < 80 and len(chunk.text) <= 420:
@@ -320,7 +327,7 @@ def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -
                 reliability="high" if stance == "supports" else "medium",
                 sourceIndependence=source_independence(chunk.citation),
                 relevanceScore=relevance_score(claim, chunk),
-                quoteSpan=quote_span_for_claim(claim, chunk),
+                quoteSpan=quote_span_for_claim(claim, chunk, stance=stance),
                 sourceMaterialId=chunk.material_id,
                 sourceName=chunk.sourceName or chunk.citation.split(", chunk")[0],
                 sourceUrl=chunk.sourceUrl,
