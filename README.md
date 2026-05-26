@@ -44,17 +44,18 @@ local demo/reference artifacts rather than source-controlled snapshots.
 
 ## Demo Flow
 
-1. Start on Upload and click Seed CaviClear Packet.
+1. Start on Upload and click Load Harvey (legal AI) or Load SynthPay (fintech).
 2. Click Run LangGraph Agent.
 3. Walk through extracted claims and status counts.
 4. Open the evidence drawer for weak/missing/contradicted claims.
 5. Export the generated risk memo.
-6. Ask: "Can we trust the ROI claim?"
+6. Ask: "Can we trust the market and model-dependency claims?"
 
 ## API Routes
 
 - `POST /deals` creates a deal.
-- `POST /deals/demo` creates the seeded CaviClear packet.
+- `POST /deals/demo` creates the seeded Harvey legal AI packet.
+- `POST /deals/demo2` creates the seeded SynthPay fintech packet.
 - `POST /deals/{deal_id}/materials` uploads files or a supplied URL.
 - `POST /deals/{deal_id}/analyze` runs the LangGraph diligence workflow.
 - `GET /deals/{deal_id}` returns persisted deal state.

@@ -1,4 +1,5 @@
 import type { ClaimStatus, DealClaim, EvidenceItem, QualityReview } from "@/lib/types";
+import { effectiveDisposition } from "@/lib/scoring";
 
 export type ReadinessGrade = "ready" | "conditional" | "blocked";
 export type ReadinessItemKind = "critical" | "evidence_request" | "resolved";
@@ -30,19 +31,20 @@ export function deriveIcReadiness(claims: DealClaim[], evidence: EvidenceItem[],
   }
 
   const items = claims.map((claim) => toReadinessItem(claim, evidenceByClaim.get(claim.id) ?? []));
-  const resolved = items.filter((item) => item.claim.reviewerStatus === "verified");
+  const visibleItems = items.filter((item) => effectiveDisposition(item.claim) !== "ignored");
+  const resolved = visibleItems.filter((item) => effectiveDisposition(item.claim) === "verified");
   const blockers = items
-    .filter((item) => item.claim.reviewerStatus !== "verified")
-    .filter((item) => item.claim.importance === "high" && riskyStatuses.has(item.claim.status))
+    .filter((item) => effectiveDisposition(item.claim) !== "ignored")
+    .filter((item) => effectiveDisposition(item.claim) === "ic_blocker" || (effectiveDisposition(item.claim) !== "verified" && item.claim.importance === "high" && riskyStatuses.has(item.claim.status)))
     .sort(compareReadinessItems);
-  const evidenceRequests = items
-    .filter((item) => item.claim.reviewerStatus !== "verified")
-    .filter((item) => item.claim.reviewerStatus === "needs_evidence" || item.independentEvidenceCount === 0)
+  const evidenceRequests = visibleItems
+    .filter((item) => effectiveDisposition(item.claim) !== "verified")
+    .filter((item) => effectiveDisposition(item.claim) === "needs_evidence" || item.independentEvidenceCount === 0)
     .filter((item) => !blockers.some((blocker) => blocker.claim.id === item.claim.id))
     .sort(compareReadinessItems);
 
   const qualityScore = qualityReview?.memoReadinessScore;
-  const derivedScore = claims.length ? Math.round((resolved.length / claims.length) * 25 + Math.max(0, 75 - blockers.length * 14 - evidenceRequests.length * 6)) : 0;
+  const derivedScore = visibleItems.length ? Math.round((resolved.length / visibleItems.length) * 25 + Math.max(0, 75 - blockers.length * 14 - evidenceRequests.length * 6)) : 0;
   const score = clampScore(qualityScore ?? derivedScore);
   const blockerCount = blockers.length + evidenceRequests.length;
   const grade: ReadinessGrade = blockers.length > 0 ? "blocked" : blockerCount > 0 || score < 85 ? "conditional" : "ready";
@@ -65,7 +67,7 @@ function toReadinessItem(claim: DealClaim, evidence: EvidenceItem[]): ReadinessI
   ).size;
   return {
     claim,
-    kind: claim.reviewerStatus === "verified" ? "resolved" : claim.reviewerStatus === "needs_evidence" || independentEvidenceCount === 0 ? "evidence_request" : "critical",
+    kind: effectiveDisposition(claim) === "verified" ? "resolved" : effectiveDisposition(claim) === "needs_evidence" || independentEvidenceCount === 0 ? "evidence_request" : "critical",
     reason: readinessReason(claim, evidence.length, independentEvidenceCount),
     evidenceCount: evidence.length,
     independentEvidenceCount
@@ -73,8 +75,9 @@ function toReadinessItem(claim: DealClaim, evidence: EvidenceItem[]): ReadinessI
 }
 
 function readinessReason(claim: DealClaim, evidenceCount: number, independentEvidenceCount: number) {
-  if (claim.reviewerStatus === "verified") return "Reviewer marked this claim as verified.";
-  if (claim.reviewerStatus === "needs_evidence") return "Reviewer requested more evidence before IC.";
+  if (effectiveDisposition(claim) === "verified") return "Reviewer marked this claim as verified.";
+  if (effectiveDisposition(claim) === "needs_evidence") return "Reviewer requested more evidence before IC.";
+  if (effectiveDisposition(claim) === "ic_blocker") return "Reviewer marked this claim as an IC blocker.";
   if (claim.status === "contradicted") return "Contradictory evidence must be reconciled before IC.";
   if (claim.status === "missing") return "No matching support was found for this claim.";
   if (independentEvidenceCount === 0) return "No third-party support is attached.";

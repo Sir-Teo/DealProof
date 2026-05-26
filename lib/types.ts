@@ -1,7 +1,9 @@
 export type ClaimStatus = "supported" | "weak" | "contradicted" | "missing";
 export type Confidence = "high" | "medium" | "low";
 export type ReviewerStatus = "unreviewed" | "verified" | "needs_evidence";
+export type ReviewerDisposition = "unreviewed" | "verified" | "needs_evidence" | "ignored" | "ic_blocker";
 export type ScoreGrade = "green" | "yellow" | "red";
+export type ReadinessStatus = "ic_ready" | "needs_diligence" | "blocked" | "screen_out";
 
 export type DealClaim = {
   id: string;
@@ -32,7 +34,10 @@ export type DealClaim = {
   verificationNeed: string;
   decisionImpact: "high" | "medium" | "low";
   reviewerStatus: ReviewerStatus;
+  reviewerDisposition: ReviewerDisposition;
   reviewerNotes: string;
+  statusReason: string;
+  resolutionRequest: string;
 };
 
 export type EvidenceItem = {
@@ -85,6 +90,9 @@ export type QualityReview = {
   lowValueClaims: string[];
   recommendedFollowUpEvidence: string[];
   overconfidenceWarnings: string[];
+  readinessStatus: ReadinessStatus;
+  topGatingIssue: string;
+  approvedDiligenceRequests: string[];
 };
 
 export type ScoreSummary = {

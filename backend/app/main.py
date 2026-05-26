@@ -29,9 +29,9 @@ from .config import (
     LOCAL_FRONTEND_ORIGINS,
 )
 from .graph import answer_question, refresh_review_artifacts, run_diligence
-from .models import ChatTurn, ClaimStatus, DealAnalysis, ReviewerStatus, SourceMaterial
+from .models import ChatTurn, ClaimStatus, DealAnalysis, ReviewerDisposition, ReviewerStatus, SourceMaterial
 from .parsers import UrlFetchError, fetch_url_text, infer_kind, parse_file, summarize
-from .scoring import memo_to_markdown
+from .scoring import diligence_requests_to_markdown, memo_to_markdown
 
 ROOT = Path(__file__).resolve().parents[1]
 STORAGE = ROOT / "storage" / "deals"
@@ -65,7 +65,9 @@ class ChatRequest(BaseModel):
 class ClaimReviewPatch(BaseModel):
     status: ClaimStatus | None = None
     reviewerStatus: ReviewerStatus | None = None
+    reviewerDisposition: ReviewerDisposition | None = None
     reviewerNotes: str | None = None
+    resolutionRequest: str | None = None
 
 
 @app.on_event("startup")
@@ -270,7 +272,9 @@ def update_claim_review(deal_id: str, claim_id: str, payload: ClaimReviewPatch) 
             claim_id,
             status=payload.status,
             reviewer_status=payload.reviewerStatus,
+            reviewer_disposition=payload.reviewerDisposition,
             reviewer_notes=payload.reviewerNotes,
+            resolution_request=payload.resolutionRequest,
         )
         refresh_review_artifacts(deal_id)
     except KeyError:
@@ -284,8 +288,17 @@ def export_memo(deal_id: str) -> PlainTextResponse:
     if not deal.memo:
         raise HTTPException(status_code=404, detail="Memo has not been generated")
     return PlainTextResponse(
-        memo_to_markdown(deal.memo, deal.score),
+        memo_to_markdown(deal.memo, deal.score, deal.qualityReview),
         headers={"Content-Disposition": f'attachment; filename="{EXPORT_MEMO_FILENAME}"'},
+    )
+
+
+@app.get("/deals/{deal_id}/export-diligence-requests")
+def export_diligence_requests(deal_id: str) -> PlainTextResponse:
+    deal = ensure_deal(deal_id)
+    return PlainTextResponse(
+        diligence_requests_to_markdown(deal),
+        headers={"Content-Disposition": 'attachment; filename="dealproof-diligence-requests.md"'},
     )
 
 

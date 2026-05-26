@@ -27,8 +27,10 @@ Importance = Literal["high", "medium", "low"]
 Confidence = Literal["high", "medium", "low"]
 DecisionImpact = Literal["high", "medium", "low"]
 ReviewerStatus = Literal["unreviewed", "verified", "needs_evidence"]
+ReviewerDisposition = Literal["unreviewed", "verified", "needs_evidence", "ignored", "ic_blocker"]
 SourceIndependence = Literal["founder_supplied", "internal", "third_party", "derived"]
 ScoreGrade = Literal["green", "yellow", "red"]
+ReadinessStatus = Literal["ic_ready", "needs_diligence", "blocked", "screen_out"]
 
 
 class SourceMaterial(BaseModel):
@@ -79,7 +81,10 @@ class DealClaim(BaseModel):
     verificationNeed: str = ""
     decisionImpact: DecisionImpact = "medium"
     reviewerStatus: ReviewerStatus = "unreviewed"
+    reviewerDisposition: ReviewerDisposition = "unreviewed"
     reviewerNotes: str = ""
+    statusReason: str = ""
+    resolutionRequest: str = ""
 
 
 class EvidenceItem(BaseModel):
@@ -151,6 +156,9 @@ class QualityReview(BaseModel):
     lowValueClaims: list[str] = Field(default_factory=list)
     recommendedFollowUpEvidence: list[str] = Field(default_factory=list)
     overconfidenceWarnings: list[str] = Field(default_factory=list)
+    readinessStatus: ReadinessStatus = "needs_diligence"
+    topGatingIssue: str = ""
+    approvedDiligenceRequests: list[str] = Field(default_factory=list)
 
 
 class ScoreSummary(BaseModel):

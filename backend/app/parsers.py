@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import csv
+import ipaddress
 import io
 import re
+import socket
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -15,6 +18,23 @@ from .config import HTTP_USER_AGENT
 
 class UrlFetchError(RuntimeError):
     pass
+
+
+def validate_fetch_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise UrlFetchError("Failed to fetch URL: URL must start with http:// or https:// and include a hostname.")
+    hostname = parsed.hostname.lower()
+    if hostname in {"localhost", "localhost.localdomain"}:
+        raise UrlFetchError("Failed to fetch URL: localhost and private network URLs are not allowed.")
+    try:
+        addresses = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise UrlFetchError("Failed to fetch URL: hostname could not be resolved.") from exc
+    for address in {item[4][0] for item in addresses}:
+        ip = ipaddress.ip_address(address)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified:
+            raise UrlFetchError("Failed to fetch URL: localhost and private network URLs are not allowed.")
 
 
 def request_headers_for_url(url: str) -> dict[str, str]:
@@ -118,6 +138,7 @@ def _parse_pptx(path: Path) -> str:
 
 
 async def fetch_url_text(url: str) -> str:
+    validate_fetch_url(url)
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
         try:
             response = await client.get(url, headers=request_headers_for_url(url))

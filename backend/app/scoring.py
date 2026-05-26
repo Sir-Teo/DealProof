@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from .models import DealClaim, EvidenceItem, QualityReview, RiskMemo, ScoreSummary
+from .models import DealAnalysis, DealClaim, EvidenceItem, QualityReview, RiskMemo, ScoreSummary
 from .config import MEMO_TITLE
 
 STATUS_SCORE = {"supported": 88, "weak": 55, "missing": 24, "contradicted": 8}
@@ -18,6 +18,7 @@ def score_claims(
     quality_review: QualityReview | None = None,
 ) -> ScoreSummary:
     evidence = evidence or []
+    claims = active_claims(claims)
     counts = status_counts(claims)
     if not claims:
         return ScoreSummary(overall=0, grade="red", counts=counts, drivers=["No diligence claims were scored."])
@@ -48,7 +49,7 @@ def score_claims(
             drivers.extend(quality_review.globalWarnings[:2])
 
     score_cap = 100
-    unresolved = [claim for claim in claims if claim.reviewerStatus != "verified"]
+    unresolved = [claim for claim in claims if effective_disposition(claim) != "verified"]
     if any(claim.status == "contradicted" and claim.decisionImpact == "high" for claim in unresolved):
         score_cap = min(score_cap, 59)
         drivers.append("Unresolved high-impact contradiction blocks IC readiness.")
@@ -74,9 +75,10 @@ def status_counts(claims: list[DealClaim]) -> dict[str, int]:
 def claim_readiness_score(claim: DealClaim, evidence: list[EvidenceItem]) -> int:
     quality_score = claim.qualityScore if claim.qualityScore > 0 else STATUS_SCORE[claim.status]
     score = round(STATUS_SCORE[claim.status] * 0.35 + quality_score * 0.65)
-    if claim.reviewerStatus == "verified":
+    disposition = effective_disposition(claim)
+    if disposition == "verified":
         score = max(score, 90)
-    elif claim.reviewerStatus == "needs_evidence":
+    elif disposition in {"needs_evidence", "ic_blocker"}:
         score -= 12
     if claim.status != "supported" and claim.category in HIGH_RISK_CATEGORIES:
         score -= 6
@@ -131,6 +133,8 @@ def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> D
     quality_score = quality_score_for_claim(claim, evidence, status, quality_issues)
     confidence = "high" if quality_score >= 82 else "medium" if quality_score >= 55 else "low"
     verification_need = verification_need_for_claim(claim, evidence, status)
+    status_reason = status_reason_for_claim(claim, evidence, status)
+    resolution_request = claim.resolutionRequest or resolution_request_for_claim(claim, status, verification_need)
     has_public_web = any(item.sourceType == "public_web" for item in evidence)
     has_internal_doc = any(item.sourceIndependence == "internal" for item in evidence)
     rationale = {
@@ -154,6 +158,8 @@ def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> D
             "qualityIssues": quality_issues,
             "verificationNeed": verification_need,
             "decisionImpact": decision_impact_for_claim(claim),
+            "statusReason": status_reason,
+            "resolutionRequest": resolution_request,
         }
     )
 
@@ -166,6 +172,97 @@ def has_audit_citation(item: EvidenceItem) -> bool:
         and item.sourceType != "derived"
         and item.sourceIndependence != "derived"
     )
+
+
+def quote_backed_evidence(evidence: list[EvidenceItem]) -> list[EvidenceItem]:
+    return [item for item in evidence if has_audit_citation(item)]
+
+
+def status_reason_for_claim(claim: DealClaim, evidence: list[EvidenceItem], status: str) -> str:
+    cited = quote_backed_evidence(evidence)
+    source_counts = Counter(item.sourceIndependence for item in evidence)
+    source_summary = ", ".join(f"{key.replace('_', ' ')}: {value}" for key, value in sorted(source_counts.items())) or "no source evidence"
+    if status == "supported":
+        strongest = next((item for item in cited if item.stance == "supports"), None)
+        source = strongest.sourceName or strongest.citation if strongest else "a quote-backed source"
+        return f"Supported because {source} directly matches the claim; source mix: {source_summary}."
+    if status == "contradicted":
+        strongest = next((item for item in cited if item.stance == "contradicts"), None)
+        source = strongest.sourceName or strongest.citation if strongest else "a quote-backed source"
+        return f"Contradicted because {source} conflicts with the claim; source mix: {source_summary}."
+    if status == "weak":
+        return f"Partial support exists, but it is not enough for IC reliance; source mix: {source_summary}."
+    return "No quote-backed uploaded, supplied-url, or public evidence directly supports this claim."
+
+
+def resolution_request_for_claim(claim: DealClaim, status: str, verification_need: str) -> str:
+    if status == "supported":
+        return ""
+    prefix = {
+        "contradicted": "Reconcile this conflicting claim with source-level backup",
+        "weak": "Provide stronger source-level evidence",
+        "missing": "Provide source-level evidence",
+    }.get(status, "Provide source-level evidence")
+    return f"{prefix}: {claim.text} ({verification_need})"
+
+
+def effective_disposition(claim: DealClaim) -> str:
+    if claim.reviewerDisposition != "unreviewed":
+        return claim.reviewerDisposition
+    if claim.reviewerStatus == "verified":
+        return "verified"
+    if claim.reviewerStatus == "needs_evidence":
+        return "needs_evidence"
+    return "unreviewed"
+
+
+def active_claims(claims: list[DealClaim]) -> list[DealClaim]:
+    return [claim for claim in claims if effective_disposition(claim) != "ignored"]
+
+
+def derive_readiness_status(claims: list[DealClaim], evidence: list[EvidenceItem], quality_review: QualityReview | None = None) -> tuple[str, str, list[str]]:
+    considered = active_claims(claims)
+    evidence_by_claim = {claim.id: [item for item in evidence if item.claimId == claim.id] for claim in considered}
+    blockers = [
+        claim for claim in considered
+        if effective_disposition(claim) == "ic_blocker"
+        or (
+            effective_disposition(claim) != "verified"
+            and claim.status == "contradicted"
+            and claim.decisionImpact == "high"
+        )
+    ]
+    missing_high = [
+        claim for claim in considered
+        if effective_disposition(claim) != "verified"
+        and claim.status == "missing"
+        and claim.importance == "high"
+    ]
+    founder_only = [
+        claim for claim in considered
+        if effective_disposition(claim) != "verified"
+        and claim.status == "supported"
+        and evidence_by_claim.get(claim.id)
+        and not any(item.sourceIndependence == "third_party" for item in evidence_by_claim[claim.id])
+    ]
+    needs_evidence = [
+        claim for claim in considered
+        if effective_disposition(claim) == "needs_evidence"
+        or (claim.status in {"weak", "missing"} and effective_disposition(claim) != "verified")
+    ]
+    unresolved = blockers + missing_high + needs_evidence + founder_only
+    requests = list(dict.fromkeys(claim.resolutionRequest for claim in unresolved if claim.resolutionRequest))[:12]
+    if blockers:
+        top = blockers[0]
+        return "blocked", f"{top.id}: {top.text} requires resolution before IC.", requests
+    if score_claims(considered, evidence, quality_review).grade == "red":
+        top = (missing_high or needs_evidence or founder_only or considered[:1])
+        issue = f"{top[0].id}: {top[0].text}" if top else "Insufficient evidence for IC."
+        return "screen_out", issue, requests
+    if missing_high or needs_evidence or founder_only:
+        top = (missing_high or needs_evidence or founder_only)[0]
+        return "needs_diligence", f"{top.id}: {top.text} needs more evidence.", requests
+    return "ic_ready", "No unresolved IC blockers.", requests
 
 
 def quality_issues_for_claim(claim: DealClaim, evidence: list[EvidenceItem], status: str) -> list[str]:
@@ -235,7 +332,11 @@ def decision_impact_for_claim(claim: DealClaim) -> str:
     return "low"
 
 
-def memo_to_markdown(memo: RiskMemo, score: ScoreSummary | None = None) -> str:
+def memo_to_markdown(
+    memo: RiskMemo,
+    score: ScoreSummary | None = None,
+    quality_review: QualityReview | None = None,
+) -> str:
     grade_emoji = {"GREEN": "🟢", "YELLOW": "🟡", "RED": "🔴"}.get(memo.overallGrade.upper(), "")
     sections = [
         f"# {MEMO_TITLE}: {memo.company}",
@@ -274,7 +375,11 @@ def memo_to_markdown(memo: RiskMemo, score: ScoreSummary | None = None) -> str:
         sections.extend(["", "## Decision Drivers", markdown_bullets(memo.decisionDrivers)])
     if memo.evidenceMap:
         sections.extend(["", "## Evidence Map", markdown_bullets(memo.evidenceMap)])
-    diligence = memo.nextDiligenceRequests or memo.followUpQuestions
+    diligence = (
+        quality_review.approvedDiligenceRequests
+        if quality_review and quality_review.approvedDiligenceRequests
+        else memo.nextDiligenceRequests or memo.followUpQuestions
+    )
     if diligence:
         sections.extend(["", "## Next Diligence Requests", markdown_bullets(diligence)])
     sections.extend([
@@ -290,3 +395,38 @@ def markdown_bullets(items: list[str]) -> str:
     if not items:
         return "- None."
     return "\n".join(f"- {item}" for item in items)
+
+
+def diligence_requests_to_markdown(deal: DealAnalysis) -> str:
+    review = deal.qualityReview or QualityReview()
+    requests = review.approvedDiligenceRequests or [
+        claim.resolutionRequest
+        for claim in active_claims(deal.claims)
+        if claim.status in {"weak", "missing", "contradicted"} and claim.resolutionRequest
+    ]
+    sections = [
+        f"# DealProof Diligence Requests: {deal.company}",
+        "",
+        f"**Readiness:** {review.readinessStatus.replace('_', ' ').title()}",
+        f"**Top gating issue:** {review.topGatingIssue or 'No unresolved IC blockers.'}",
+        "",
+        "## Requests",
+    ]
+    if requests:
+        for index, request in enumerate(list(dict.fromkeys(requests)), start=1):
+            sections.append(f"{index}. {request}")
+    else:
+        sections.append("No open diligence requests.")
+    sections.extend(["", "## Claim Links"])
+    linked = [
+        claim
+        for claim in active_claims(deal.claims)
+        if claim.resolutionRequest and claim.resolutionRequest in requests
+    ]
+    if linked:
+        for claim in linked:
+            sections.append(f"- {claim.id} ({claim.status}, {claim.decisionImpact} impact): {claim.text}")
+    else:
+        sections.append("- None.")
+    sections.append("")
+    return "\n".join(sections)

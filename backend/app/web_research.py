@@ -14,6 +14,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from .models import DealClaim, DealProfile, EvidenceItem, MaterialChunk
+from .parsers import UrlFetchError, validate_fetch_url
 from .retrieval import evidence_stance_for_chunk, keywords, quote_span_for_claim, relevance_score
 
 WEB_SEARCH_ENABLED = os.getenv("DEALPROOF_WEB_SEARCH_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
@@ -294,6 +295,10 @@ def evidence_from_result(
 
 def fetch_public_text(client: httpx.Client, url: str) -> str:
     if should_skip_url(url):
+        return ""
+    try:
+        validate_fetch_url(url)
+    except UrlFetchError:
         return ""
     try:
         response = client.get(url)

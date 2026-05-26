@@ -23,8 +23,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { API_BASE_URL, DEFAULT_DEAL, UI_COPY } from "@/lib/app-config";
-import { evidenceForClaim, scoreClaims } from "@/lib/scoring";
-import type { ChatTurn, ClaimStatus, DealAnalysis, DealClaim, EvidenceItem, ScoreSummary } from "@/lib/types";
+import { effectiveDisposition, evidenceForClaim, scoreClaims } from "@/lib/scoring";
+import type { ChatTurn, ClaimStatus, DealAnalysis, DealClaim, EvidenceItem, ReadinessStatus, ReviewerDisposition, ScoreSummary } from "@/lib/types";
 
 const emptyCounts = { supported: 0, weak: 0, contradicted: 0, missing: 0 };
 const DEAL_ID_KEY = "dealproofDealId";
@@ -77,6 +77,7 @@ type AgentToolRun = {
   statsEvent: AgentEvent;
 };
 type FeedNote = { id: string; role: "user" | "agent"; title: string; body?: string };
+type ClaimFilter = "needs_review" | "blockers" | "weak_missing" | "third_party_missing" | "verified" | "all";
 
 const statusIcon: Record<ClaimStatus, typeof CheckCircle2> = {
   supported: CheckCircle2,
@@ -112,6 +113,7 @@ export default function Home() {
     [claims, deal?.evidence, deal?.qualityReview, deal?.score]
   );
   const exportUrl = deal ? `${API_BASE_URL}/deals/${deal.id}/export-memo` : "#";
+  const diligenceExportUrl = deal ? `${API_BASE_URL}/deals/${deal.id}/export-diligence-requests` : "#";
   const suggestedQuestions = useMemo(() => buildSuggestedQuestions(claims), [claims]);
   const isAnalyzing = busy === "analyze" || busy === "demo";
   const canRunAgent = Boolean(deal?.materials.length) && !isAnalyzing;
@@ -192,6 +194,12 @@ export default function Home() {
     setSidebarOpen(false);
   }
 
+  function resetComposerInputs() {
+    setFiles(null);
+    setUrls([""]);
+    setAttachOpen(false);
+  }
+
   async function switchDeal(id: string) {
     try {
       const d = await api<DealAnalysis>(`/deals/${id}`);
@@ -201,6 +209,7 @@ export default function Home() {
       setFeedNotes([]);
       setPendingQuestion(null);
       setQuestion("");
+      resetComposerInputs();
       setError(null);
       setSidebarOpen(false);
     } catch (exc) {
@@ -208,13 +217,24 @@ export default function Home() {
     }
   }
 
-  async function reviewClaim(claimId: string, reviewerStatus: "verified" | "needs_evidence" | "unreviewed", reviewerNotes?: string) {
+  async function reviewClaim(
+    claimId: string,
+    reviewerDisposition: ReviewerDisposition,
+    reviewerNotes?: string,
+    resolutionRequest?: string
+  ) {
     if (!deal) return;
+    const reviewerStatus = reviewerDisposition === "verified" ? "verified" : reviewerDisposition === "needs_evidence" ? "needs_evidence" : "unreviewed";
     try {
       const updated = await api<DealAnalysis>(`/deals/${deal.id}/claims/${claimId}/review`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewerStatus, ...(reviewerNotes !== undefined && { reviewerNotes }) }),
+        body: JSON.stringify({
+          reviewerStatus,
+          reviewerDisposition,
+          ...(reviewerNotes !== undefined && { reviewerNotes }),
+          ...(resolutionRequest !== undefined && { resolutionRequest })
+        }),
       });
       setDeal(updated);
     } catch (exc) {
@@ -267,6 +287,8 @@ export default function Home() {
       setFeedNotes([]);
       void loadDealList();
       setPendingQuestion(null);
+      setQuestion("");
+      resetComposerInputs();
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
     } finally {
@@ -281,6 +303,7 @@ export default function Home() {
     setFeedNotes([]);
     setPendingQuestion(null);
     setQuestion("");
+    resetComposerInputs();
     try {
       const created = await api<DealAnalysis>("/deals/demo", { method: "POST" });
       persistDeal(created);
@@ -472,11 +495,16 @@ export default function Home() {
 
           {(isAnalyzing || agentEvents.length > 0) && <AgentActivity events={agentEvents} running={isAnalyzing} />}
 
+          {deal && deal.materials.length > 0 && !deal.claims.length && !isAnalyzing && (
+            <MaterialsReady deal={deal} onRun={() => void analyzeDeal()} canRun={canRunAgent} />
+          )}
+
           {deal && !isAnalyzing && (
             <AgentOutput
               deal={deal}
               scoring={scoring}
               exportUrl={exportUrl}
+              diligenceExportUrl={diligenceExportUrl}
               onReviewClaim={reviewClaim}
             />
           )}
@@ -770,24 +798,66 @@ function formatWebEventMeta(event: AgentEvent) {
   return "";
 }
 
-function AgentOutput({ deal, scoring, exportUrl, onReviewClaim }: {
+function MaterialsReady({ deal, onRun, canRun }: { deal: DealAnalysis; onRun: () => void; canRun: boolean }) {
+  return (
+    <article className="message agentMessage">
+      <Avatar status="done" />
+      <div className="messageBody materialsReady">
+        <div className="messageMeta">
+          <strong>{UI_COPY.appName}</strong>
+        </div>
+        <div className="materialsReadyHeader">
+          <div>
+            <p className="messageTitle">{UI_COPY.demoReadyTitle}</p>
+            <p className="messageCopy">{deal.materials.length} source materials are staged for {deal.company}.</p>
+          </div>
+          <button className="primaryButton" type="button" onClick={onRun} disabled={!canRun}>
+            <Bot size={13} />
+            {UI_COPY.runAgentButton}
+          </button>
+        </div>
+        <div className="materialsTable">
+          {deal.materials.map((material) => (
+            <div key={material.id} className="materialRow">
+              <FileText size={13} />
+              <div>
+                <strong>{material.name}</strong>
+                <span>{material.kind} · {material.summary || material.excerpt || "Ready for parsing."}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function AgentOutput({ deal, scoring, exportUrl, diligenceExportUrl, onReviewClaim }: {
   deal: DealAnalysis;
   scoring: ReturnType<typeof scoreClaims>;
   exportUrl: string;
-  onReviewClaim: (claimId: string, status: "verified" | "needs_evidence" | "unreviewed", notes?: string) => void;
+  diligenceExportUrl: string;
+  onReviewClaim: (claimId: string, disposition: ReviewerDisposition, notes?: string, resolutionRequest?: string) => void;
 }) {
+  const [claimFilter, setClaimFilter] = useState<ClaimFilter>("all");
   if (!deal.materials.length) return null;
   const memo = deal.memo;
   const claims = deal.claims;
   const risks = memo?.keyRisks?.length ? memo.keyRisks : (memo?.materialRisks ?? []);
-  const diligenceRequests = memo?.nextDiligenceRequests?.length ? memo.nextDiligenceRequests : (memo?.followUpQuestions ?? []);
+  const diligenceRequests = deal.qualityReview?.approvedDiligenceRequests?.length
+    ? deal.qualityReview.approvedDiligenceRequests
+    : memo?.nextDiligenceRequests?.length ? memo.nextDiligenceRequests : (memo?.followUpQuestions ?? []);
+  const filterCounts = buildClaimFilterCounts(claims, deal.evidence);
+  const filteredClaims = claims.filter((claim) => claimMatchesFilter(claim, claimFilter, deal.evidence));
+  const workspaceGroups = buildWorkspaceGroups(filteredClaims, deal.evidence);
+  const readinessLabel = formatReadiness(deal.qualityReview?.readinessStatus);
 
   return (
     <div className="agentOutput">
       {memo && (
         <div className={clsx("gradeBar", `card--${scoring.grade}`)}>
-          <strong>{scoring.grade} · {scoring.overall}/100</strong>
-          <span>{memo.icRecommendation}</span>
+          <strong>{readinessLabel} · {scoring.grade} · {scoring.overall}/100</strong>
+          <span>{deal.qualityReview?.topGatingIssue || memo.icRecommendation}</span>
         </div>
       )}
 
@@ -847,50 +917,90 @@ function AgentOutput({ deal, scoring, exportUrl, onReviewClaim }: {
         <section className="artifactPanel">
           <div className="artifactPanelHeader">
             <div>
-              <p className="eyebrow">{UI_COPY.claimsEyebrow}</p>
-              <h2>{claims.length} diligence claims</h2>
+              <p className="eyebrow">Claim review workspace</p>
+              <h2>{claims.length} auditable work items</h2>
             </div>
-            <span className={clsx("gradeChip", `card--${scoring.grade}`)}>
-              {scoring.overall}/100 · {scoring.counts.weak + scoring.counts.contradicted + scoring.counts.missing} {UI_COPY.exceptionsNeedReview}
-            </span>
+            <a className="secondaryButton" href={diligenceExportUrl}>
+              <ArrowDownToLine size={14} />
+              Export requests
+            </a>
           </div>
+          {deal.qualityReview && (
+            <div className="readinessStrip">
+              <Metric label="Readiness" value={readinessLabel} />
+              <Metric label="Top issue" value={deal.qualityReview.topGatingIssue || "No unresolved IC blockers."} />
+              <Metric label="Open requests" value={String(diligenceRequests.length)} />
+            </div>
+          )}
+          <ClaimFilterBar active={claimFilter} counts={filterCounts} onChange={setClaimFilter} />
           <div className="claimGroups">
-            {(["contradicted", "weak", "missing", "supported"] as ClaimStatus[]).map((status) => {
-              const items = claims.filter((claim) => claim.status === status);
+            {workspaceGroups.map(({ key, title, items }) => {
               if (!items.length) return null;
               return (
-                <section key={status} className="claimGroup">
-                  <h3>{status}</h3>
+                <section key={key} className="claimGroup">
+                  <h3>{title}</h3>
                   {items.map((claim) => {
                     const claimEvidence = evidenceForClaim(claim.id, deal.evidence);
+                    const disposition = effectiveDisposition(claim);
                     return (
                       <div key={claim.id} className="claimRow">
-                        <StatusPill status={claim.status} />
-                        <span className="claimText" title={claim.text}>{claim.text}</span>
-                        <small>{claimEvidence.length} {UI_COPY.evidenceLabel}</small>
+                        <div className="claimRowMain">
+                          <StatusPill status={claim.status} />
+                          <span className="claimText" title={claim.text}>{claim.text}</span>
+                          <small>{claimEvidence.length} {UI_COPY.evidenceLabel} · {claim.confidence} confidence · {claim.decisionImpact} impact</small>
+                        </div>
                         <div className="reviewButtons">
                           <button
                             type="button"
-                            className={clsx("reviewBtn", claim.reviewerStatus === "verified" && "reviewBtn--active reviewBtn--verified")}
-                            onClick={() => onReviewClaim(claim.id, claim.reviewerStatus === "verified" ? "unreviewed" : "verified")}
+                            className={clsx("reviewBtn", disposition === "verified" && "reviewBtn--active reviewBtn--verified")}
+                            onClick={() => onReviewClaim(claim.id, disposition === "verified" ? "unreviewed" : "verified")}
                             title="Mark verified"
                           >✓ Verified</button>
                           <button
                             type="button"
-                            className={clsx("reviewBtn", claim.reviewerStatus === "needs_evidence" && "reviewBtn--active reviewBtn--needs")}
-                            onClick={() => onReviewClaim(claim.id, claim.reviewerStatus === "needs_evidence" ? "unreviewed" : "needs_evidence")}
+                            className={clsx("reviewBtn", disposition === "needs_evidence" && "reviewBtn--active reviewBtn--needs")}
+                            onClick={() => onReviewClaim(claim.id, disposition === "needs_evidence" ? "unreviewed" : "needs_evidence")}
                             title="Needs more evidence"
                           >? Needs evidence</button>
+                          <button
+                            type="button"
+                            className={clsx("reviewBtn", disposition === "ic_blocker" && "reviewBtn--active reviewBtn--blocker")}
+                            onClick={() => onReviewClaim(claim.id, disposition === "ic_blocker" ? "unreviewed" : "ic_blocker")}
+                            title="Mark IC blocker"
+                          >! IC blocker</button>
+                          <button
+                            type="button"
+                            className={clsx("reviewBtn", disposition === "ignored" && "reviewBtn--active")}
+                            onClick={() => onReviewClaim(claim.id, disposition === "ignored" ? "unreviewed" : "ignored")}
+                            title="Ignore claim"
+                          >Ignore</button>
                         </div>
+                        <div className="claimReason">
+                          <strong>Why:</strong> {claim.statusReason || claim.riskRationale}
+                        </div>
+                        {claim.resolutionRequest && (
+                          <div className="resolutionRequest">
+                            <strong>Request:</strong>
+                            <input
+                              defaultValue={claim.resolutionRequest}
+                              onBlur={(event) => {
+                                if (event.currentTarget.value !== claim.resolutionRequest) {
+                                  onReviewClaim(claim.id, disposition, claim.reviewerNotes, event.currentTarget.value);
+                                }
+                              }}
+                              aria-label={`Diligence request for ${claim.id}`}
+                            />
+                          </div>
+                        )}
                         {claimEvidence.length > 0 && (
                           <details className="claimEvidence">
                             <summary>View</summary>
                             <div className="claimEvidencePanel">
                               {claimEvidence.map((item) => (
-                                <article key={item.id} className={clsx("evidenceItem", `evidenceItem--${item.stance}`)}>
+                                <article key={item.id} className={clsx("evidenceItem", `evidenceItem--${item.stance}`, `source--${item.sourceIndependence}`)}>
                                   <header className="citationHeader">
                                     <div className="citationTitle">
-                                      <span>{item.stance.replaceAll("_", " ")}</span>
+                                      <span>{item.stance.replaceAll("_", " ")} · {item.sourceIndependence.replaceAll("_", " ")}</span>
                                       <strong>{sourceLabel(item)}</strong>
                                     </div>
                                     {item.sourceUrl && (
@@ -915,6 +1025,9 @@ function AgentOutput({ deal, scoring, exportUrl, onReviewClaim }: {
                 </section>
               );
             })}
+            {filteredClaims.length === 0 && (
+              <p className="emptyFilteredClaims">No claims match this view.</p>
+            )}
           </div>
         </section>
       )}
@@ -972,6 +1085,36 @@ function StatusPill({ status }: { status: ClaimStatus }) {
   );
 }
 
+function ClaimFilterBar({ active, counts, onChange }: {
+  active: ClaimFilter;
+  counts: Record<ClaimFilter, number>;
+  onChange: (filter: ClaimFilter) => void;
+}) {
+  const filters: Array<{ key: ClaimFilter; label: string }> = [
+    { key: "needs_review", label: "Needs review" },
+    { key: "blockers", label: "Blockers" },
+    { key: "weak_missing", label: "Weak/missing" },
+    { key: "third_party_missing", label: "No third-party" },
+    { key: "verified", label: "Verified" },
+    { key: "all", label: "All" },
+  ];
+  return (
+    <div className="claimFilters" role="group" aria-label="Claim review filters">
+      {filters.map((filter) => (
+        <button
+          key={filter.key}
+          type="button"
+          className={clsx(active === filter.key && "claimFilter--active")}
+          onClick={() => onChange(filter.key)}
+        >
+          {filter.label}
+          <span>{counts[filter.key]}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function MemoSection({ title, items, danger = false }: { title: string; items: string[]; danger?: boolean }) {
   return (
     <section className={clsx("memoSection", danger && "danger")}>
@@ -1006,6 +1149,71 @@ function buildSuggestedQuestions(claims: DealClaim[]) {
 
 function formatClaimCategory(category: DealClaim["category"]) {
   return category.replaceAll("_", " ");
+}
+
+function claimMatchesFilter(claim: DealClaim, filter: ClaimFilter, evidence: EvidenceItem[]) {
+  const disposition = effectiveDisposition(claim);
+  const hasThirdParty = evidenceForClaim(claim.id, evidence).some((item) => item.sourceIndependence === "third_party");
+  if (filter === "all") return true;
+  if (filter === "verified") return disposition === "verified";
+  if (filter === "blockers") return disposition === "ic_blocker" || (claim.status === "contradicted" && claim.decisionImpact === "high");
+  if (filter === "weak_missing") return claim.status === "weak" || claim.status === "missing";
+  if (filter === "third_party_missing") return claim.status === "supported" && !hasThirdParty;
+  return disposition !== "verified" && disposition !== "ignored" && (
+    claim.status !== "supported" ||
+    !hasThirdParty ||
+    disposition === "needs_evidence" ||
+    disposition === "ic_blocker"
+  );
+}
+
+function buildClaimFilterCounts(claims: DealClaim[], evidence: EvidenceItem[]) {
+  const counts = {
+    needs_review: 0,
+    blockers: 0,
+    weak_missing: 0,
+    third_party_missing: 0,
+    verified: 0,
+    all: claims.length,
+  } satisfies Record<ClaimFilter, number>;
+  for (const claim of claims) {
+    (Object.keys(counts) as ClaimFilter[]).forEach((filter) => {
+      if (filter !== "all" && claimMatchesFilter(claim, filter, evidence)) counts[filter] += 1;
+    });
+  }
+  return counts;
+}
+
+function buildWorkspaceGroups(claims: DealClaim[], evidence: EvidenceItem[]) {
+  const evidenceByClaim = new Map<string, EvidenceItem[]>();
+  for (const item of evidence) {
+    evidenceByClaim.set(item.claimId, [...(evidenceByClaim.get(item.claimId) ?? []), item]);
+  }
+  const blockers: DealClaim[] = [];
+  const needsEvidence: DealClaim[] = [];
+  const monitor: DealClaim[] = [];
+  const verified: DealClaim[] = [];
+  for (const claim of claims) {
+    const disposition = effectiveDisposition(claim);
+    const hasThirdParty = (evidenceByClaim.get(claim.id) ?? []).some((item) => item.sourceIndependence === "third_party");
+    if (disposition === "verified") verified.push(claim);
+    else if (disposition === "ic_blocker" || (claim.status === "contradicted" && claim.decisionImpact === "high")) blockers.push(claim);
+    else if (disposition === "needs_evidence" || claim.status === "missing" || claim.status === "weak" || (claim.status === "supported" && !hasThirdParty)) needsEvidence.push(claim);
+    else monitor.push(claim);
+  }
+  return [
+    { key: "blockers", title: "Blockers", items: blockers },
+    { key: "needs-evidence", title: "Needs evidence", items: needsEvidence },
+    { key: "monitor", title: "Monitor", items: monitor },
+    { key: "verified", title: "Verified", items: verified },
+  ];
+}
+
+function formatReadiness(status?: ReadinessStatus) {
+  if (status === "ic_ready") return "IC-ready";
+  if (status === "blocked") return "Blocked";
+  if (status === "screen_out") return "Screen out";
+  return "Needs diligence";
 }
 
 function sourceLabel(item: EvidenceItem) {

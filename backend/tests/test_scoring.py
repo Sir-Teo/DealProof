@@ -1,5 +1,5 @@
 from app.models import DealClaim, EvidenceItem
-from app.scoring import apply_rule_based_status, score_claims
+from app.scoring import apply_rule_based_status, derive_readiness_status, score_claims
 
 
 def claim() -> DealClaim:
@@ -55,6 +55,8 @@ def test_support_requires_quote_backed_citation():
 
     assert updated.status == "weak"
     assert "Evidence is missing an exact quote-backed citation." in updated.qualityIssues
+    assert updated.statusReason
+    assert updated.resolutionRequest.startswith("Provide stronger source-level evidence")
 
 
 def test_founder_only_support_is_not_overconfident():
@@ -186,3 +188,34 @@ def test_founder_only_or_no_third_party_support_does_not_over_score():
     assert score.grade != "green"
     assert score.overall <= 84
     assert "No third-party validation is attached; score is capped below green." in score.drivers
+
+
+def test_review_dispositions_drive_readiness_and_ignored_claims_are_excluded():
+    ignored = claim().model_copy(
+        update={
+            "status": "contradicted",
+            "qualityScore": 10,
+            "decisionImpact": "high",
+            "reviewerDisposition": "ignored",
+        }
+    )
+    blocker = claim().model_copy(
+        update={
+            "id": "claim-02",
+            "text": "Customer ROI is independently proven.",
+            "category": "customer_roi",
+            "status": "weak",
+            "qualityScore": 40,
+            "decisionImpact": "high",
+            "reviewerDisposition": "ic_blocker",
+            "resolutionRequest": "Provide customer-level ROI backup.",
+        }
+    )
+
+    readiness, top_issue, requests = derive_readiness_status([ignored, blocker], [])
+    score = score_claims([ignored, blocker])
+
+    assert readiness == "blocked"
+    assert "claim-02" in top_issue
+    assert requests == ["Provide customer-level ROI backup."]
+    assert score.counts["contradicted"] == 0

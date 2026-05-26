@@ -126,7 +126,10 @@ def init_db() -> None:
         ensure_column(conn, "claims", "verification_need", "text not null default ''")
         ensure_column(conn, "claims", "decision_impact", "text not null default 'medium'")
         ensure_column(conn, "claims", "reviewer_status", "text not null default 'unreviewed'")
+        ensure_column(conn, "claims", "reviewer_disposition", "text not null default 'unreviewed'")
         ensure_column(conn, "claims", "reviewer_notes", "text not null default ''")
+        ensure_column(conn, "claims", "status_reason", "text not null default ''")
+        ensure_column(conn, "claims", "resolution_request", "text not null default ''")
         ensure_column(conn, "evidence", "source_independence", "text not null default 'internal'")
         ensure_column(conn, "evidence", "relevance_score", "real not null default 0")
         ensure_column(conn, "evidence", "quote_span", "text")
@@ -283,8 +286,9 @@ def save_analysis(
                 """
                 insert into claims
                 (id, deal_id, text, category, source_material, source_snippet, importance, status, risk_rationale,
-                 confidence, quality_score, quality_issues, verification_need, decision_impact, reviewer_status, reviewer_notes)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 confidence, quality_score, quality_issues, verification_need, decision_impact, reviewer_status,
+                 reviewer_disposition, reviewer_notes, status_reason, resolution_request)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     claim.id,
@@ -302,7 +306,10 @@ def save_analysis(
                     claim.verificationNeed,
                     claim.decisionImpact,
                     claim.reviewerStatus,
+                    claim.reviewerDisposition,
                     claim.reviewerNotes,
+                    claim.statusReason,
+                    claim.resolutionRequest,
                 ),
             )
         for item in evidence:
@@ -370,7 +377,10 @@ def get_deal(deal_id: str) -> DealAnalysis:
             verificationNeed=row["verification_need"],
             decisionImpact=row["decision_impact"],
             reviewerStatus=row["reviewer_status"],
+            reviewerDisposition=row["reviewer_disposition"],
             reviewerNotes=row["reviewer_notes"],
+            statusReason=row["status_reason"],
+            resolutionRequest=row["resolution_request"],
         )
         for row in claims
     ]
@@ -420,7 +430,9 @@ def update_claim_review(
     claim_id: str,
     status: str | None = None,
     reviewer_status: str | None = None,
+    reviewer_disposition: str | None = None,
     reviewer_notes: str | None = None,
+    resolution_request: str | None = None,
 ) -> None:
     assignments: list[str] = []
     values: list[str] = []
@@ -430,9 +442,15 @@ def update_claim_review(
     if reviewer_status is not None:
         assignments.append("reviewer_status = ?")
         values.append(reviewer_status)
+    if reviewer_disposition is not None:
+        assignments.append("reviewer_disposition = ?")
+        values.append(reviewer_disposition)
     if reviewer_notes is not None:
         assignments.append("reviewer_notes = ?")
         values.append(reviewer_notes)
+    if resolution_request is not None:
+        assignments.append("resolution_request = ?")
+        values.append(resolution_request)
     if not assignments:
         return
     values.extend([deal_id, claim_id])

@@ -3,7 +3,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from app.parsers import fetch_url_text, infer_kind, parse_file, request_headers_for_url, summarize
+from app.parsers import UrlFetchError, fetch_url_text, infer_kind, parse_file, request_headers_for_url, summarize, validate_fetch_url
 
 
 def test_parse_txt(tmp_path: Path):
@@ -58,6 +58,10 @@ async def test_fetch_url_text_sends_headers_and_extracts_sec_xml_html(monkeypatc
         "app.parsers.httpx.AsyncClient",
         lambda **kwargs: original_client(transport=transport, **kwargs),
     )
+    monkeypatch.setattr(
+        "app.parsers.socket.getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 443))],
+    )
 
     text = await fetch_url_text(
         "https://www.sec.gov/Archives/edgar/data/1387222/000095010326007678/xslF345X06/ownership.xml"
@@ -68,3 +72,13 @@ async def test_fetch_url_text_sends_headers_and_extracts_sec_xml_html(monkeypatc
     assert "SEC FORM 4" in text
     assert "Common stock sale" in text
     assert "ignore()" not in text
+
+
+def test_validate_fetch_url_blocks_private_networks(monkeypatch):
+    monkeypatch.setattr(
+        "app.parsers.socket.getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("127.0.0.1", 80))],
+    )
+
+    with pytest.raises(UrlFetchError, match="private network"):
+        validate_fetch_url("https://internal.example.test")

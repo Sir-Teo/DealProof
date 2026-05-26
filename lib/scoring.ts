@@ -33,6 +33,7 @@ const highRiskCategories = new Set<DealClaim["category"]>([
 ]);
 
 export function scoreClaims(claims: DealClaim[], evidence: EvidenceItem[] = [], qualityReview?: QualityReview | null): ScoreSummary {
+  claims = claims.filter((claim) => effectiveDisposition(claim) !== "ignored");
   const counts = countStatuses(claims);
   if (!claims.length) {
     return { overall: 0, grade: "red", counts, drivers: ["No diligence claims were scored."] };
@@ -76,7 +77,7 @@ export function scoreClaims(claims: DealClaim[], evidence: EvidenceItem[] = [], 
   }
 
   let scoreCap = 100;
-  const unresolved = claims.filter((claim) => claim.reviewerStatus !== "verified");
+  const unresolved = claims.filter((claim) => effectiveDisposition(claim) !== "verified");
   if (unresolved.some((claim) => claim.status === "contradicted" && claim.decisionImpact === "high")) {
     scoreCap = Math.min(scoreCap, 59);
     drivers.push("Unresolved high-impact contradiction blocks IC readiness.");
@@ -111,9 +112,10 @@ function countStatuses(claims: DealClaim[]) {
 function claimReadinessScore(claim: DealClaim, evidence: EvidenceItem[]) {
   const qualityScore = claim.qualityScore > 0 ? claim.qualityScore : statusWeights[claim.status];
   let score = Math.round(statusWeights[claim.status] * 0.35 + qualityScore * 0.65);
-  if (claim.reviewerStatus === "verified") {
+  const disposition = effectiveDisposition(claim);
+  if (disposition === "verified") {
     score = Math.max(score, 90);
-  } else if (claim.reviewerStatus === "needs_evidence") {
+  } else if (disposition === "needs_evidence" || disposition === "ic_blocker") {
     score -= 12;
   }
   if (claim.status !== "supported" && highRiskCategories.has(claim.category)) score -= 6;
@@ -125,6 +127,13 @@ function claimReadinessScore(claim: DealClaim, evidence: EvidenceItem[]) {
   if (evidence.length && !evidence.some((item) => item.sourceIndependence === "third_party")) score -= 4;
   if (evidence.some((item) => item.stance === "contradicts")) score -= 12;
   return clampScore(score);
+}
+
+export function effectiveDisposition(claim: DealClaim) {
+  if (claim.reviewerDisposition && claim.reviewerDisposition !== "unreviewed") return claim.reviewerDisposition;
+  if (claim.reviewerStatus === "verified") return "verified";
+  if (claim.reviewerStatus === "needs_evidence") return "needs_evidence";
+  return "unreviewed";
 }
 
 function clampScore(score: number) {

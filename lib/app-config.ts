@@ -24,7 +24,7 @@ export const UI_COPY = {
   createDealButton: "Create deal",
   seedDemoButton: "Load Harvey (legal AI)",
   seedDemo2Button: "Load SynthPay (fintech)",
-  demoReadyTitle: "Demo loaded — ready to analyze.",
+  demoReadyTitle: "Materials loaded — ready to analyze.",
   demoReadyBody: "Demo materials are staged below. Hit \"Run analysis\" to start the full diligence pipeline.",
   runAnalysisButton: "Run analysis",
   uploadButton: "Upload",

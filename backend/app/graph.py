@@ -24,7 +24,7 @@ from .models import (
     SourceMaterial,
 )
 from .retrieval import chunk_text, fallback_evidence_for_claim
-from .scoring import apply_rule_based_status, has_audit_citation, score_claims
+from .scoring import active_claims, apply_rule_based_status, derive_readiness_status, effective_disposition, has_audit_citation, score_claims
 from .web_research import collect_public_web_evidence
 
 
@@ -376,7 +376,7 @@ def score_claim_statuses(state: DiligenceState) -> DiligenceState:
 
 
 def review_quality(state: DiligenceState) -> DiligenceState:
-    claims = state["claims"]
+    claims = active_claims(state["claims"])
     evidence = state["evidence"]
     duplicated = duplicated_claims(claims)
     low_value = [claim.id for claim in claims if claim.qualityScore < 35 or "Claim is too terse to verify precisely." in claim.qualityIssues]
@@ -394,10 +394,11 @@ def review_quality(state: DiligenceState) -> DiligenceState:
         for claim in claims
         if claim.status == "supported" and ("No third-party validation is attached." in claim.qualityIssues or claim.confidence != "high")
     ]
-    follow_up = [claim.verificationNeed for claim in claims if claim.status != "supported"]
-    unique_follow_up = list(dict.fromkeys(follow_up))[:6]
+    follow_up = [claim.resolutionRequest or claim.verificationNeed for claim in claims if claim.status != "supported"]
+    unique_follow_up = list(dict.fromkeys(item for item in follow_up if item))[:6]
     avg_quality = round(sum(claim.qualityScore for claim in claims) / len(claims)) if claims else 0
     penalty = min(30, len(warnings) * 5 + len(duplicated) * 3)
+    readiness_status, top_gating_issue, approved_requests = derive_readiness_status(claims, evidence)
     review = QualityReview(
         memoReadinessScore=max(0, min(100, avg_quality - penalty)),
         globalWarnings=warnings,
@@ -405,6 +406,9 @@ def review_quality(state: DiligenceState) -> DiligenceState:
         lowValueClaims=low_value,
         recommendedFollowUpEvidence=unique_follow_up,
         overconfidenceWarnings=overconfidence,
+        readinessStatus=readiness_status,
+        topGatingIssue=top_gating_issue,
+        approvedDiligenceRequests=approved_requests or unique_follow_up,
     )
     return {**state, "quality_review": review}
 
@@ -425,24 +429,26 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
     llm = get_llm_client()
     if not llm.enabled:
         raise RuntimeError("DEEPSEEK_API_KEY is not configured. Add it to backend/.env.")
-    score_summary = score_claims(state["claims"], state.get("evidence", []), state.get("quality_review"))
+    reviewable_claims = active_claims(state["claims"])
+    score_summary = score_claims(reviewable_claims, state.get("evidence", []), state.get("quality_review"))
     grade = score_summary.grade
     profile = state.get("profile", DealProfile())
     claim_context = "\n".join(
         f"- [{claim.status}/{claim.importance}/{claim.category}/confidence={claim.confidence}/quality={claim.qualityScore}] "
         f"{claim.text} Rationale: {claim.riskRationale} Verification need: {claim.verificationNeed}"
-        for claim in state["claims"]
+        for claim in reviewable_claims
+        if effective_disposition(claim) not in {"ignored", "needs_evidence"}
     )
     seen_quotes: set[str] = set()
     evidence_context = "\n".join(
         evidence_summary_for_claim(claim, state.get("evidence", []), seen_quotes)
-        for claim in state["claims"]
+        for claim in reviewable_claims
     )
     quality_context = state.get("quality_review", QualityReview()).model_dump_json()
 
     # Build specific unresolved-claims block for Fix 6
     unresolved = [
-        c for c in state["claims"]
+        c for c in reviewable_claims
         if c.status in {"contradicted", "missing", "weak"} and c.importance == "high"
     ]
     unresolved_block = "\n".join(
@@ -469,6 +475,8 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
         f"IC readiness: {ic_readiness_label} ({score_summary.overall}/100). "
         f"Key issues: {'; '.join(score_summary.drivers[:2])}\n"
         f"Quality review: {quality_context}\n\n"
+        "Use reviewer disposition as authoritative: ignored and needs_evidence claims must not be presented as strengths. "
+        "Verified claims may be presented as trusted only if their evidence context supports that framing.\n\n"
         + (f"High-priority unresolved claims (use these verbatim in nextDiligenceRequests):\n{unresolved_block}\n\n" if unresolved_block else "")
         + f"Claims:\n{claim_context}\n\nEvidence summaries:\n{evidence_context}\n\n"
         "Return shape: {\"memo\":{\"company\":\"...\",\"overallGrade\":\"green|yellow|red\",\"investmentQuestion\":\"...\","
@@ -481,7 +489,7 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
 
     # Fix 4: append reconciliation note when grade is green/yellow but contradictions exist
     unresolved_contradictions = [
-        c for c in state["claims"]
+        c for c in reviewable_claims
         if c.status == "contradicted" and c.reviewerStatus != "verified"
     ]
     if unresolved_contradictions and grade in {"green", "yellow"}:
@@ -527,8 +535,36 @@ def refresh_review_artifacts(deal_id: str) -> None:
     score_summary = score_claims(deal.claims, deal.evidence, reviewed["quality_review"])
     grade = score_summary.grade
     reviewed["on_progress"] = None
-    memo_state = generate_memo({**reviewed, "deal_id": deal_id, "company": deal.company, "stage": deal.stage})
-    db.save_review_artifacts(deal_id, memo_state["memo"], reviewed["quality_review"])
+    try:
+        memo_state = generate_memo({**reviewed, "deal_id": deal_id, "company": deal.company, "stage": deal.stage})
+        memo = memo_state["memo"]
+    except Exception:
+        memo = deterministic_review_memo(deal, reviewed["quality_review"], grade)
+    db.save_review_artifacts(deal_id, memo, reviewed["quality_review"])
+
+
+def deterministic_review_memo(deal, quality_review: QualityReview, grade: str) -> RiskMemo:
+    active = active_claims(deal.claims)
+    verified = [claim for claim in active if effective_disposition(claim) == "verified" or claim.status == "supported"]
+    unresolved = [claim for claim in active if effective_disposition(claim) != "verified" and claim.status in {"weak", "missing", "contradicted"}]
+    strengths = [f"{claim.id}: {claim.text}" for claim in verified if effective_disposition(claim) != "needs_evidence"][:5]
+    risks = [f"{claim.id}: {claim.text} — {claim.statusReason or claim.riskRationale}" for claim in unresolved[:6]]
+    requests = quality_review.approvedDiligenceRequests or [claim.resolutionRequest for claim in unresolved if claim.resolutionRequest]
+    return RiskMemo(
+        company=deal.company,
+        overallGrade=grade,  # type: ignore[arg-type]
+        investmentQuestion=f"Is {deal.company} ready for IC based on verified evidence?",
+        keyStrengths=strengths,
+        materialRisks=risks,
+        followUpQuestions=list(dict.fromkeys(requests))[:8],
+        icRecommendation=f"Current readiness: {quality_review.readinessStatus.replace('_', ' ')}. Top gating issue: {quality_review.topGatingIssue or 'none'}.",
+        executiveSummary=f"{deal.company} is {quality_review.readinessStatus.replace('_', ' ')} after reviewer updates.",
+        thesisAssessment="Use verified strengths only; unresolved claims require the listed diligence requests before IC reliance.",
+        evidenceMap=[f"{claim.id} ({claim.status}): {claim.statusReason or claim.riskRationale}" for claim in active[:8]],
+        keyRisks=risks,
+        nextDiligenceRequests=list(dict.fromkeys(requests))[:8],
+        decisionDrivers=[quality_review.topGatingIssue] if quality_review.topGatingIssue else [],
+    )
 
 
 def answer_question(deal_id: str, question: str, chat_history=None):
@@ -696,5 +732,3 @@ def evidence_summary_for_claim(
         f"{claim.id} ({claim.status}): {claim.text} - primary source: {primary_source}; "
         f"sources [{independence_summary}], stances [{stance_summary}], citations: {', '.join(citations)}.{primary_quote}"
     )
-
-

@@ -19,7 +19,10 @@ const claims: DealClaim[] = [
     verificationNeed: "Keep citation attached.",
     decisionImpact: "high",
     reviewerStatus: "unreviewed",
-    reviewerNotes: ""
+    reviewerDisposition: "unreviewed",
+    reviewerNotes: "",
+    statusReason: "Supported by financial snapshot.",
+    resolutionRequest: ""
   },
   {
     id: "claim-02",
@@ -36,7 +39,10 @@ const claims: DealClaim[] = [
     verificationNeed: "Request customer cohort data.",
     decisionImpact: "high",
     reviewerStatus: "unreviewed",
-    reviewerNotes: ""
+    reviewerDisposition: "unreviewed",
+    reviewerNotes: "",
+    statusReason: "Partial support exists.",
+    resolutionRequest: "Provide customer cohort data."
   },
   {
     id: "claim-03",
@@ -53,7 +59,10 @@ const claims: DealClaim[] = [
     verificationNeed: "Reconcile the contradiction.",
     decisionImpact: "medium",
     reviewerStatus: "unreviewed",
-    reviewerNotes: ""
+    reviewerDisposition: "unreviewed",
+    reviewerNotes: "",
+    statusReason: "Contradictory evidence conflicts with this claim.",
+    resolutionRequest: "Reconcile competitor evidence."
   },
   {
     id: "claim-04",
@@ -70,7 +79,10 @@ const claims: DealClaim[] = [
     verificationNeed: "Request bottom-up market evidence.",
     decisionImpact: "high",
     reviewerStatus: "unreviewed",
-    reviewerNotes: ""
+    reviewerDisposition: "unreviewed",
+    reviewerNotes: "",
+    statusReason: "No support was found.",
+    resolutionRequest: "Provide bottom-up market evidence."
   }
 ];
 

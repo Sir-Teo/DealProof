@@ -66,7 +66,10 @@ const MOCK_DEAL_ANALYZED = {
     duplicatedClaims: [],
     lowValueClaims: [],
     recommendedFollowUpEvidence: ["Provide audited P&L"],
-    overconfidenceWarnings: []
+    overconfidenceWarnings: [],
+    readinessStatus: "needs_diligence",
+    topGatingIssue: "c3: Full HIPAA compliance is complete. needs more evidence.",
+    approvedDiligenceRequests: ["Audited P&L"]
   },
   score: {
     overall: 72,
@@ -94,7 +97,10 @@ function claim(id: string, text: string, status: string, category: string, impor
     verificationNeed: "Request source-level evidence.",
     decisionImpact: importance,
     reviewerStatus: "unreviewed",
-    reviewerNotes: ""
+    reviewerDisposition: "unreviewed",
+    reviewerNotes: "",
+    statusReason: "Evidence status reason.",
+    resolutionRequest: status === "supported" ? "" : `Provide source-level evidence: ${text}`
   };
 }
 
@@ -119,7 +125,7 @@ test("composer and empty state render correctly", async ({ page }) => {
   await expect(page.locator(".composerCard")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Ask about the deal evidence..." })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Run agent", exact: true })).toBeDisabled();
-  await expect(page.getByRole("button", { name: /Load demo deal/i })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /Load Harvey/i })).toBeEnabled();
 });
 
 test("attach drawer opens and closes on paperclip click", async ({ page }) => {
@@ -133,6 +139,22 @@ test("attach drawer opens and closes on paperclip click", async ({ page }) => {
   await expect(page.locator(".attachDrawer")).not.toBeVisible();
 });
 
+test("loading a deal clears stale attachment input", async ({ page }) => {
+  await page.route("**/deals/demo", (route) => route.fulfill({ json: MOCK_DEAL_SEEDED }));
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Attach files or URL" }).evaluate((button: HTMLButtonElement) => button.click());
+  await page.getByPlaceholder("Add URL").fill("example.com");
+  await page.getByRole("button", { name: /^Add$/ }).click();
+  await expect(page.getByText("Invalid URL")).toHaveCount(2);
+
+  await page.getByRole("button", { name: /Load Harvey/i }).click();
+
+  await expect(page.getByText("Materials loaded — ready to analyze.")).toBeVisible();
+  await expect(page.locator(".attachDrawer")).not.toBeVisible();
+  await expect(page.getByText("Invalid URL")).toHaveCount(0);
+});
+
 test("post-analysis panels show memo, claims, and evidence", async ({ page }) => {
   await setupAnalyzedMocks(page);
   await page.goto("/");
@@ -141,13 +163,13 @@ test("post-analysis panels show memo, claims, and evidence", async ({ page }) =>
   await expect(page.locator(".messageTitle").filter({ hasText: /Analysis complete/i })).toBeVisible({ timeout: 5_000 });
   await expect(page.locator(".agentOutput")).toBeVisible({ timeout: 10_000 });
   await expect(page.locator(".gradeBar")).toHaveClass(/card--yellow/);
-  await expect(page.locator(".gradeBar strong")).toHaveText("yellow · 72/100");
+  await expect(page.locator(".gradeBar strong")).toHaveText("Needs diligence · yellow · 72/100");
   await expect(page.locator(".scoreDrivers")).toContainText("High-importance missing evidence prevents a green score.");
   await expect(page.locator(".memoArtifact")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Red team memo" })).toBeVisible();
   await expect(page.locator(".profileGrid .metric")).toHaveCount(4);
-  await expect(page.getByRole("heading", { name: "3 diligence claims" })).toBeVisible();
-  await expect(page.locator(".claimGroup").filter({ hasText: "supported" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "3 auditable work items" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Needs evidence" })).toBeVisible();
 
   const evidence = page.locator(".claimEvidence").first();
   await evidence.locator("summary").click();

@@ -1,7 +1,8 @@
 from fastapi.testclient import TestClient
 
+from app import db
 from app.main import app
-from app.models import RiskMemo
+from app.models import DealClaim, QualityReview, RiskMemo
 from app.parsers import UrlFetchError
 
 
@@ -66,7 +67,10 @@ def test_risk_memo_accepts_structured_evidence_map_items():
     ]
 
 
-def test_analysis_stream_emits_progress_events(monkeypatch):
+NO_API_KEY = "DEEPSEEK_API_KEY is not configured. Add it to backend/.env."
+
+
+def test_analysis_stream_reports_missing_api_key(monkeypatch):
     monkeypatch.setattr("app.graph.DeepSeekClient", lambda: type("FakeDeepSeek", (), {"enabled": False})())
 
     with TestClient(app) as client:
@@ -79,12 +83,11 @@ def test_analysis_stream_emits_progress_events(monkeypatch):
         body = streamed.text
         assert '"event": "run_start"' in body
         assert '"event": "tool_start"' in body
-        assert '"event": "tool_complete"' in body
-        assert '"event": "step_complete"' in body
-        assert '"event": "run_complete"' in body
+        assert '"event": "run_error"' in body
+        assert NO_API_KEY in body
 
 
-def test_analysis_returns_quality_review_and_claim_review_patch(monkeypatch):
+def test_analysis_endpoint_reports_missing_api_key(monkeypatch):
     monkeypatch.setattr("app.graph.DeepSeekClient", lambda: type("FakeDeepSeek", (), {"enabled": False})())
 
     with TestClient(app) as client:
@@ -93,89 +96,80 @@ def test_analysis_returns_quality_review_and_claim_review_patch(monkeypatch):
         deal_id = created.json()["id"]
 
         analyzed = client.post(f"/deals/{deal_id}/analyze")
-        assert analyzed.status_code == 200
-        deal = analyzed.json()
-        assert deal["claims"]
-        assert deal["evidence"]
-        assert deal["memo"]
-        assert deal["generatedAt"]
-        assert deal["qualityReview"]["memoReadinessScore"] >= 0
-        claim_id = deal["claims"][0]["id"]
 
+    assert analyzed.status_code == 500
+    assert analyzed.json()["detail"] == NO_API_KEY
+
+
+def test_chat_before_analysis_does_not_require_api_key():
+    with TestClient(app) as client:
+        created = client.post("/deals/demo")
+        assert created.status_code == 200
+        deal_id = created.json()["id"]
+
+        response = client.post(f"/deals/{deal_id}/chat", json={"question": "Can we trust this deal?"})
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Run analysis before asking diligence questions."
+
+
+def test_claim_review_disposition_and_diligence_request_export(monkeypatch):
+    monkeypatch.setattr("app.graph.DeepSeekClient", lambda: type("FakeDeepSeek", (), {"enabled": False})())
+    deal_id = "deal-review-workflow-test"
+    claim = DealClaim(
+        id="claim-01",
+        text="The product is fully HIPAA compliant.",
+        category="compliance",
+        sourceMaterial="deck.txt",
+        sourceSnippet="HIPAA compliant",
+        importance="high",
+        status="missing",
+        riskRationale="No compliance evidence was found.",
+        confidence="low",
+        qualityScore=20,
+        verificationNeed="Request compliance evidence.",
+        decisionImpact="high",
+        statusReason="No quote-backed evidence supports this claim.",
+        resolutionRequest="Provide HIPAA audit or compliance documentation.",
+    )
+    memo = RiskMemo(
+        company="ReviewCo",
+        overallGrade="red",
+        investmentQuestion="Can ReviewCo pass compliance diligence?",
+        keyStrengths=[],
+        materialRisks=["Compliance evidence is missing."],
+        followUpQuestions=[claim.resolutionRequest],
+        icRecommendation="Needs diligence.",
+    )
+    review = QualityReview(
+        memoReadinessScore=40,
+        readinessStatus="needs_diligence",
+        topGatingIssue="claim-01: compliance evidence is missing.",
+        approvedDiligenceRequests=[claim.resolutionRequest],
+    )
+
+    db.init_db()
+    try:
+        db.create_deal(deal_id, "ReviewCo", stage="Seed")
+    except Exception:
+        pass
+    db.save_analysis(deal_id, [claim], [], memo, review, "2026-05-25T00:00:00+00:00")
+
+    with TestClient(app) as client:
         patched = client.patch(
-            f"/deals/{deal_id}/claims/{claim_id}/review",
-            json={"reviewerStatus": "needs_evidence", "reviewerNotes": "Ask for customer-level backup."},
+            f"/deals/{deal_id}/claims/{claim.id}/review",
+            json={
+                "reviewerDisposition": "ic_blocker",
+                "reviewerNotes": "Must resolve before IC.",
+                "resolutionRequest": "Send HIPAA audit report and policy evidence.",
+            },
         )
+        exported = client.get(f"/deals/{deal_id}/export-diligence-requests")
 
-        assert patched.status_code == 200
-        claim = next(item for item in patched.json()["claims"] if item["id"] == claim_id)
-        assert claim["reviewerStatus"] == "needs_evidence"
-        assert claim["reviewerNotes"] == "Ask for customer-level backup."
-
-
-def test_claim_status_review_refreshes_memo_and_quality_review(monkeypatch):
-    monkeypatch.setattr("app.graph.DeepSeekClient", lambda: type("FakeDeepSeek", (), {"enabled": False})())
-
-    with TestClient(app) as client:
-        created = client.post("/deals/demo")
-        assert created.status_code == 200
-        deal_id = created.json()["id"]
-
-        analyzed = client.post(f"/deals/{deal_id}/analyze")
-        assert analyzed.status_code == 200
-        deal = analyzed.json()
-
-        updated = deal
-        for claim in deal["claims"]:
-            patched = client.patch(f"/deals/{deal_id}/claims/{claim['id']}/review", json={"status": "supported"})
-            assert patched.status_code == 200
-            updated = patched.json()
-
-    assert updated["score"]["grade"] == updated["memo"]["overallGrade"]
-    assert "High-importance claims remain weak or missing." not in updated["qualityReview"]["globalWarnings"]
-
-
-def test_chat_history_persists_multiple_follow_up_questions(monkeypatch):
-    monkeypatch.setattr("app.graph.DeepSeekClient", lambda: type("FakeDeepSeek", (), {"enabled": False})())
-
-    with TestClient(app) as client:
-        created = client.post("/deals/demo")
-        assert created.status_code == 200
-        deal_id = created.json()["id"]
-        analyzed = client.post(f"/deals/{deal_id}/analyze")
-        assert analyzed.status_code == 200
-
-        first = client.post(f"/deals/{deal_id}/chat", json={"question": "What evidence supports the ROI claims?"})
-        second = client.post(f"/deals/{deal_id}/chat", json={"question": "What about retention?"})
-        loaded = client.get(f"/deals/{deal_id}")
-
-    assert first.status_code == 200
-    assert second.status_code == 200
-    assert first.json()["id"] != second.json()["id"]
-    assert first.json()["dealId"] == deal_id
-    assert second.json()["citations"]
-    history = loaded.json()["chatHistory"]
-    assert [turn["question"] for turn in history[-2:]] == [
-        "What evidence supports the ROI claims?",
-        "What about retention?",
-    ]
-    assert all(turn["answer"] for turn in history[-2:])
-
-
-def test_follow_up_question_uses_diligence_category_context(monkeypatch):
-    monkeypatch.setattr("app.graph.DeepSeekClient", lambda: type("FakeDeepSeek", (), {"enabled": False})())
-
-    with TestClient(app) as client:
-        created = client.post("/deals/demo")
-        assert created.status_code == 200
-        deal_id = created.json()["id"]
-        analyzed = client.post(f"/deals/{deal_id}/analyze")
-        assert analyzed.status_code == 200
-
-        first = client.post(f"/deals/{deal_id}/chat", json={"question": "Can we trust ROI and retention?"})
-        follow_up = client.post(f"/deals/{deal_id}/chat", json={"question": "What about competition?"})
-
-    assert first.status_code == 200
-    assert follow_up.status_code == 200
-    assert "compet" in follow_up.json()["answer"].lower()
-    assert follow_up.json()["citations"]
+    assert patched.status_code == 200
+    updated_claim = patched.json()["claims"][0]
+    assert updated_claim["reviewerDisposition"] == "ic_blocker"
+    assert updated_claim["resolutionRequest"] == "Send HIPAA audit report and policy evidence."
+    assert patched.json()["qualityReview"]["readinessStatus"] == "blocked"
+    assert exported.status_code == 200
+    assert "Send HIPAA audit report and policy evidence." in exported.text
