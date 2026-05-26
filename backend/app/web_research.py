@@ -289,6 +289,11 @@ def evidence_from_result(
         sourceName=title,
         sourceUrl=result.url,
         chunkIndex=1,
+        evidenceRole="contradiction" if stance == "contradicts" else "primary_support" if stance == "supports" else "corroborating_support",
+        sourceAuthority="public_filing" if "sec.gov" in result.url.lower() else "press" if any(term in result.url.lower() for term in ["news", "press", "prnewswire", "businesswire"]) else "third_party",
+        locator=result.url,
+        quoteConfidence="high" if stance in {"supports", "contradicts"} else "medium",
+        assessorRationale=f"Public web source matched the claim with relevance {score:.2f} and stance {stance.replace('_', ' ')}.",
         retrievedAt=datetime.now(timezone.utc).isoformat(),
     )
 

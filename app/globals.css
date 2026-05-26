@@ -766,8 +766,19 @@ summary:focus-visible {
   line-height: 1.45;
 }
 
+.claimMetaGrid {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
 .claimReason strong,
-.resolutionRequest strong {
+.resolutionRequest strong,
+.claimMetaGrid strong {
   color: var(--ink);
   font-weight: 600;
 }
@@ -1017,6 +1028,15 @@ summary:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.evidenceRationale {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  padding: 0 4px;
+  overflow-wrap: anywhere;
+}
+
 .contextSnippet {
   color: var(--muted);
   font-size: 12px;
@@ -1121,6 +1141,69 @@ summary:focus-visible {
 }
 
 .memoSection.danger li::marker {
+  color: var(--red);
+}
+
+.reportV2 {
+  display: grid;
+  gap: 12px;
+}
+
+.reportGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.reportClaimSection {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  min-width: 0;
+}
+
+.reportClaimSection h3 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.reportClaimSection ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reportClaimSection li {
+  display: grid;
+  gap: 3px;
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.45;
+  min-width: 0;
+}
+
+.reportClaimSection li strong {
+  color: var(--ink);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.reportClaimSection li span,
+.reportClaimSection li small {
+  overflow-wrap: anywhere;
+}
+
+.reportClaimSection li small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.reportClaimSection.danger li strong {
   color: var(--red);
 }
 
@@ -1464,6 +1547,10 @@ summary:focus-visible {
   }
 
   .memoColumns {
+    grid-template-columns: 1fr;
+  }
+
+  .reportGrid {
     grid-template-columns: 1fr;
   }
 

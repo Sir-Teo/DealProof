@@ -126,6 +126,8 @@ function claimReadinessScore(claim: DealClaim, evidence: EvidenceItem[]) {
   }
   if (evidence.length && !evidence.some((item) => item.sourceIndependence === "third_party")) score -= 4;
   if (evidence.some((item) => item.stance === "contradicts")) score -= 12;
+  if (verificationStandardSatisfied(claim, evidence)) score += 4;
+  else if (claim.decisionImpact === "high") score -= 6;
   return clampScore(score);
 }
 
@@ -142,6 +144,32 @@ function clampScore(score: number) {
 
 function uniqueItems(items: string[]) {
   return Array.from(new Set(items.filter(Boolean)));
+}
+
+function verificationStandardSatisfied(claim: DealClaim, evidence: EvidenceItem[]) {
+  const standard = claim.verificationStandard ?? "founder_statement";
+  const citedSupport = evidence.filter(
+    (item) =>
+      item.stance === "supports" &&
+      Boolean(item.citation?.trim()) &&
+      Boolean(item.quoteSpan?.trim()) &&
+      item.sourceType !== "derived" &&
+      item.sourceIndependence !== "derived"
+  );
+  if (!citedSupport.length) return false;
+  const authorities = new Set(citedSupport.map((item) => item.sourceAuthority ?? "internal_operating"));
+  const independence = new Set(citedSupport.map((item) => item.sourceIndependence));
+  const hasAuthority = (...values: NonNullable<EvidenceItem["sourceAuthority"]>[]) => values.some((item) => authorities.has(item));
+  if (standard === "founder_statement") return true;
+  if (standard === "internal_document") {
+    return hasAuthority("internal_operating", "customer", "third_party", "public_filing") || independence.has("internal") || independence.has("third_party");
+  }
+  if (standard === "customer_reference") return hasAuthority("customer", "third_party", "public_filing") || independence.has("third_party");
+  if (standard === "third_party") return hasAuthority("third_party", "public_filing", "press") || independence.has("third_party");
+  if (standard === "audited_financials") return hasAuthority("public_filing", "third_party", "internal_operating");
+  if (standard === "legal_document") return hasAuthority("public_filing", "third_party", "internal_operating");
+  if (standard === "public_filing") return authorities.has("public_filing");
+  return false;
 }
 
 export function evidenceForClaim(claimId: string, evidence: EvidenceItem[]) {

@@ -4,6 +4,30 @@ export type ReviewerStatus = "unreviewed" | "verified" | "needs_evidence";
 export type ReviewerDisposition = "unreviewed" | "verified" | "needs_evidence" | "ignored" | "ic_blocker";
 export type ScoreGrade = "green" | "yellow" | "red";
 export type ReadinessStatus = "ic_ready" | "needs_diligence" | "blocked" | "screen_out";
+export type ClaimKind =
+  | "metric"
+  | "customer"
+  | "market"
+  | "competition"
+  | "product"
+  | "compliance"
+  | "financial"
+  | "team"
+  | "fundraising"
+  | "legal"
+  | "operational"
+  | "other";
+export type VerificationStandard =
+  | "founder_statement"
+  | "internal_document"
+  | "customer_reference"
+  | "third_party"
+  | "audited_financials"
+  | "legal_document"
+  | "public_filing";
+export type ReviewPriority = "critical" | "high" | "medium" | "low";
+export type EvidenceRole = "primary_support" | "corroborating_support" | "contradiction" | "context" | "gap";
+export type SourceAuthority = "founder" | "internal_operating" | "customer" | "third_party" | "public_filing" | "press" | "derived";
 
 export type DealClaim = {
   id: string;
@@ -38,6 +62,13 @@ export type DealClaim = {
   reviewerNotes: string;
   statusReason: string;
   resolutionRequest: string;
+  claimKind?: ClaimKind;
+  extractedFact?: string;
+  sourceLocator?: string;
+  materialityReason?: string;
+  verificationStandard?: VerificationStandard;
+  reviewPriority?: ReviewPriority;
+  isTargetCompanyClaim?: boolean;
 };
 
 export type EvidenceItem = {
@@ -57,6 +88,46 @@ export type EvidenceItem = {
   sourceUrl?: string | null;
   chunkIndex?: number | null;
   retrievedAt?: string | null;
+  evidenceRole?: EvidenceRole;
+  sourceAuthority?: SourceAuthority;
+  sourceDate?: string | null;
+  locator?: string;
+  quoteConfidence?: Confidence;
+  assessorRationale?: string;
+};
+
+export type SourceQualityNote = {
+  materialId: string;
+  materialName: string;
+  sourceType: "file" | "url" | "seed";
+  authority: SourceAuthority;
+  reliability: Confidence;
+  limitations: string[];
+};
+
+export type ReportClaimRef = {
+  claimId: string;
+  text: string;
+  status: ClaimStatus;
+  rationale: string;
+  evidenceIds: string[];
+};
+
+export type DiligenceReport = {
+  reportVersion: string;
+  company: string;
+  generatedAt?: string | null;
+  decisionSummary: string;
+  investmentThesis: string;
+  keyVerifiedClaims: ReportClaimRef[];
+  disputedClaims: ReportClaimRef[];
+  weakOrMissingClaims: ReportClaimRef[];
+  evidenceAssessment: string[];
+  redFlags: string[];
+  diligencePlan: string[];
+  sourceQualityNotes: SourceQualityNote[];
+  icRecommendation: string;
+  appendixClaimLedger: ReportClaimRef[];
 };
 
 export type RiskMemo = {
@@ -136,6 +207,7 @@ export type DealAnalysis = {
   evidence: EvidenceItem[];
   profile: DealProfile | null;
   memo: RiskMemo | null;
+  report: DiligenceReport | null;
   qualityReview: QualityReview | null;
   score: ScoreSummary | null;
   generatedAt: string | null;

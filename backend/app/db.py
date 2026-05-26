@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import DATABASE_FILENAME, DEFAULT_STAGE, DEFAULT_TAGLINE
-from .models import ChatTurn, DealAnalysis, DealClaim, DealProfile, EvidenceItem, QualityReview, RiskMemo, SourceMaterial
+from .models import ChatTurn, DealAnalysis, DealClaim, DealProfile, DiligenceReport, EvidenceItem, QualityReview, RiskMemo, SourceMaterial
 from .scoring import score_claims
 
 import os as _os
@@ -109,6 +109,11 @@ def init_db() -> None:
               payload text not null
             );
 
+            create table if not exists reports (
+              deal_id text primary key references deals(id) on delete cascade,
+              payload text not null
+            );
+
             create table if not exists chats (
               id text primary key,
               deal_id text not null references deals(id) on delete cascade,
@@ -130,6 +135,13 @@ def init_db() -> None:
         ensure_column(conn, "claims", "reviewer_notes", "text not null default ''")
         ensure_column(conn, "claims", "status_reason", "text not null default ''")
         ensure_column(conn, "claims", "resolution_request", "text not null default ''")
+        ensure_column(conn, "claims", "claim_kind", "text not null default 'other'")
+        ensure_column(conn, "claims", "extracted_fact", "text not null default ''")
+        ensure_column(conn, "claims", "source_locator", "text not null default ''")
+        ensure_column(conn, "claims", "materiality_reason", "text not null default ''")
+        ensure_column(conn, "claims", "verification_standard", "text not null default 'founder_statement'")
+        ensure_column(conn, "claims", "review_priority", "text not null default 'medium'")
+        ensure_column(conn, "claims", "is_target_company_claim", "integer not null default 1")
         ensure_column(conn, "evidence", "source_independence", "text not null default 'internal'")
         ensure_column(conn, "evidence", "relevance_score", "real not null default 0")
         ensure_column(conn, "evidence", "quote_span", "text")
@@ -138,6 +150,12 @@ def init_db() -> None:
         ensure_column(conn, "evidence", "source_url", "text")
         ensure_column(conn, "evidence", "chunk_index", "integer")
         ensure_column(conn, "evidence", "retrieved_at", "text")
+        ensure_column(conn, "evidence", "evidence_role", "text not null default 'context'")
+        ensure_column(conn, "evidence", "source_authority", "text not null default 'internal_operating'")
+        ensure_column(conn, "evidence", "source_date", "text")
+        ensure_column(conn, "evidence", "locator", "text not null default ''")
+        ensure_column(conn, "evidence", "quote_confidence", "text not null default 'medium'")
+        ensure_column(conn, "evidence", "assessor_rationale", "text not null default ''")
 
 
 def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -274,6 +292,7 @@ def save_analysis(
     quality_review: QualityReview,
     generated_at: str,
     profile: DealProfile | None = None,
+    report: DiligenceReport | None = None,
 ) -> None:
     with connect() as conn:
         conn.execute("delete from claims where deal_id = ?", (deal_id,))
@@ -281,14 +300,16 @@ def save_analysis(
         conn.execute("delete from memos where deal_id = ?", (deal_id,))
         conn.execute("delete from deal_profiles where deal_id = ?", (deal_id,))
         conn.execute("delete from quality_reviews where deal_id = ?", (deal_id,))
+        conn.execute("delete from reports where deal_id = ?", (deal_id,))
         for claim in claims:
             conn.execute(
                 """
                 insert into claims
                 (id, deal_id, text, category, source_material, source_snippet, importance, status, risk_rationale,
                  confidence, quality_score, quality_issues, verification_need, decision_impact, reviewer_status,
-                 reviewer_disposition, reviewer_notes, status_reason, resolution_request)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 reviewer_disposition, reviewer_notes, status_reason, resolution_request, claim_kind, extracted_fact,
+                 source_locator, materiality_reason, verification_standard, review_priority, is_target_company_claim)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     claim.id,
@@ -310,6 +331,13 @@ def save_analysis(
                     claim.reviewerNotes,
                     claim.statusReason,
                     claim.resolutionRequest,
+                    claim.claimKind,
+                    claim.extractedFact,
+                    claim.sourceLocator,
+                    claim.materialityReason,
+                    claim.verificationStandard,
+                    claim.reviewPriority,
+                    1 if claim.isTargetCompanyClaim else 0,
                 ),
             )
         for item in evidence:
@@ -318,8 +346,9 @@ def save_analysis(
                 insert into evidence
                 (id, deal_id, claim_id, title, source_type, citation, snippet, stance, reliability,
                  source_independence, relevance_score, quote_span, source_material_id, source_name, source_url,
-                 chunk_index, retrieved_at)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 chunk_index, retrieved_at, evidence_role, source_authority, source_date, locator, quote_confidence,
+                 assessor_rationale)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     item.id,
@@ -339,11 +368,19 @@ def save_analysis(
                     item.sourceUrl,
                     item.chunkIndex,
                     item.retrievedAt,
+                    item.evidenceRole,
+                    item.sourceAuthority,
+                    item.sourceDate,
+                    item.locator,
+                    item.quoteConfidence,
+                    item.assessorRationale,
                 ),
             )
         conn.execute("insert into memos (deal_id, payload) values (?, ?)", (deal_id, memo.model_dump_json()))
         if profile:
             conn.execute("insert into deal_profiles (deal_id, payload) values (?, ?)", (deal_id, profile.model_dump_json()))
+        if report:
+            conn.execute("insert into reports (deal_id, payload) values (?, ?)", (deal_id, report.model_dump_json()))
         conn.execute("insert into quality_reviews (deal_id, payload) values (?, ?)", (deal_id, quality_review.model_dump_json()))
         conn.execute(
             "update deals set status = 'completed', error = null, generated_at = ? where id = ?",
@@ -361,6 +398,7 @@ def get_deal(deal_id: str) -> DealAnalysis:
         profile_row = conn.execute("select payload from deal_profiles where deal_id = ?", (deal_id,)).fetchone()
         memo_row = conn.execute("select payload from memos where deal_id = ?", (deal_id,)).fetchone()
         review_row = conn.execute("select payload from quality_reviews where deal_id = ?", (deal_id,)).fetchone()
+        report_row = conn.execute("select payload from reports where deal_id = ?", (deal_id,)).fetchone()
     parsed_claims = [
         DealClaim(
             id=row["id"],
@@ -381,6 +419,13 @@ def get_deal(deal_id: str) -> DealAnalysis:
             reviewerNotes=row["reviewer_notes"],
             statusReason=row["status_reason"],
             resolutionRequest=row["resolution_request"],
+            claimKind=row["claim_kind"],
+            extractedFact=row["extracted_fact"],
+            sourceLocator=row["source_locator"],
+            materialityReason=row["materiality_reason"],
+            verificationStandard=row["verification_standard"],
+            reviewPriority=row["review_priority"],
+            isTargetCompanyClaim=bool(row["is_target_company_claim"]),
         )
         for row in claims
     ]
@@ -402,6 +447,12 @@ def get_deal(deal_id: str) -> DealAnalysis:
             sourceUrl=row["source_url"],
             chunkIndex=row["chunk_index"],
             retrievedAt=row["retrieved_at"],
+            evidenceRole=row["evidence_role"],
+            sourceAuthority=row["source_authority"],
+            sourceDate=row["source_date"],
+            locator=row["locator"],
+            quoteConfidence=row["quote_confidence"],
+            assessorRationale=row["assessor_rationale"],
         )
         for row in evidence
     ]
@@ -419,6 +470,7 @@ def get_deal(deal_id: str) -> DealAnalysis:
         evidence=parsed_evidence,
         profile=DealProfile.model_validate(json.loads(profile_row["payload"])) if profile_row else None,
         memo=RiskMemo.model_validate(json.loads(memo_row["payload"])) if memo_row else None,
+        report=DiligenceReport.model_validate(json.loads(report_row["payload"])) if report_row else None,
         qualityReview=quality_review,
         score=score_claims(parsed_claims, parsed_evidence, quality_review) if parsed_claims else None,
         chatHistory=get_chats(deal_id),
@@ -463,11 +515,14 @@ def update_claim_review(
             raise KeyError(claim_id)
 
 
-def save_review_artifacts(deal_id: str, memo: RiskMemo, quality_review: QualityReview) -> None:
+def save_review_artifacts(deal_id: str, memo: RiskMemo, quality_review: QualityReview, report: DiligenceReport | None = None) -> None:
     with connect() as conn:
         conn.execute("delete from memos where deal_id = ?", (deal_id,))
         conn.execute("delete from quality_reviews where deal_id = ?", (deal_id,))
+        conn.execute("delete from reports where deal_id = ?", (deal_id,))
         conn.execute("insert into memos (deal_id, payload) values (?, ?)", (deal_id, memo.model_dump_json()))
+        if report:
+            conn.execute("insert into reports (deal_id, payload) values (?, ?)", (deal_id, report.model_dump_json()))
         conn.execute("insert into quality_reviews (deal_id, payload) values (?, ?)", (deal_id, quality_review.model_dump_json()))
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from .models import DealAnalysis, DealClaim, EvidenceItem, QualityReview, RiskMemo, ScoreSummary
+from .models import DealAnalysis, DealClaim, DiligenceReport, EvidenceItem, QualityReview, RiskMemo, ScoreSummary
 from .config import MEMO_TITLE
 
 STATUS_SCORE = {"supported": 88, "weak": 55, "missing": 24, "contradicted": 8}
@@ -90,6 +90,10 @@ def claim_readiness_score(claim: DealClaim, evidence: list[EvidenceItem]) -> int
         score -= 4
     if any(item.stance == "contradicts" for item in evidence):
         score -= 12
+    if verification_standard_satisfied(claim, evidence):
+        score += 4
+    elif claim.decisionImpact == "high":
+        score -= 6
     return clamp_score(score)
 
 
@@ -104,7 +108,12 @@ def unique_items(items: list[str]) -> list[str]:
 def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> DealClaim:
     stances = {item.stance for item in evidence}
     independent_support = any(
-        item.stance == "supports" and item.sourceIndependence != "founder_supplied" and has_audit_citation(item)
+        item.stance == "supports"
+        and (
+            item.sourceIndependence == "third_party"
+            or item.sourceAuthority in {"third_party", "public_filing", "customer"}
+        )
+        and has_audit_citation(item)
         for item in evidence
     )
     # Internal financial/operating documents (CSV models, data rooms) with matching numbers are authoritative
@@ -118,11 +127,12 @@ def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> D
             for item in evidence
         )
     )
-    founder_only_support = any(item.stance in {"supports", "partially_supports"} for item in evidence) and not independent_support and not internal_doc_support
+    standard_support = verification_standard_satisfied(claim, evidence)
+    founder_only_support = any(item.stance in {"supports", "partially_supports"} for item in evidence) and not independent_support and not internal_doc_support and not standard_support
     contradiction = any(item.stance == "contradicts" and has_audit_citation(item) for item in evidence)
     if contradiction:
         status = "contradicted"
-    elif independent_support or internal_doc_support:
+    elif standard_support or independent_support or internal_doc_support:
         status = "supported"
     elif "partially_supports" in stances or founder_only_support:
         status = "weak"
@@ -140,6 +150,7 @@ def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> D
     rationale = {
         "supported": (
             "The claim is supported by quote-backed public web evidence." if has_public_web
+            else f"The claim satisfies the {claim.verificationStandard.replace('_', ' ')} verification standard." if standard_support
             else "The claim is supported by internal financial or operating data supplied for this deal." if has_internal_doc
             else "The claim is supported by cited material supplied for this deal."
         ),
@@ -172,6 +183,33 @@ def has_audit_citation(item: EvidenceItem) -> bool:
         and item.sourceType != "derived"
         and item.sourceIndependence != "derived"
     )
+
+
+def verification_standard_satisfied(claim: DealClaim, evidence: list[EvidenceItem]) -> bool:
+    cited_support = [
+        item for item in evidence
+        if item.stance == "supports" and has_audit_citation(item)
+    ]
+    if not cited_support:
+        return False
+    authorities = {item.sourceAuthority for item in cited_support}
+    independence = {item.sourceIndependence for item in cited_support}
+    standard = claim.verificationStandard
+    if standard == "founder_statement":
+        return bool(cited_support)
+    if standard == "internal_document":
+        return bool({"internal_operating", "customer", "third_party", "public_filing"} & authorities) or "internal" in independence or "third_party" in independence
+    if standard == "customer_reference":
+        return bool({"customer", "third_party", "public_filing"} & authorities) or "third_party" in independence
+    if standard == "third_party":
+        return bool({"third_party", "public_filing", "press"} & authorities) or "third_party" in independence
+    if standard == "audited_financials":
+        return bool({"public_filing", "third_party", "internal_operating"} & authorities)
+    if standard == "legal_document":
+        return bool({"public_filing", "third_party", "internal_operating"} & authorities)
+    if standard == "public_filing":
+        return "public_filing" in authorities
+    return False
 
 
 def quote_backed_evidence(evidence: list[EvidenceItem]) -> list[EvidenceItem]:
@@ -281,6 +319,8 @@ def quality_issues_for_claim(claim: DealClaim, evidence: list[EvidenceItem], sta
         issues.append("Evidence is missing an exact quote-backed citation.")
     if evidence and not any(item.sourceIndependence == "third_party" for item in evidence):
         issues.append("No third-party validation is attached.")
+    if claim.decisionImpact == "high" and not verification_standard_satisfied(claim, evidence):
+        issues.append(f"Evidence does not satisfy the {claim.verificationStandard.replace('_', ' ')} verification standard.")
     return issues
 
 
@@ -391,6 +431,89 @@ def memo_to_markdown(
     return "\n".join(sections)
 
 
+def report_to_markdown(
+    report: DiligenceReport,
+    score: ScoreSummary | None = None,
+    quality_review: QualityReview | None = None,
+) -> str:
+    sections = [
+        f"# {MEMO_TITLE}: {report.company}",
+        "",
+        "**Report version:** 2.0",
+    ]
+    if score:
+        counts = score.counts
+        sections.extend([
+            f"**Overall grade:** {score.grade.upper()}",
+            f"**IC readiness:** {score.overall}/100",
+            (
+                f"**Claim breakdown:** {counts.get('supported', 0)} supported · "
+                f"{counts.get('weak', 0)} weak · {counts.get('contradicted', 0)} contradicted · "
+                f"{counts.get('missing', 0)} missing"
+            ),
+        ])
+        if score.drivers:
+            sections.extend(["", "## Key Score Drivers", markdown_bullets(score.drivers)])
+    if quality_review:
+        sections.extend([
+            "",
+            "## Readiness",
+            f"- Status: {quality_review.readinessStatus.replace('_', ' ')}",
+            f"- Top gating issue: {quality_review.topGatingIssue or 'No unresolved IC blockers.'}",
+        ])
+    sections.extend([
+        "",
+        "## Decision Summary",
+        report.decisionSummary,
+        "",
+        "## Investment Thesis",
+        report.investmentThesis,
+        "",
+        "## Key Verified Claims",
+        markdown_report_claims(report.keyVerifiedClaims),
+        "",
+        "## Disputed Claims",
+        markdown_report_claims(report.disputedClaims),
+        "",
+        "## Weak or Missing Claims",
+        markdown_report_claims(report.weakOrMissingClaims),
+        "",
+        "## Evidence Assessment",
+        markdown_bullets(report.evidenceAssessment),
+        "",
+        "## Red Flags",
+        markdown_bullets(report.redFlags),
+        "",
+        "## Diligence Plan",
+        markdown_bullets(report.diligencePlan),
+        "",
+        "## Source Quality",
+        markdown_bullets([
+            f"{note.materialName}: {note.authority.replace('_', ' ')} / {note.reliability} reliability - {'; '.join(note.limitations)}"
+            for note in report.sourceQualityNotes
+        ]),
+        "",
+        "## IC Recommendation",
+        report.icRecommendation,
+        "",
+        "## Appendix: Claim Ledger",
+        markdown_report_claims(report.appendixClaimLedger),
+        "",
+    ])
+    return "\n".join(sections)
+
+
+def markdown_report_claims(items) -> str:
+    if not items:
+        return "- None."
+    return "\n".join(
+        f"- {item.claimId} ({item.status}): {item.text}"
+        + (f" — {item.rationale}" if item.rationale else "")
+        + (f" [evidence: {', '.join(item.evidenceIds)}]" if item.evidenceIds else "")
+        for item in items
+    )
+
+
 def markdown_bullets(items: list[str]) -> str:
     if not items:
         return "- None."
@@ -399,7 +522,7 @@ def markdown_bullets(items: list[str]) -> str:
 
 def diligence_requests_to_markdown(deal: DealAnalysis) -> str:
     review = deal.qualityReview or QualityReview()
-    requests = review.approvedDiligenceRequests or [
+    requests = (deal.report.diligencePlan if deal.report and deal.report.diligencePlan else None) or review.approvedDiligenceRequests or [
         claim.resolutionRequest
         for claim in active_claims(deal.claims)
         if claim.status in {"weak", "missing", "contradicted"} and claim.resolutionRequest

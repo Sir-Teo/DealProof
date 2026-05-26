@@ -24,7 +24,7 @@ import {
 import clsx from "clsx";
 import { API_BASE_URL, DEFAULT_DEAL, UI_COPY } from "@/lib/app-config";
 import { effectiveDisposition, evidenceForClaim, scoreClaims } from "@/lib/scoring";
-import type { ChatTurn, ClaimStatus, DealAnalysis, DealClaim, EvidenceItem, ReadinessStatus, ReviewerDisposition, ScoreSummary } from "@/lib/types";
+import type { ChatTurn, ClaimStatus, DealAnalysis, DealClaim, DiligenceReport, EvidenceItem, ReadinessStatus, ReportClaimRef, ReviewerDisposition, ScoreSummary, SourceQualityNote } from "@/lib/types";
 
 const emptyCounts = { supported: 0, weak: 0, contradicted: 0, missing: 0 };
 const DEAL_ID_KEY = "dealproofDealId";
@@ -842,6 +842,7 @@ function AgentOutput({ deal, scoring, exportUrl, diligenceExportUrl, onReviewCla
   const [claimFilter, setClaimFilter] = useState<ClaimFilter>("all");
   if (!deal.materials.length) return null;
   const memo = deal.memo;
+  const report = deal.report;
   const claims = deal.claims;
   const risks = memo?.keyRisks?.length ? memo.keyRisks : (memo?.materialRisks ?? []);
   const diligenceRequests = deal.qualityReview?.approvedDiligenceRequests?.length
@@ -881,6 +882,7 @@ function AgentOutput({ deal, scoring, exportUrl, diligenceExportUrl, onReviewCla
               <Metric label="Stage" value={deal.profile.stage} />
             </div>
           )}
+          {report && <DiligenceReportPanel report={report} />}
           {memo.executiveSummary && (
             <section className="memoNarrative">
               <h3>{UI_COPY.executiveSummaryTitle}</h3>
@@ -978,6 +980,13 @@ function AgentOutput({ deal, scoring, exportUrl, diligenceExportUrl, onReviewCla
                         <div className="claimReason">
                           <strong>Why:</strong> {claim.statusReason || claim.riskRationale}
                         </div>
+                        {(claim.materialityReason || claim.verificationStandard || claim.reviewPriority) && (
+                          <div className="claimMetaGrid">
+                            {claim.reviewPriority && <span><strong>Priority:</strong> {claim.reviewPriority}</span>}
+                            {claim.verificationStandard && <span><strong>Standard:</strong> {claim.verificationStandard.replaceAll("_", " ")}</span>}
+                            {claim.materialityReason && <span><strong>Materiality:</strong> {claim.materialityReason}</span>}
+                          </div>
+                        )}
                         {claim.resolutionRequest && (
                           <div className="resolutionRequest">
                             <strong>Request:</strong>
@@ -1014,6 +1023,12 @@ function AgentOutput({ deal, scoring, exportUrl, diligenceExportUrl, onReviewCla
                                     <Quote size={14} />
                                     <p>{item.quoteSpan || item.snippet}</p>
                                   </blockquote>
+                                    {(item.evidenceRole || item.sourceAuthority || item.assessorRationale) && (
+                                      <p className="evidenceRationale">
+                                        {[item.evidenceRole?.replaceAll("_", " "), item.sourceAuthority?.replaceAll("_", " "), item.quoteConfidence && `${item.quoteConfidence} quote confidence`].filter(Boolean).join(" · ")}
+                                        {item.assessorRationale ? ` — ${item.assessorRationale}` : ""}
+                                      </p>
+                                    )}
                                 </article>
                               ))}
                             </div>
@@ -1041,6 +1056,65 @@ function Metric({ label, value }: { label: string; value: string }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function DiligenceReportPanel({ report }: { report: DiligenceReport }) {
+  return (
+    <div className="reportV2">
+      <section className="memoNarrative">
+        <h3>Decision summary</h3>
+        <p>{report.decisionSummary}</p>
+      </section>
+      <section className="memoNarrative">
+        <h3>Investment thesis</h3>
+        <p>{report.investmentThesis}</p>
+      </section>
+      <div className="reportGrid">
+        <ReportClaimSection title="Verified claims" claims={report.keyVerifiedClaims} />
+        <ReportClaimSection title="Disputed claims" claims={report.disputedClaims} danger />
+        <ReportClaimSection title="Weak or missing" claims={report.weakOrMissingClaims} />
+      </div>
+      <div className="memoColumns">
+        <MemoSection title="Red flags" items={report.redFlags} danger />
+        <MemoSection title="Diligence plan" items={report.diligencePlan} />
+        <SourceQualitySection notes={report.sourceQualityNotes} />
+      </div>
+    </div>
+  );
+}
+
+function ReportClaimSection({ title, claims, danger = false }: { title: string; claims: ReportClaimRef[]; danger?: boolean }) {
+  return (
+    <section className={clsx("reportClaimSection", danger && "danger")}>
+      <h3>{title}</h3>
+      <ul>
+        {(claims.length ? claims : []).map((claim) => (
+          <li key={`${title}-${claim.claimId}`}>
+            <strong>{claim.claimId}</strong>
+            <span>{claim.text}</span>
+            {claim.rationale && <small>{claim.rationale}</small>}
+          </li>
+        ))}
+        {!claims.length && <li>None.</li>}
+      </ul>
+    </section>
+  );
+}
+
+function SourceQualitySection({ notes }: { notes: SourceQualityNote[] }) {
+  return (
+    <section className="memoSection">
+      <h3>Source quality</h3>
+      <ul>
+        {notes.map((note) => (
+          <li key={note.materialId}>
+            {note.materialName}: {note.authority.replaceAll("_", " ")} / {note.reliability}
+          </li>
+        ))}
+        {!notes.length && <li>None.</li>}
+      </ul>
+    </section>
   );
 }
 

@@ -29,6 +29,32 @@ DecisionImpact = Literal["high", "medium", "low"]
 ReviewerStatus = Literal["unreviewed", "verified", "needs_evidence"]
 ReviewerDisposition = Literal["unreviewed", "verified", "needs_evidence", "ignored", "ic_blocker"]
 SourceIndependence = Literal["founder_supplied", "internal", "third_party", "derived"]
+ClaimKind = Literal[
+    "metric",
+    "customer",
+    "market",
+    "competition",
+    "product",
+    "compliance",
+    "financial",
+    "team",
+    "fundraising",
+    "legal",
+    "operational",
+    "other",
+]
+VerificationStandard = Literal[
+    "founder_statement",
+    "internal_document",
+    "customer_reference",
+    "third_party",
+    "audited_financials",
+    "legal_document",
+    "public_filing",
+]
+ReviewPriority = Literal["critical", "high", "medium", "low"]
+EvidenceRole = Literal["primary_support", "corroborating_support", "contradiction", "context", "gap"]
+SourceAuthority = Literal["founder", "internal_operating", "customer", "third_party", "public_filing", "press", "derived"]
 ScoreGrade = Literal["green", "yellow", "red"]
 ReadinessStatus = Literal["ic_ready", "needs_diligence", "blocked", "screen_out"]
 
@@ -85,6 +111,13 @@ class DealClaim(BaseModel):
     reviewerNotes: str = ""
     statusReason: str = ""
     resolutionRequest: str = ""
+    claimKind: ClaimKind = "other"
+    extractedFact: str = ""
+    sourceLocator: str = ""
+    materialityReason: str = ""
+    verificationStandard: VerificationStandard = "founder_statement"
+    reviewPriority: ReviewPriority = "medium"
+    isTargetCompanyClaim: bool = True
 
 
 class EvidenceItem(BaseModel):
@@ -104,6 +137,46 @@ class EvidenceItem(BaseModel):
     sourceUrl: str | None = None
     chunkIndex: int | None = None
     retrievedAt: str | None = None
+    evidenceRole: EvidenceRole = "context"
+    sourceAuthority: SourceAuthority = "internal_operating"
+    sourceDate: str | None = None
+    locator: str = ""
+    quoteConfidence: Confidence = "medium"
+    assessorRationale: str = ""
+
+
+class SourceQualityNote(BaseModel):
+    materialId: str
+    materialName: str
+    sourceType: Literal["file", "url", "seed"]
+    authority: SourceAuthority
+    reliability: Confidence
+    limitations: list[str] = Field(default_factory=list)
+
+
+class ReportClaimRef(BaseModel):
+    claimId: str
+    text: str
+    status: ClaimStatus
+    rationale: str = ""
+    evidenceIds: list[str] = Field(default_factory=list)
+
+
+class DiligenceReport(BaseModel):
+    reportVersion: str = "2.0"
+    company: str
+    generatedAt: str | None = None
+    decisionSummary: str
+    investmentThesis: str
+    keyVerifiedClaims: list[ReportClaimRef] = Field(default_factory=list)
+    disputedClaims: list[ReportClaimRef] = Field(default_factory=list)
+    weakOrMissingClaims: list[ReportClaimRef] = Field(default_factory=list)
+    evidenceAssessment: list[str] = Field(default_factory=list)
+    redFlags: list[str] = Field(default_factory=list)
+    diligencePlan: list[str] = Field(default_factory=list)
+    sourceQualityNotes: list[SourceQualityNote] = Field(default_factory=list)
+    icRecommendation: str
+    appendixClaimLedger: list[ReportClaimRef] = Field(default_factory=list)
 
 
 class RiskMemo(BaseModel):
@@ -191,6 +264,7 @@ class DealAnalysis(BaseModel):
     evidence: list[EvidenceItem] = Field(default_factory=list)
     profile: DealProfile | None = None
     memo: RiskMemo | None = None
+    report: DiligenceReport | None = None
     qualityReview: QualityReview | None = None
     score: ScoreSummary | None = None
     chatHistory: list[ChatTurn] = Field(default_factory=list)
@@ -215,6 +289,23 @@ class EvidenceAssessments(BaseModel):
 
 class MemoGeneration(BaseModel):
     memo: RiskMemo
+
+
+class EvidenceReview(BaseModel):
+    claimId: str
+    evidenceId: str
+    stance: Literal["supports", "partially_supports", "contradicts", "not_found"]
+    evidenceRole: EvidenceRole = "context"
+    quoteConfidence: Confidence = "medium"
+    assessorRationale: str = ""
+
+
+class EvidenceReviews(BaseModel):
+    reviews: list[EvidenceReview]
+
+
+class ReportGeneration(BaseModel):
+    report: DiligenceReport
 
 
 class ChatAnswer(BaseModel):

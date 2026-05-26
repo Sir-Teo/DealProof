@@ -4,7 +4,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 
-from .models import DealClaim, EvidenceItem, MaterialChunk, SourceIndependence, SourceMaterial
+from .models import DealClaim, EvidenceItem, MaterialChunk, SourceAuthority, SourceIndependence, SourceMaterial
 from .config import LOCAL_RETRIEVAL_CITATION
 
 
@@ -92,6 +92,23 @@ def source_independence(citation: str) -> SourceIndependence:
     if citation == LOCAL_RETRIEVAL_CITATION:
         return "derived"
     return "internal"
+
+
+def source_authority_for_independence(independence: SourceIndependence, citation: str = "") -> SourceAuthority:
+    lower = citation.lower()
+    if independence == "founder_supplied":
+        return "founder"
+    if independence == "third_party":
+        if any(term in lower for term in ["10-k", "10k", "annual report", "sec", "filing"]):
+            return "public_filing"
+        if any(term in lower for term in ["press", "news", "prnewswire", "businesswire"]):
+            return "press"
+        return "third_party"
+    if independence == "derived":
+        return "derived"
+    if "customer" in lower or "reference" in lower:
+        return "customer"
+    return "internal_operating"
 
 
 def relevance_score(claim: DealClaim, chunk: MaterialChunk) -> float:
@@ -309,12 +326,17 @@ def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -
                 reliability="medium",
                 sourceIndependence="derived",
                 relevanceScore=0,
+                evidenceRole="gap",
+                sourceAuthority="derived",
+                quoteConfidence="low",
+                assessorRationale="No source chunk met the retrieval threshold for this claim.",
                 retrievedAt=retrieved_at,
             )
         ]
     evidence: list[EvidenceItem] = []
     for chunk in relevant:
         stance = evidence_stance_for_chunk(claim, chunk)
+        independence = source_independence(chunk.citation)
         evidence.append(
             EvidenceItem(
                 id=f"ev-{uuid.uuid4().hex[:10]}",
@@ -325,13 +347,18 @@ def fallback_evidence_for_claim(claim: DealClaim, chunks: list[MaterialChunk]) -
                 snippet=chunk.text[:420],
                 stance=stance,  # type: ignore[arg-type]
                 reliability="high" if stance == "supports" else "medium",
-                sourceIndependence=source_independence(chunk.citation),
+                sourceIndependence=independence,
                 relevanceScore=relevance_score(claim, chunk),
                 quoteSpan=quote_span_for_claim(claim, chunk, stance=stance),
                 sourceMaterialId=chunk.material_id,
                 sourceName=chunk.sourceName or chunk.citation.split(", chunk")[0],
                 sourceUrl=chunk.sourceUrl,
                 chunkIndex=chunk.chunkIndex,
+                evidenceRole="contradiction" if stance == "contradicts" else "primary_support" if stance == "supports" else "corroborating_support",
+                sourceAuthority=source_authority_for_independence(independence, chunk.citation),
+                locator=chunk.citation,
+                quoteConfidence="high" if stance in {"supports", "contradicts"} else "medium",
+                assessorRationale=f"Retrieved chunk was scored as {stance.replace('_', ' ')} by lexical, numeric, and source-quality rules.",
                 retrievedAt=retrieved_at,
             )
         )
