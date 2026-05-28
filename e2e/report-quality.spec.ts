@@ -336,7 +336,7 @@ function assertDemoOutputQuality(deal: DealAnalysis) {
   const diligenceText = memoDiligenceRequests(memo).join("\n");
 
   expect(deal.materials.length).toBeGreaterThanOrEqual(3);
-  expect(deal.claims.length).toBeGreaterThanOrEqual(8);
+  expect(deal.claims.length).toBe(6);
   expect(deal.evidence.length).toBeGreaterThanOrEqual(deal.claims.length);
   expect(new Set(deal.claims.map((claim) => claim.text)).size).toBe(deal.claims.length);
   expect(new Set(deal.evidence.map((item) => item.citation)).size).toBeGreaterThanOrEqual(3);

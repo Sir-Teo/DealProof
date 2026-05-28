@@ -101,6 +101,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const feedWrapRef = useRef<HTMLElement>(null);
   const feedBottomRef = useRef<HTMLDivElement>(null);
+  const wasAnalyzingRef = useRef(false);
 
   const claims = useMemo(() => deal?.claims ?? [], [deal?.claims]);
   const scoring = useMemo<ScoreSummary>(
@@ -119,8 +120,20 @@ export default function Home() {
   const canRunAgent = Boolean(deal?.materials.length) && !isAnalyzing;
 
   useEffect(() => {
-    feedBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [feedNotes.length, deal?.chatHistory?.length, isAnalyzing]);
+    if (isAnalyzing) {
+      wasAnalyzingRef.current = true;
+      feedBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      return;
+    }
+    if (wasAnalyzingRef.current) {
+      wasAnalyzingRef.current = false;
+      feedWrapRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (busy === "chat" || pendingQuestion || feedNotes.length > 0 || (deal?.chatHistory?.length ?? 0) > 0) {
+      feedBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [feedNotes.length, deal?.chatHistory?.length, isAnalyzing, busy, pendingQuestion]);
 
   useEffect(() => {
     const savedId = localStorage.getItem(DEAL_ID_KEY);
@@ -1073,6 +1086,11 @@ function DiligenceReportPanel({ report }: { report: DiligenceReport }) {
         <MemoSection title="Diligence plan" items={report.diligencePlan} />
         <SourceQualitySection notes={report.sourceQualityNotes} />
       </div>
+      <div className="reportSupplementGrid">
+        <MemoSection title="Evidence assessment" items={report.evidenceAssessment} />
+        <MemoSection title="IC recommendation" items={[report.icRecommendation]} />
+      </div>
+      <ReportClaimSection title="Appendix claim ledger" claims={report.appendixClaimLedger} />
     </div>
   );
 }

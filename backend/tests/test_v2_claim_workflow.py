@@ -185,5 +185,5 @@ def test_demo_packet_can_run_with_deterministic_v2_fixture_without_live_llm(monk
     assert payload["report"]["reportVersion"] == "2.0"
     assert payload["report"]["decisionSummary"]
     assert payload["memo"]["overallGrade"] == payload["score"]["grade"]
-    assert len(payload["claims"]) >= 8
+    assert len(payload["claims"]) == 6
     assert all(claim["verificationStandard"] for claim in payload["claims"])

@@ -145,7 +145,7 @@ summary:focus-visible {
 }
 
 .messageFeed {
-  width: min(760px, 100%);
+  width: min(960px, 100%);
   margin: 0 auto;
   display: grid;
   gap: 18px;
@@ -1151,7 +1151,13 @@ summary:focus-visible {
 
 .reportGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.reportSupplementGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -1550,7 +1556,8 @@ summary:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .reportGrid {
+  .reportGrid,
+  .reportSupplementGrid {
     grid-template-columns: 1fr;
   }
 

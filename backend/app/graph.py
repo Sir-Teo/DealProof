@@ -64,7 +64,8 @@ def deterministic_analysis_enabled() -> bool:
     return os.getenv("DEALPROOF_DETERMINISTIC_ANALYSIS", "0").strip().lower() in {"1", "true", "yes"}
 
 
-MAX_CLAIMS = int(os.getenv("DEALPROOF_MAX_CLAIMS", "14"))
+MAX_CLAIMS = int(os.getenv("DEALPROOF_MAX_CLAIMS", "6"))
+MAX_CLAIMS_PER_MATERIAL = int(os.getenv("DEALPROOF_MAX_CLAIMS_PER_MATERIAL", "6"))
 
 GRAPH_STEPS: list[GraphStep] = [
     ("load_materials", "Read supplied materials", "Loading source packets from the deal workspace"),
@@ -364,6 +365,7 @@ def extract_claims(state: DiligenceState) -> DiligenceState:
         "Every claim must include a sourceMaterial and direct sourceSnippet from the supplied context. "
         "Prefer specific claims with metrics, named customers, dates, cohorts, fundraising terms, product capabilities, legal status, "
         "or explicit assertions that would affect an IC decision. Split compound claims when they combine independent facts. "
+        f"Extract at most {MAX_CLAIMS_PER_MATERIAL} claims from each source material; choose the claims most likely to change an IC decision. "
         "Initial status must be missing and riskRationale can be empty. "
         "IMPORTANT: The claim text field must be a standalone assertion written in plain English. "
         "Do NOT include source navigation labels such as 'Slide 7:', 'Slide 4:', '### ', 'Claim:', or 'Source:' in the text field. "
@@ -382,11 +384,11 @@ def extract_claims(state: DiligenceState) -> DiligenceState:
             "\"claimKind\":\"metric|customer|market|competition|product|compliance|financial|team|fundraising|legal|operational|other\","
             "\"extractedFact\":\"...\",\"sourceLocator\":\"...\",\"materialityReason\":\"...\",\"verificationStandard\":\"founder_statement|internal_document|customer_reference|third_party|audited_financials|legal_document|public_filing\","
             "\"reviewPriority\":\"critical|high|medium|low\",\"isTargetCompanyClaim\":true}]}\n\n"
-            f"Material:\n### {material.name}\nKind: {material.kind}\n{material.text[:8_000]}"
+            f"Material:\n### {material.name}\nKind: {material.kind}\n{material.text[:6_000]}"
         )
         extracted, raw_output = llm.complete_json_with_raw(system, user, ClaimExtraction, on_chunk=stream_llm_chunk(state, "extract_claims"))
         raw_outputs.append(raw_output)
-        claims.extend(extracted.claims)
+        claims.extend(extracted.claims[:MAX_CLAIMS_PER_MATERIAL])
     state = {**state, **with_llm_output(state, "extract_claims", "\n\n".join(raw_outputs))}
     if not claims:
         raise ValueError("No diligence claims were extracted from the supplied materials.")
@@ -1029,7 +1031,7 @@ def candidate_claim_sentences(material: SourceMaterial) -> list[str]:
         if lower.startswith(("table of contents", "copyright", "forward-looking statements")):
             continue
         scored.append((number_hits + keyword_hits, number_hits, piece))
-    return [piece for _, __, piece in sorted(scored, key=lambda item: (item[0], item[1], len(item[2])), reverse=True)[:8]]
+    return [piece for _, __, piece in sorted(scored, key=lambda item: (item[0], item[1], len(item[2])), reverse=True)[:MAX_CLAIMS_PER_MATERIAL]]
 
 
 def is_low_value_sentence(text: str) -> bool:
@@ -1301,14 +1303,14 @@ def claim_metric_sort_rank(claim: DealClaim) -> int:
 
 def select_diverse_claims(claims: list[DealClaim], limit: int) -> list[DealClaim]:
     category_caps = {
-        "financials": 4,
-        "growth": 3,
-        "customer_roi": 3,
-        "competition": 2,
-        "market": 2,
-        "compliance": 2,
-        "fundraising": 2,
-        "legal": 2,
+        "financials": 3,
+        "growth": 1,
+        "customer_roi": 1,
+        "competition": 1,
+        "market": 1,
+        "compliance": 1,
+        "fundraising": 1,
+        "legal": 1,
     }
     selected: list[DealClaim] = []
     category_counts: Counter[str] = Counter()
