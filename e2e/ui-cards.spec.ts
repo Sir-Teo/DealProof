@@ -43,6 +43,22 @@ const MOCK_DEAL_ANALYZED = {
       relevanceScore: 0.95,
       citation: "Public source (https://example.com/nrr)",
       chunkIndex: 1
+    },
+    {
+      id: "e2",
+      claimId: "c2",
+      title: "Founder deck",
+      stance: "partially_supports",
+      snippet: "37 clinics are active, but signed status needs validation.",
+      quoteSpan: "37 clinics are active",
+      sourceName: "Founder deck",
+      sourceType: "uploaded",
+      sourceUrl: "https://example.com/clinics",
+      sourceIndependence: "founder_supplied",
+      reliability: "medium",
+      relevanceScore: 0.78,
+      citation: "Founder deck (https://example.com/clinics)",
+      chunkIndex: 2
     }
   ],
   memo: {
@@ -168,10 +184,10 @@ test("post-analysis panels show memo, claims, and evidence", async ({ page }) =>
   await expect(page.locator(".memoArtifact")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Red team memo" })).toBeVisible();
   await expect(page.locator(".profileGrid .metric")).toHaveCount(4);
-  await expect(page.getByRole("heading", { name: "3 auditable work items" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "3 priority diligence claims" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Needs evidence" })).toBeVisible();
 
-  const evidence = page.locator(".claimEvidence").first();
+  const evidence = page.locator('details.claimEvidence:has(summary:has-text("evidence"))').first();
   await evidence.locator("summary").click();
   await expect(evidence.locator(".evidenceItem").first()).toBeVisible();
   await expect(evidence.locator(".quoteBlock").first()).toBeVisible();

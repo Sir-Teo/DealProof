@@ -42,7 +42,7 @@ test("runs a larger public-material data room through the diligence workflow", a
   await expect(page.locator(".agentOutput")).toBeVisible();
   await expect(page.locator(".gradeBar")).toBeVisible();
   await expect(page.locator(".memoArtifact")).toBeVisible();
-  await expect(page.getByRole("heading", { name: /18 diligence claims/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /priority diligence claims/i })).toBeVisible();
   await expect(page.locator(".claimRow").filter({ hasText: "contradicted" }).first()).toBeVisible();
   await expect(page.locator(".claimRow").filter({ hasText: "supported" }).first()).toBeVisible();
   await expect(page.locator(".claimRow").filter({ hasText: "weak" }).first()).toBeVisible();

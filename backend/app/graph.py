@@ -64,7 +64,7 @@ def deterministic_analysis_enabled() -> bool:
     return os.getenv("DEALPROOF_DETERMINISTIC_ANALYSIS", "0").strip().lower() in {"1", "true", "yes"}
 
 
-MAX_CLAIMS = int(os.getenv("DEALPROOF_MAX_CLAIMS", "24"))
+MAX_CLAIMS = int(os.getenv("DEALPROOF_MAX_CLAIMS", "14"))
 
 GRAPH_STEPS: list[GraphStep] = [
     ("load_materials", "Read supplied materials", "Loading source packets from the deal workspace"),
@@ -405,13 +405,13 @@ def normalize_claims(state: DiligenceState) -> DiligenceState:
     normalized = clean_claim_text(normalize_claim_ids(deduped))
     if not normalized:
         raise ValueError("No target-company diligence claims remained after normalization.")
-    return {**state, "claims": normalized[:MAX_CLAIMS]}
+    return {**state, "claims": normalized}
 
 
 def rank_claims(state: DiligenceState) -> DiligenceState:
     ranked = [rank_claim_materiality(claim, state.get("source_quality", [])) for claim in state["claims"]]
     ranked.sort(key=claim_materiality_sort_key)
-    return {**state, "claims": normalize_claim_ids(ranked[:MAX_CLAIMS])}
+    return {**state, "claims": normalize_claim_ids(select_diverse_claims(ranked, MAX_CLAIMS))}
 
 
 def retrieve_evidence(state: DiligenceState) -> DiligenceState:
@@ -988,7 +988,7 @@ def deterministic_extract_claims(state: DiligenceState) -> list[DealClaim]:
     claims: list[DealClaim] = []
     for material in state.get("materials", []):
         for sentence in candidate_claim_sentences(material):
-            category = infer_claim_category(sentence)
+            category = infer_claim_category(sentence, state["company"])
             importance = "high" if category in {"growth", "financials", "customer_roi", "market", "competition", "compliance", "fundraising", "legal"} else "medium"
             claim = DealClaim(
                 id=f"claim-{len(claims) + 1:02d}",
@@ -1008,10 +1008,6 @@ def deterministic_extract_claims(state: DiligenceState) -> list[DealClaim]:
                 isTargetCompanyClaim=True,
             )
             claims.append(claim)
-            if len(claims) >= MAX_CLAIMS * 2:
-                break
-        if len(claims) >= MAX_CLAIMS * 2:
-            break
     return claims
 
 
@@ -1054,8 +1050,10 @@ def is_low_value_sentence(text: str) -> bool:
     return False
 
 
-def infer_claim_category(text: str) -> str:
+def infer_claim_category(text: str, company: str = "") -> str:
     lower = text.lower()
+    if company:
+        lower = lower.replace(company.lower(), "company")
     if any(term in lower for term in ["roi", "save", "savings", "hours", "efficiency"]):
         return "customer_roi"
     if any(term in lower for term in ["competitor", "competition", "alternative", "vs", "versus"]):
@@ -1208,7 +1206,7 @@ def decontextualize_claim(claim: DealClaim, company: str) -> DealClaim:
 def is_target_company_claim(claim: DealClaim, company: str) -> bool:
     if not claim.isTargetCompanyClaim:
         return False
-    lower = claim.text.lower()
+    lower = f"{claim.text} {claim.sourceMaterial}".lower().replace("_", " ")
     company_tokens = {token for token in re.findall(r"[a-zA-Z0-9]+", company.lower()) if len(token) > 2}
     mentioned_public = {issuer for issuer in PUBLIC_ISSUERS if re.search(rf"\b{re.escape(issuer)}\b", lower)}
     if mentioned_public and not (mentioned_public & company_tokens):
@@ -1261,7 +1259,7 @@ def decision_impact_for_category(category: str, importance: str) -> str:
     return "low"
 
 
-def claim_materiality_sort_key(claim: DealClaim) -> tuple[int, int, int, str]:
+def claim_materiality_sort_key(claim: DealClaim) -> tuple[int, int, int, int, str]:
     priority_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     importance_rank = {"high": 0, "medium": 1, "low": 2}
     category_rank = {
@@ -1278,8 +1276,59 @@ def claim_materiality_sort_key(claim: DealClaim) -> tuple[int, int, int, str]:
         priority_rank.get(claim.reviewPriority, 4),
         importance_rank.get(claim.importance, 3),
         category_rank.get(claim.category, 9),
+        claim_metric_sort_rank(claim),
         claim.text,
     )
+
+
+def claim_metric_sort_rank(claim: DealClaim) -> int:
+    lower = claim.text.lower()
+    if claim.category == "financials":
+        if "arr" in lower:
+            return 0
+        if "gross margin" in lower:
+            return 1
+        if "revenue" in lower:
+            return 2
+        if "cash" in lower or "burn" in lower:
+            return 3
+    if claim.category == "customer_roi" and "roi" in lower:
+        return 0
+    if claim.category == "competition" and "no direct" in lower:
+        return 0
+    return 5
+
+
+def select_diverse_claims(claims: list[DealClaim], limit: int) -> list[DealClaim]:
+    category_caps = {
+        "financials": 4,
+        "growth": 3,
+        "customer_roi": 3,
+        "competition": 2,
+        "market": 2,
+        "compliance": 2,
+        "fundraising": 2,
+        "legal": 2,
+    }
+    selected: list[DealClaim] = []
+    category_counts: Counter[str] = Counter()
+    for claim in claims:
+        if len(selected) >= limit:
+            break
+        if category_counts[claim.category] >= category_caps.get(claim.category, 1):
+            continue
+        selected.append(claim)
+        category_counts[claim.category] += 1
+    if len(selected) < limit:
+        selected_ids = {claim.id for claim in selected}
+        for claim in claims:
+            if len(selected) >= limit:
+                break
+            if claim.id not in selected_ids:
+                selected.append(claim)
+                selected_ids.add(claim.id)
+    selected.sort(key=claim_materiality_sort_key)
+    return selected
 
 
 def deterministic_diligence_report(state: DiligenceState) -> DiligenceReport:

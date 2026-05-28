@@ -839,7 +839,7 @@ function AgentOutput({ deal, scoring, exportUrl, diligenceExportUrl, onReviewCla
   diligenceExportUrl: string;
   onReviewClaim: (claimId: string, disposition: ReviewerDisposition, notes?: string, resolutionRequest?: string) => void;
 }) {
-  const [claimFilter, setClaimFilter] = useState<ClaimFilter>("all");
+  const [claimFilter, setClaimFilter] = useState<ClaimFilter>("needs_review");
   if (!deal.materials.length) return null;
   const memo = deal.memo;
   const report = deal.report;
@@ -920,7 +920,7 @@ function AgentOutput({ deal, scoring, exportUrl, diligenceExportUrl, onReviewCla
           <div className="artifactPanelHeader">
             <div>
               <p className="eyebrow">Claim review workspace</p>
-              <h2>{claims.length} auditable work items</h2>
+              <h2>{claims.length} priority diligence claims</h2>
             </div>
             <a className="secondaryButton" href={diligenceExportUrl}>
               <ArrowDownToLine size={14} />
@@ -957,19 +957,19 @@ function AgentOutput({ deal, scoring, exportUrl, diligenceExportUrl, onReviewCla
                             className={clsx("reviewBtn", disposition === "verified" && "reviewBtn--active reviewBtn--verified")}
                             onClick={() => onReviewClaim(claim.id, disposition === "verified" ? "unreviewed" : "verified")}
                             title="Mark verified"
-                          >✓ Verified</button>
+                          >Verified</button>
                           <button
                             type="button"
                             className={clsx("reviewBtn", disposition === "needs_evidence" && "reviewBtn--active reviewBtn--needs")}
                             onClick={() => onReviewClaim(claim.id, disposition === "needs_evidence" ? "unreviewed" : "needs_evidence")}
                             title="Needs more evidence"
-                          >? Needs evidence</button>
+                          >Needs evidence</button>
                           <button
                             type="button"
                             className={clsx("reviewBtn", disposition === "ic_blocker" && "reviewBtn--active reviewBtn--blocker")}
                             onClick={() => onReviewClaim(claim.id, disposition === "ic_blocker" ? "unreviewed" : "ic_blocker")}
                             title="Mark IC blocker"
-                          >! IC blocker</button>
+                          >Blocker</button>
                           <button
                             type="button"
                             className={clsx("reviewBtn", disposition === "ignored" && "reviewBtn--active")}
@@ -977,16 +977,6 @@ function AgentOutput({ deal, scoring, exportUrl, diligenceExportUrl, onReviewCla
                             title="Ignore claim"
                           >Ignore</button>
                         </div>
-                        <div className="claimReason">
-                          <strong>Why:</strong> {claim.statusReason || claim.riskRationale}
-                        </div>
-                        {(claim.materialityReason || claim.verificationStandard || claim.reviewPriority) && (
-                          <div className="claimMetaGrid">
-                            {claim.reviewPriority && <span><strong>Priority:</strong> {claim.reviewPriority}</span>}
-                            {claim.verificationStandard && <span><strong>Standard:</strong> {claim.verificationStandard.replaceAll("_", " ")}</span>}
-                            {claim.materialityReason && <span><strong>Materiality:</strong> {claim.materialityReason}</span>}
-                          </div>
-                        )}
                         {claim.resolutionRequest && (
                           <div className="resolutionRequest">
                             <strong>Request:</strong>
@@ -1001,10 +991,13 @@ function AgentOutput({ deal, scoring, exportUrl, diligenceExportUrl, onReviewCla
                             />
                           </div>
                         )}
-                        {claimEvidence.length > 0 && (
+                        {(claimEvidence.length > 0 || claim.statusReason || claim.riskRationale) && (
                           <details className="claimEvidence">
-                            <summary>View</summary>
+                            <summary>{claimEvidence.length > 0 ? `${claimEvidence.length} evidence` : "Details"}</summary>
                             <div className="claimEvidencePanel">
+                              {(claim.statusReason || claim.riskRationale) && (
+                                <p className="claimReason"><strong>Why:</strong> {claim.statusReason || claim.riskRationale}</p>
+                              )}
                               {claimEvidence.map((item) => (
                                 <article key={item.id} className={clsx("evidenceItem", `evidenceItem--${item.stance}`, `source--${item.sourceIndependence}`)}>
                                   <header className="citationHeader">
