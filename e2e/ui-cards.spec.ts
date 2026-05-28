@@ -132,6 +132,10 @@ async function setupAnalyzedMocks(page: Page, streamBody?: string) {
   await page.route(`**/deals/${DEAL_ID}`, (route) => route.fulfill({ json: MOCK_DEAL_ANALYZED }));
 }
 
+async function runMockDemo(page: Page) {
+  await page.getByRole("button", { name: /Try demo/i }).evaluate((button: HTMLButtonElement) => button.click());
+}
+
 test("composer and empty state render correctly", async ({ page }) => {
   await page.goto("/");
 
@@ -174,7 +178,7 @@ test("loading a deal clears stale attachment input", async ({ page }) => {
 test("post-analysis panels show memo, claims, and evidence", async ({ page }) => {
   await setupAnalyzedMocks(page);
   await page.goto("/");
-  await page.getByRole("button", { name: /Try demo/i }).click();
+  await runMockDemo(page);
 
   await expect(page.locator(".messageTitle").filter({ hasText: /Analysis complete/i })).toBeVisible({ timeout: 5_000 });
   await expect(page.locator(".agentOutput")).toBeVisible({ timeout: 10_000 });
@@ -207,7 +211,7 @@ test("agent stream renders web-search research details", async ({ page }) => {
 
   await setupAnalyzedMocks(page, streamBody);
   await page.goto("/");
-  await page.getByRole("button", { name: /Try demo/i }).click();
+  await runMockDemo(page);
 
   const webTool = page.locator(".toolCall").filter({ hasText: "search public web" }).first();
   await expect(webTool).toBeVisible({ timeout: 10_000 });
@@ -222,7 +226,7 @@ test("mobile keeps composer and artifact panels usable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await setupAnalyzedMocks(page);
   await page.goto("/");
-  await page.getByRole("button", { name: /Try demo/i }).click();
+  await runMockDemo(page);
 
   await expect(page.locator(".composerCard")).toBeVisible();
   await expect(page.locator(".agentOutput")).toBeVisible({ timeout: 10_000 });

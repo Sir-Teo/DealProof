@@ -8,7 +8,7 @@ test("demo analysis reports a missing API key clearly", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByText("Add deal materials to begin.")).toBeVisible();
-  await page.getByRole("button", { name: /Try demo/i }).click();
+  await page.getByRole("button", { name: /Try demo/i }).evaluate((button: HTMLButtonElement) => button.click());
 
   await expect((await seedResponse).ok()).toBe(true);
   const response = await analyzeResponse;
