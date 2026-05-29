@@ -679,14 +679,14 @@ summary:focus-visible {
 
 .claimGroups {
   display: grid;
-  gap: 6px;
+  gap: 18px;
 }
 
 .claimGroup h3 {
   color: var(--muted);
   font-size: 10.5px;
   font-weight: 500;
-  margin: 0 0 3px;
+  margin: 0 0 4px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -694,18 +694,17 @@ summary:focus-visible {
 .claimRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) max-content;
-  align-items: center;
-  gap: 6px;
+  align-items: start;
+  gap: 4px 14px;
   border-top: 1px solid var(--line);
-  min-height: 30px;
-  padding: 5px 2px;
+  padding: 12px 2px;
 }
 
 .claimRowMain {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
-  align-items: center;
-  gap: 2px 7px;
+  align-items: start;
+  gap: 3px 8px;
   min-width: 0;
 }
 
@@ -763,19 +762,18 @@ summary:focus-visible {
 
 .claimText {
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
-  line-height: 1.25;
+  line-height: 1.45;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .claimRow small {
   grid-column: 2;
+  margin-top: 1px;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 11px;
   text-transform: capitalize;
   white-space: normal;
 }
@@ -834,18 +832,23 @@ summary:focus-visible {
 .readinessStrip {
   display: grid;
   grid-template-columns: 0.8fr 2fr 0.6fr;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding: 6px 0;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding: 10px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
+}
+
+.readinessStrip .metric {
+  border-top: none;
+  padding: 0;
 }
 
 .claimFilters {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  margin-bottom: 14px;
 }
 
 .claimFilters button {
