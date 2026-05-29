@@ -15,7 +15,6 @@ import {
   NotebookPen,
   Paperclip,
   Plus,
-  Quote,
   Send,
   ShieldCheck,
   Upload,
@@ -969,26 +968,38 @@ function AgentOutput({ deal, scoring, exportUrl, diligenceExportUrl, onReviewCla
                             type="button"
                             className={clsx("reviewBtn", disposition === "verified" && "reviewBtn--active reviewBtn--verified")}
                             onClick={() => onReviewClaim(claim.id, disposition === "verified" ? "unreviewed" : "verified")}
+                            aria-label="Mark verified"
                             title="Mark verified"
-                          >Verified</button>
+                          >
+                            <CheckCircle2 size={13} />
+                          </button>
                           <button
                             type="button"
                             className={clsx("reviewBtn", disposition === "needs_evidence" && "reviewBtn--active reviewBtn--needs")}
                             onClick={() => onReviewClaim(claim.id, disposition === "needs_evidence" ? "unreviewed" : "needs_evidence")}
+                            aria-label="Needs more evidence"
                             title="Needs more evidence"
-                          >Needs evidence</button>
+                          >
+                            <CircleHelp size={13} />
+                          </button>
                           <button
                             type="button"
                             className={clsx("reviewBtn", disposition === "ic_blocker" && "reviewBtn--active reviewBtn--blocker")}
                             onClick={() => onReviewClaim(claim.id, disposition === "ic_blocker" ? "unreviewed" : "ic_blocker")}
+                            aria-label="Mark IC blocker"
                             title="Mark IC blocker"
-                          >Blocker</button>
+                          >
+                            <AlertTriangle size={13} />
+                          </button>
                           <button
                             type="button"
                             className={clsx("reviewBtn", disposition === "ignored" && "reviewBtn--active")}
                             onClick={() => onReviewClaim(claim.id, disposition === "ignored" ? "unreviewed" : "ignored")}
+                            aria-label="Ignore claim"
                             title="Ignore claim"
-                          >Ignore</button>
+                          >
+                            <XCircle size={13} />
+                          </button>
                         </div>
                         {claim.resolutionRequest && (
                           <div className="resolutionRequest">
@@ -1015,26 +1026,18 @@ function AgentOutput({ deal, scoring, exportUrl, diligenceExportUrl, onReviewCla
                                 <article key={item.id} className={clsx("evidenceItem", `evidenceItem--${item.stance}`, `source--${item.sourceIndependence}`)}>
                                   <header className="citationHeader">
                                     <div className="citationTitle">
-                                      <span>{item.stance.replaceAll("_", " ")} · {item.sourceIndependence.replaceAll("_", " ")}</span>
                                       <strong>{sourceLabel(item)}</strong>
                                     </div>
                                     {item.sourceUrl && (
                                       <a className="sourceLink" href={item.sourceUrl} target="_blank" rel="noreferrer">
-                                        <ExternalLink size={13} />
+                                        <ExternalLink size={12} />
                                         Open source
                                       </a>
                                     )}
                                   </header>
                                   <blockquote className="quoteBlock">
-                                    <Quote size={14} />
                                     <p>{item.quoteSpan || item.snippet}</p>
                                   </blockquote>
-                                    {(item.evidenceRole || item.sourceAuthority || item.assessorRationale) && (
-                                      <p className="evidenceRationale">
-                                        {[item.evidenceRole?.replaceAll("_", " "), item.sourceAuthority?.replaceAll("_", " "), item.quoteConfidence && `${item.quoteConfidence} quote confidence`].filter(Boolean).join(" · ")}
-                                        {item.assessorRationale ? ` — ${item.assessorRationale}` : ""}
-                                      </p>
-                                    )}
                                 </article>
                               ))}
                             </div>

@@ -578,14 +578,14 @@ summary:focus-visible {
 .gradeBar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 0;
-  margin-top: 14px;
+  gap: 8px;
+  padding: 7px 0;
+  margin-top: 10px;
   border-top: 1px solid var(--line);
 }
 
 .gradeBar strong {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -594,8 +594,8 @@ summary:focus-visible {
 
 .gradeBar span {
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .scoreDrivers {
@@ -647,8 +647,8 @@ summary:focus-visible {
 .artifactPanel {
   border-top: 1px solid var(--line);
   background: transparent;
-  margin-top: 18px;
-  padding: 18px 0 0;
+  margin-top: 12px;
+  padding: 12px 0 0;
 }
 
 .artifactPanelHeader {
@@ -656,12 +656,12 @@ summary:focus-visible {
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .artifactPanelHeader h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.25;
   color: var(--ink);
@@ -679,69 +679,91 @@ summary:focus-visible {
 
 .claimGroups {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .claimGroup h3 {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
-  margin: 0 0 6px;
+  margin: 0 0 3px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 
 .claimRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 6px;
   border-top: 1px solid var(--line);
-  min-height: 34px;
-  padding: 8px 4px;
+  min-height: 30px;
+  padding: 5px 2px;
 }
 
 .claimRowMain {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 6px 8px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 7px;
   min-width: 0;
 }
 
 .claimEvidence {
-  display: contents;
+  grid-column: 1 / -1;
+  display: block;
+  min-width: 0;
+  margin-top: -2px;
+  padding-left: 0;
 }
 
 .claimEvidence summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
   padding: 3px 0;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   list-style: none;
+  width: fit-content;
   white-space: nowrap;
+}
+
+.claimEvidence summary::-webkit-details-marker {
+  display: none;
 }
 
 .claimEvidence summary::before {
   content: "";
+  width: 0;
+  height: 0;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  border-left: 4px solid currentColor;
+  transition: transform 0.12s ease;
 }
 
 .claimEvidence[open] summary::before {
-  content: "";
+  transform: rotate(90deg);
 }
 
 .claimEvidencePanel {
   display: grid;
-  grid-column: 1 / -1;
-  gap: 8px;
-  padding: 4px 0 6px;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 2px;
+  padding: 5px 0 2px;
+  border-top: 1px solid var(--line);
 }
 
 .claimText {
   color: var(--ink);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   line-height: 1.25;
   min-width: 0;
@@ -753,7 +775,7 @@ summary:focus-visible {
 .claimRow small {
   grid-column: 2;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10.5px;
   text-transform: capitalize;
   white-space: normal;
 }
@@ -783,6 +805,12 @@ summary:focus-visible {
   font-weight: 600;
 }
 
+.claimEvidence .claimReason {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
 .resolutionRequest {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -806,32 +834,32 @@ summary:focus-visible {
 .readinessStrip {
   display: grid;
   grid-template-columns: 0.8fr 2fr 0.6fr;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding: 10px 0;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 6px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
 
 .claimFilters {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .claimFilters button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 28px;
+  min-height: 24px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: white;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 4px 9px;
+  padding: 3px 8px;
 }
 
 .claimFilters button:hover {
@@ -860,10 +888,10 @@ summary:focus-visible {
 .answerBox footer span {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   border-radius: 999px;
-  padding: 3px 8px;
-  font-size: 11px;
+  padding: 2px 6px;
+  font-size: 10.5px;
   font-weight: 600;
   text-transform: capitalize;
   white-space: nowrap;
@@ -891,7 +919,7 @@ summary:focus-visible {
 
 .metric {
   border-top: 1px solid var(--line);
-  padding: 11px 4px;
+  padding: 7px 2px;
   min-width: 0;
 }
 
@@ -901,13 +929,13 @@ summary:focus-visible {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
 }
 
 .metric strong {
   display: block;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: capitalize;
   overflow-wrap: anywhere;
@@ -923,7 +951,29 @@ summary:focus-visible {
   border-top: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
-  padding: 16px 4px;
+  padding: 10px 0;
+}
+
+.claimEvidencePanel .evidenceItem {
+  display: grid;
+  gap: 3px;
+  padding: 5px 0 6px;
+}
+
+.claimEvidencePanel .claimReason + .evidenceItem,
+.claimEvidencePanel .evidenceItem:first-of-type {
+  border-top: 0;
+}
+
+.claimEvidencePanel .evidenceItem + .evidenceItem {
+  border-top: 1px solid var(--line);
+}
+
+.claimEvidencePanel .source--third_party,
+.claimEvidencePanel .source--founder_supplied,
+.claimEvidencePanel .source--derived {
+  border-top-color: var(--line);
+  opacity: 1;
 }
 
 .source--third_party {
@@ -949,91 +999,62 @@ summary:focus-visible {
 
 .citationHeader {
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+}
+
+.claimEvidencePanel .citationHeader {
+  align-items: baseline;
+  margin-bottom: 0;
 }
 
 .citationTitle {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
   flex-wrap: wrap;
 }
 
 .citationTitle strong {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.citationTitle span {
-  color: var(--muted);
-  background: var(--gray-bg);
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 7px;
-  text-transform: capitalize;
-}
-
-.citationTitle small {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-
 .sourceLink {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  font-size: 11px;
+  gap: 3px;
+  color: var(--muted);
+  border: 0;
+  border-radius: 0;
+  font-size: 10.5px;
   font-weight: 600;
-  padding: 4px 7px;
+  padding: 0;
   text-decoration: none;
   white-space: nowrap;
 }
 
 .sourceLink:hover {
-  background: var(--panel-soft);
-  border-color: var(--line-strong);
+  color: var(--ink);
+  text-decoration: underline;
 }
 
 .quoteBlock {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
+  display: block;
   background: transparent;
   border: 0;
   border-radius: 0;
-  margin: 0 0 10px;
-  padding: 6px 4px;
-}
-
-.quoteBlock svg {
-  color: var(--faint);
-  margin-top: 3px;
+  margin: 0;
+  padding: 0;
 }
 
 .quoteBlock p {
-  color: #1f2937;
-  font-size: 13px;
-  font-style: italic;
-  line-height: 1.6;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.35;
   margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.evidenceRationale {
-  color: var(--muted);
-  font-size: 11.5px;
-  line-height: 1.45;
-  margin: 0;
-  padding: 0 4px;
   overflow-wrap: anywhere;
 }
 
@@ -1578,7 +1599,7 @@ summary:focus-visible {
   }
 
   .claimRow {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) max-content;
   }
 
   .claimRow small {
@@ -1587,11 +1608,11 @@ summary:focus-visible {
   }
 
   .claimRowMain {
-    grid-template-columns: 1fr;
+    grid-template-columns: max-content minmax(0, 1fr);
   }
 
   .reviewButtons {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .readinessStrip {
@@ -1741,13 +1762,18 @@ summary:focus-visible {
 
 .reviewButtons {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   flex: 0 0 auto;
+  align-self: center;
 }
 
 .reviewBtn {
-  font-size: 11px;
-  padding: 2px 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border-radius: 5px;
   border: 1px solid var(--line-strong);
   background: none;
@@ -1765,6 +1791,10 @@ summary:focus-visible {
 .reviewBtn--active {
   border-color: transparent;
   font-weight: 500;
+}
+
+.reviewBtn svg {
+  flex: 0 0 auto;
 }
 
 .reviewBtn--verified {
@@ -1804,13 +1834,12 @@ summary:focus-visible {
   }
 
   .claimRow {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) max-content;
   }
 
   .reviewButtons {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 100%;
+    display: flex;
+    width: auto;
   }
 
   .reviewBtn {
