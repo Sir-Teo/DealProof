@@ -44,7 +44,7 @@ Backend settings live in `backend/.env`:
 
 ```bash
 DEEPSEEK_API_KEY=your-key-here
-DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_MODEL=deepseek-v4-flash
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEALPROOF_WEB_SEARCH_ENABLED=1
 ```

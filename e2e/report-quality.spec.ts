@@ -10,6 +10,7 @@ type DealClaim = {
   category: string;
   importance: Importance;
   status: ClaimStatus;
+  riskRationale: string;
   confidence: "high" | "medium" | "low";
   qualityScore: number;
   qualityIssues: string[];

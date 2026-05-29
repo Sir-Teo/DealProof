@@ -21,6 +21,44 @@ def test_demo_deal_can_be_created_and_loaded():
         assert len(loaded.json()["materials"]) >= 3
 
 
+def test_settings_can_be_saved_and_loaded():
+    with TestClient(app) as client:
+        updated = client.patch(
+            "/settings",
+            json={
+                "maxClaims": 9,
+                "maxClaimsPerMaterial": 4,
+                "deepseekModel": "deepseek-v4-pro",
+                "webResearchEnabled": False,
+            },
+        )
+        loaded = client.get("/settings")
+
+    assert updated.status_code == 200
+    assert loaded.status_code == 200
+    assert loaded.json() == {
+        "maxClaims": 9,
+        "maxClaimsPerMaterial": 4,
+        "deepseekModel": "deepseek-v4-pro",
+        "webResearchEnabled": False,
+    }
+
+
+def test_settings_reject_legacy_deepseek_models():
+    with TestClient(app) as client:
+        response = client.patch(
+            "/settings",
+            json={
+                "maxClaims": 6,
+                "maxClaimsPerMaterial": 6,
+                "deepseekModel": "deepseek-chat",
+                "webResearchEnabled": True,
+            },
+        )
+
+    assert response.status_code == 422
+
+
 def test_add_url_returns_readable_fetch_failure(monkeypatch):
     async def fail_fetch(_url: str) -> str:
         raise UrlFetchError("Failed to fetch URL: upstream returned HTTP 403.")

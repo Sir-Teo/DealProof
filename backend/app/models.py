@@ -4,7 +4,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from .config import DEFAULT_STAGE, DEFAULT_TAGLINE
+from .config import (
+    ALLOWED_DEEPSEEK_MODELS,
+    DEFAULT_DEEPSEEK_MODEL,
+    DEFAULT_MAX_CLAIMS,
+    DEFAULT_MAX_CLAIMS_PER_MATERIAL,
+    DEFAULT_STAGE,
+    DEFAULT_TAGLINE,
+    DEFAULT_WEB_RESEARCH_ENABLED,
+)
 
 ClaimStatus = Literal["supported", "weak", "contradicted", "missing"]
 ClaimCategory = Literal[
@@ -57,6 +65,22 @@ EvidenceRole = Literal["primary_support", "corroborating_support", "contradictio
 SourceAuthority = Literal["founder", "internal_operating", "customer", "third_party", "public_filing", "press", "derived"]
 ScoreGrade = Literal["green", "yellow", "red"]
 ReadinessStatus = Literal["ic_ready", "needs_diligence", "blocked", "screen_out"]
+DeepSeekModelName = Literal["deepseek-v4-flash", "deepseek-v4-pro"]
+
+
+class AppSettings(BaseModel):
+    maxClaims: int = Field(default=DEFAULT_MAX_CLAIMS, ge=1, le=30)
+    maxClaimsPerMaterial: int = Field(default=DEFAULT_MAX_CLAIMS_PER_MATERIAL, ge=1, le=20)
+    deepseekModel: DeepSeekModelName = DEFAULT_DEEPSEEK_MODEL  # type: ignore[assignment]
+    webResearchEnabled: bool = DEFAULT_WEB_RESEARCH_ENABLED
+
+    @field_validator("deepseekModel", mode="before")
+    @classmethod
+    def normalize_deepseek_model(cls, value) -> str:
+        model = str(value).strip()
+        if model not in ALLOWED_DEEPSEEK_MODELS:
+            raise ValueError("DeepSeek model must be deepseek-v4-flash or deepseek-v4-pro")
+        return model
 
 
 class SourceMaterial(BaseModel):

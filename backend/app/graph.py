@@ -13,6 +13,7 @@ from . import db
 from .config import AGENT_ROLE, APP_NAME
 from .llm import DeepSeekClient
 from .models import (
+    AppSettings,
     ClaimExtraction,
     DealClaim,
     DealProfile,
@@ -31,6 +32,7 @@ from .models import (
 )
 from .retrieval import chunk_text, fallback_evidence_for_claim, source_authority_for_independence, source_independence
 from .scoring import active_claims, apply_rule_based_status, derive_readiness_status, effective_disposition, has_audit_citation, score_claims
+from .settings import get_app_settings
 from .web_research import collect_public_web_evidence
 
 
@@ -50,13 +52,22 @@ class DiligenceState(TypedDict, total=False):
     llm_outputs: dict[str, str]
     on_progress: ProgressCallback
     generated_at: str
+    settings: AppSettings
 
 
 ProgressCallback = Callable[[str, str, dict[str, int | str] | None], None]
 
 
-def get_llm_client() -> DeepSeekClient:
-    return DeepSeekClient()
+def get_llm_client(state: DiligenceState | None = None) -> DeepSeekClient:
+    settings = state.get("settings") if state else None
+    model = (settings or get_app_settings()).deepseekModel
+    try:
+        return DeepSeekClient(model=model)
+    except TypeError:
+        client = DeepSeekClient()
+        if hasattr(client, "model"):
+            client.model = model
+        return client
 GraphStep = tuple[str, str, str]
 
 
@@ -64,8 +75,16 @@ def deterministic_analysis_enabled() -> bool:
     return os.getenv("DEALPROOF_DETERMINISTIC_ANALYSIS", "0").strip().lower() in {"1", "true", "yes"}
 
 
-MAX_CLAIMS = int(os.getenv("DEALPROOF_MAX_CLAIMS", "6"))
-MAX_CLAIMS_PER_MATERIAL = int(os.getenv("DEALPROOF_MAX_CLAIMS_PER_MATERIAL", "6"))
+def run_settings(state: DiligenceState) -> AppSettings:
+    return state.get("settings") or get_app_settings()
+
+
+def max_claims(state: DiligenceState) -> int:
+    return max(1, run_settings(state).maxClaims)
+
+
+def max_claims_per_material(state: DiligenceState) -> int:
+    return max(1, run_settings(state).maxClaimsPerMaterial)
 
 GRAPH_STEPS: list[GraphStep] = [
     ("load_materials", "Read supplied materials", "Loading source packets from the deal workspace"),
@@ -125,22 +144,33 @@ def build_graph():
     return graph.compile()
 
 
-def run_diligence(deal_id: str, on_progress: ProgressCallback | None = None) -> DiligenceState:
+def run_diligence(
+    deal_id: str,
+    on_progress: ProgressCallback | None = None,
+    settings: AppSettings | None = None,
+) -> DiligenceState:
     db.update_deal_status(deal_id, "running")
     try:
         deal = db.get_deal(deal_id)
+        active_settings = settings or get_app_settings()
         if on_progress:
-            result = run_diligence_with_progress(deal_id, deal.company, deal.stage, on_progress)
+            result = run_diligence_with_progress(deal_id, deal.company, deal.stage, on_progress, active_settings)
         else:
-            result = build_graph().invoke({"deal_id": deal_id, "company": deal.company, "stage": deal.stage})
+            result = build_graph().invoke({"deal_id": deal_id, "company": deal.company, "stage": deal.stage, "settings": active_settings})
         return result
     except Exception as exc:
         db.update_deal_status(deal_id, "failed", error=str(exc))
         raise
 
 
-def run_diligence_with_progress(deal_id: str, company: str, stage: str, on_progress: ProgressCallback) -> DiligenceState:
-    state: DiligenceState = {"deal_id": deal_id, "company": company, "stage": stage, "on_progress": on_progress}
+def run_diligence_with_progress(
+    deal_id: str,
+    company: str,
+    stage: str,
+    on_progress: ProgressCallback,
+    settings: AppSettings,
+) -> DiligenceState:
+    state: DiligenceState = {"deal_id": deal_id, "company": company, "stage": stage, "on_progress": on_progress, "settings": settings}
     graph_updates = iter(build_graph().stream(state, stream_mode="updates"))
     for step_id, label, description in GRAPH_STEPS:
         before = progress_payload(state, label)
@@ -285,7 +315,7 @@ def profile_deal(state: DiligenceState) -> DiligenceState:
     if deterministic_analysis_enabled():
         profile = deterministic_profile(state)
         return {**state, "profile": profile, **with_llm_output(state, "profile_deal", profile.model_dump_json())}
-    llm = get_llm_client()
+    llm = get_llm_client(state)
     if not llm.enabled:
         raise RuntimeError("DEEPSEEK_API_KEY is not configured. Add it to backend/.env.")
     context = format_material_context(state["materials"], max_chars=9_000)
@@ -354,7 +384,7 @@ def extract_claims(state: DiligenceState) -> DiligenceState:
     if deterministic_analysis_enabled():
         claims = deterministic_extract_claims(state)
         return {**state, "claims": claims, **with_llm_output(state, "extract_claims", f"deterministic_claims={len(claims)}")}
-    llm = get_llm_client()
+    llm = get_llm_client(state)
     if not llm.enabled:
         raise RuntimeError("DEEPSEEK_API_KEY is not configured. Add it to backend/.env.")
     profile = state.get("profile", DealProfile())
@@ -365,7 +395,7 @@ def extract_claims(state: DiligenceState) -> DiligenceState:
         "Every claim must include a sourceMaterial and direct sourceSnippet from the supplied context. "
         "Prefer specific claims with metrics, named customers, dates, cohorts, fundraising terms, product capabilities, legal status, "
         "or explicit assertions that would affect an IC decision. Split compound claims when they combine independent facts. "
-        f"Extract at most {MAX_CLAIMS_PER_MATERIAL} claims from each source material; choose the claims most likely to change an IC decision. "
+        f"Extract at most {max_claims_per_material(state)} claims from each source material; choose the claims most likely to change an IC decision. "
         "Initial status must be missing and riskRationale can be empty. "
         "IMPORTANT: The claim text field must be a standalone assertion written in plain English. "
         "Do NOT include source navigation labels such as 'Slide 7:', 'Slide 4:', '### ', 'Claim:', or 'Source:' in the text field. "
@@ -388,7 +418,7 @@ def extract_claims(state: DiligenceState) -> DiligenceState:
         )
         extracted, raw_output = llm.complete_json_with_raw(system, user, ClaimExtraction, on_chunk=stream_llm_chunk(state, "extract_claims"))
         raw_outputs.append(raw_output)
-        claims.extend(extracted.claims[:MAX_CLAIMS_PER_MATERIAL])
+        claims.extend(extracted.claims[:max_claims_per_material(state)])
     state = {**state, **with_llm_output(state, "extract_claims", "\n\n".join(raw_outputs))}
     if not claims:
         raise ValueError("No diligence claims were extracted from the supplied materials.")
@@ -413,7 +443,7 @@ def normalize_claims(state: DiligenceState) -> DiligenceState:
 def rank_claims(state: DiligenceState) -> DiligenceState:
     ranked = [rank_claim_materiality(claim, state.get("source_quality", [])) for claim in state["claims"]]
     ranked.sort(key=claim_materiality_sort_key)
-    return {**state, "claims": normalize_claim_ids(select_diverse_claims(ranked, MAX_CLAIMS))}
+    return {**state, "claims": normalize_claim_ids(select_diverse_claims(ranked, max_claims(state)))}
 
 
 def retrieve_evidence(state: DiligenceState) -> DiligenceState:
@@ -428,7 +458,7 @@ def retrieve_evidence(state: DiligenceState) -> DiligenceState:
 
 
 def assess_evidence(state: DiligenceState) -> DiligenceState:
-    llm = get_llm_client()
+    llm = get_llm_client(state)
     evidence = [enrich_evidence_item(item) for item in state.get("evidence", [])]
     if deterministic_analysis_enabled() or not llm.enabled:
         return {**state, "evidence": evidence}
@@ -508,12 +538,15 @@ def enrich_evidence_item(item: EvidenceItem) -> EvidenceItem:
 
 
 def search_public_web(state: DiligenceState) -> DiligenceState:
+    settings = run_settings(state)
     try:
         web_evidence = collect_public_web_evidence(
             state["company"],
             state.get("profile", DealProfile()),
             state["claims"],
             on_progress=web_progress_emitter(state),
+            enabled=settings.webResearchEnabled,
+            max_claims=settings.maxClaims,
         )
     except Exception:
         emit = web_progress_emitter(state)
@@ -637,7 +670,7 @@ def generate_report(state: DiligenceState) -> DiligenceState:
     report = deterministic_diligence_report(state)
     if deterministic_analysis_enabled():
         return {**state, "report": report}
-    llm = get_llm_client()
+    llm = get_llm_client(state)
     if llm.enabled:
         system = (
             "You write structured IC diligence reports for VC/PE investors. Return JSON only. "
@@ -676,7 +709,7 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
         memo = memo_from_report(state["report"], state)
         return {**state, "memo": memo}
 
-    llm = get_llm_client()
+    llm = get_llm_client(state)
     if not llm.enabled:
         raise RuntimeError("DEEPSEEK_API_KEY is not configured. Add it to backend/.env.")
     reviewable_claims = active_claims(state["claims"])
@@ -988,8 +1021,9 @@ PUBLIC_ISSUERS = {"apple", "target", "microsoft", "amazon", "google", "alphabet"
 
 def deterministic_extract_claims(state: DiligenceState) -> list[DealClaim]:
     claims: list[DealClaim] = []
+    per_material_limit = max_claims_per_material(state)
     for material in state.get("materials", []):
-        for sentence in candidate_claim_sentences(material):
+        for sentence in candidate_claim_sentences(material, limit=per_material_limit):
             category = infer_claim_category(sentence, state["company"])
             importance = "high" if category in {"growth", "financials", "customer_roi", "market", "competition", "compliance", "fundraising", "legal"} else "medium"
             claim = DealClaim(
@@ -1013,7 +1047,7 @@ def deterministic_extract_claims(state: DiligenceState) -> list[DealClaim]:
     return claims
 
 
-def candidate_claim_sentences(material: SourceMaterial) -> list[str]:
+def candidate_claim_sentences(material: SourceMaterial, limit: int = 6) -> list[str]:
     text = re.sub(r"\s+", " ", material.text).strip()
     text = text.replace("U.S.", "US").replace("U.K.", "UK")
     pieces = [part.strip(" -•\t") for part in re.split(r"(?<=[.!?])\s+|\n+|(?<=\.)\s*(?=[A-Z][A-Za-z ]+:)", text) if part.strip()]
@@ -1031,7 +1065,7 @@ def candidate_claim_sentences(material: SourceMaterial) -> list[str]:
         if lower.startswith(("table of contents", "copyright", "forward-looking statements")):
             continue
         scored.append((number_hits + keyword_hits, number_hits, piece))
-    return [piece for _, __, piece in sorted(scored, key=lambda item: (item[0], item[1], len(item[2])), reverse=True)[:MAX_CLAIMS_PER_MATERIAL]]
+    return [piece for _, __, piece in sorted(scored, key=lambda item: (item[0], item[1], len(item[2])), reverse=True)[:limit]]
 
 
 def is_low_value_sentence(text: str) -> bool:

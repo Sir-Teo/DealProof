@@ -12,6 +12,7 @@ dist/
 backend/.venv/
 backend/data/*.db
 backend/data/*.db-*
+backend/data/*.json
 backend/storage/deals/*
 backend/.pytest_cache/
 __pycache__/

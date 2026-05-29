@@ -37,12 +37,19 @@ def collect_public_web_evidence(
     profile: DealProfile,
     claims: list[DealClaim],
     on_progress: WebProgress | None = None,
+    enabled: bool | None = None,
+    max_claims: int | None = None,
 ) -> list[EvidenceItem]:
-    if not WEB_SEARCH_ENABLED:
+    search_enabled = WEB_SEARCH_ENABLED if enabled is None else enabled
+    if not search_enabled:
         emit_web_progress(on_progress, "web_disabled", {"label": "Public web search is disabled"})
         return []
 
-    selected_claims = sorted(claims, key=claim_priority_key)[:WEB_SEARCH_MAX_CLAIMS]
+    claim_limit = max(1, max_claims or WEB_SEARCH_MAX_CLAIMS)
+    selected_claims = sorted(claims, key=claim_priority_key)[:claim_limit]
+    if not selected_claims:
+        emit_web_progress(on_progress, "web_complete", {"label": "No claims selected for public web research", "webEvidence": 0})
+        return []
     emit_web_progress(
         on_progress,
         "web_start",
@@ -95,7 +102,7 @@ def collect_public_web_evidence(
                     )
         return claim_evidence
 
-    max_workers = min(len(selected_claims), WEB_SEARCH_MAX_CLAIMS)
+    max_workers = min(len(selected_claims), claim_limit)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(research_claim, claim): claim for claim in selected_claims}
         for future in as_completed(futures):

@@ -16,17 +16,29 @@ import {
   Paperclip,
   Plus,
   Send,
+  Settings,
   ShieldCheck,
   Upload,
+  X,
   XCircle
 } from "lucide-react";
 import clsx from "clsx";
 import { API_BASE_URL, DEFAULT_DEAL, UI_COPY } from "@/lib/app-config";
 import { effectiveDisposition, evidenceForClaim, scoreClaims } from "@/lib/scoring";
-import type { ChatTurn, ClaimStatus, DealAnalysis, DealClaim, DiligenceReport, EvidenceItem, ReadinessStatus, ReportClaimRef, ReviewerDisposition, ScoreSummary, SourceQualityNote } from "@/lib/types";
+import type { AppSettings, ChatTurn, ClaimStatus, DealAnalysis, DealClaim, DiligenceReport, EvidenceItem, ReadinessStatus, ReportClaimRef, ReviewerDisposition, ScoreSummary, SourceQualityNote } from "@/lib/types";
 
 const emptyCounts = { supported: 0, weak: 0, contradicted: 0, missing: 0 };
 const DEAL_ID_KEY = "dealproofDealId";
+const DEFAULT_SETTINGS: AppSettings = {
+  maxClaims: 6,
+  maxClaimsPerMaterial: 6,
+  deepseekModel: "deepseek-v4-flash",
+  webResearchEnabled: true
+};
+const DEEPSEEK_MODEL_OPTIONS = [
+  { label: "DeepSeek V4 Flash", value: "deepseek-v4-flash" },
+  { label: "DeepSeek V4 Pro", value: "deepseek-v4-pro" }
+];
 
 type DealSummary = {
   id: string;
@@ -98,6 +110,10 @@ export default function Home() {
   const [feedNotes, setFeedNotes] = useState<FeedNote[]>([]);
   const [dealList, setDealList] = useState<DealSummary[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [settingsDraft, setSettingsDraft] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [settingsSaving, setSettingsSaving] = useState(false);
   const feedWrapRef = useRef<HTMLElement>(null);
   const feedBottomRef = useRef<HTMLDivElement>(null);
   const wasAnalyzingRef = useRef(false);
@@ -148,6 +164,15 @@ export default function Home() {
         .catch(() => localStorage.removeItem(DEAL_ID_KEY));
     }
     void loadDealList();
+    api<AppSettings>("/settings")
+      .then((loaded) => {
+        setSettings(loaded);
+        setSettingsDraft(loaded);
+      })
+      .catch(() => {
+        setSettings(DEFAULT_SETTINGS);
+        setSettingsDraft(DEFAULT_SETTINGS);
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -229,6 +254,30 @@ export default function Home() {
     }
   }
 
+  function updateSettingsDraft<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
+    setSettingsDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  async function saveSettings() {
+    setSettingsSaving(true);
+    setError(null);
+    try {
+      const saved = await api<AppSettings>("/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settingsDraft)
+      });
+      setSettings(saved);
+      setSettingsDraft(saved);
+      return true;
+    } catch (exc) {
+      setError(String(exc instanceof Error ? exc.message : exc));
+      return false;
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
   async function reviewClaim(
     claimId: string,
     reviewerDisposition: ReviewerDisposition,
@@ -259,7 +308,11 @@ export default function Home() {
   }
 
   async function runAnalysisForDeal(targetDeal: DealAnalysis) {
-    const response = await fetch(`${API_BASE_URL}/deals/${targetDeal.id}/analyze-stream`, { method: "POST" });
+    const response = await fetch(`${API_BASE_URL}/deals/${targetDeal.id}/analyze-stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ settings })
+    });
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
       throw new Error(payload?.detail ?? `Request failed: ${response.status}`);
@@ -455,6 +508,17 @@ export default function Home() {
           <strong>{UI_COPY.appName}</strong>
         </div>
         <div className="headerActions">
+          <button
+            className={clsx("iconButton", settingsOpen && "iconButton--active")}
+            type="button"
+            onClick={() => {
+              setSettingsDraft(settings);
+              setSettingsOpen((open) => !open);
+            }}
+            title={UI_COPY.settingsButton}
+          >
+            <Settings size={15} />
+          </button>
           {deal && (
             <button className="iconButton" type="button" onClick={newDeal} title="New deal">
               <Plus size={15} />
@@ -462,6 +526,23 @@ export default function Home() {
           )}
         </div>
       </header>
+
+      {settingsOpen && (
+        <SettingsPanel
+          settings={settingsDraft}
+          onChange={updateSettingsDraft}
+          onClose={() => {
+            setSettingsDraft(settings);
+            setSettingsOpen(false);
+          }}
+          onSave={() => {
+            void saveSettings().then((saved) => {
+              if (saved) setSettingsOpen(false);
+            });
+          }}
+          saving={settingsSaving}
+        />
+      )}
 
       <section className="feedWrap" ref={feedWrapRef}>
         <div className="messageFeed" aria-live="polite">
@@ -672,6 +753,74 @@ function Avatar({ status }: { status: AgentEventStatus | "user" }) {
     <div className={clsx("avatar", status)}>
       {status === "running" ? <Loader2 className="spin" size={14} /> : status === "error" ? <XCircle size={14} /> : status === "user" ? null : <Bot size={14} />}
     </div>
+  );
+}
+
+function SettingsPanel({ settings, onChange, onClose, onSave, saving }: {
+  settings: AppSettings;
+  onChange: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void;
+  onClose: () => void;
+  onSave: () => void;
+  saving: boolean;
+}) {
+  return (
+    <form className="settingsPanel" onSubmit={(event) => { event.preventDefault(); onSave(); }}>
+      <header>
+        <strong>Settings</strong>
+        <button className="iconButton" type="button" onClick={onClose} title="Close settings">
+          <X size={14} />
+        </button>
+      </header>
+      <label className="settingsField">
+        <span>Claims</span>
+        <input
+          type="number"
+          min={1}
+          max={30}
+          value={settings.maxClaims}
+          onChange={(event) => onChange("maxClaims", clampNumber(event.currentTarget.value, 1, 30))}
+        />
+      </label>
+      <label className="settingsField">
+        <span>Per source</span>
+        <input
+          type="number"
+          min={1}
+          max={20}
+          value={settings.maxClaimsPerMaterial}
+          onChange={(event) => onChange("maxClaimsPerMaterial", clampNumber(event.currentTarget.value, 1, 20))}
+        />
+      </label>
+      <label className="settingsField settingsField--wide">
+        <span>Model</span>
+        <select
+          value={settings.deepseekModel}
+          onChange={(event) => onChange("deepseekModel", event.currentTarget.value as AppSettings["deepseekModel"])}
+        >
+          {DEEPSEEK_MODEL_OPTIONS.map((model) => (
+            <option key={model.value} value={model.value}>
+              {model.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="toggleField">
+        <span>Public web</span>
+        <input
+          type="checkbox"
+          checked={settings.webResearchEnabled}
+          onChange={(event) => onChange("webResearchEnabled", event.currentTarget.checked)}
+        />
+        <span className="toggleTrack" aria-hidden="true" />
+      </label>
+      <footer>
+        <button className="secondaryButton" type="button" onClick={onClose}>Cancel</button>
+        <button className="primaryButton" type="submit" disabled={saving || !settings.deepseekModel.trim()}>
+          {saving ? <Loader2 className="spin" size={13} /> : null}
+          Save
+        </button>
+      </footer>
+    </form>
   );
 }
 
@@ -1216,6 +1365,12 @@ function MemoSection({ title, items, danger = false }: { title: string; items: s
 
 function formatToolName(toolName: string) {
   return toolName.replaceAll("_", " ");
+}
+
+function clampNumber(value: string, min: number, max: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return min;
+  return Math.min(max, Math.max(min, Math.round(parsed)));
 }
 
 function formatAgentStats(event: AgentEvent) {

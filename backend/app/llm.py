@@ -8,13 +8,15 @@ from typing import Callable, TypeVar
 import httpx
 from pydantic import BaseModel, ValidationError
 
+from .config import DEFAULT_DEEPSEEK_MODEL
+
 T = TypeVar("T", bound=BaseModel)
 
 
 class DeepSeekClient:
-    def __init__(self) -> None:
+    def __init__(self, model: str | None = None) -> None:
         self.api_key = os.getenv("DEEPSEEK_API_KEY")
-        self.model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+        self.model = model or DEFAULT_DEEPSEEK_MODEL
         self.base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
     @property

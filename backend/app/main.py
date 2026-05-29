@@ -29,9 +29,10 @@ from .config import (
     LOCAL_FRONTEND_ORIGINS,
 )
 from .graph import answer_question, refresh_review_artifacts, run_diligence
-from .models import ChatTurn, ClaimStatus, DealAnalysis, ReviewerDisposition, ReviewerStatus, SourceMaterial
+from .models import AppSettings, ChatTurn, ClaimStatus, DealAnalysis, ReviewerDisposition, ReviewerStatus, SourceMaterial
 from .parsers import UrlFetchError, fetch_url_text, infer_kind, parse_file, summarize
 from .scoring import diligence_requests_to_markdown, memo_to_markdown, report_to_markdown
+from .settings import get_app_settings, save_app_settings
 
 ROOT = Path(__file__).resolve().parents[1]
 STORAGE = ROOT / "storage" / "deals"
@@ -62,6 +63,10 @@ class ChatRequest(BaseModel):
     question: str
 
 
+class AnalysisRequest(BaseModel):
+    settings: AppSettings | None = None
+
+
 class ClaimReviewPatch(BaseModel):
     status: ClaimStatus | None = None
     reviewerStatus: ReviewerStatus | None = None
@@ -79,6 +84,16 @@ def startup() -> None:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/settings")
+def read_settings() -> AppSettings:
+    return get_app_settings()
+
+
+@app.patch("/settings")
+def update_settings(payload: AppSettings) -> AppSettings:
+    return save_app_settings(payload)
 
 
 @app.get("/deals")
@@ -202,18 +217,19 @@ async def add_url(deal_id: str, payload: UrlCreate) -> DealAnalysis:
 
 
 @app.post("/deals/{deal_id}/analyze")
-def analyze_deal(deal_id: str) -> DealAnalysis:
+def analyze_deal(deal_id: str, payload: AnalysisRequest | None = None) -> DealAnalysis:
     ensure_deal(deal_id)
     try:
-        run_diligence(deal_id)
+        run_diligence(deal_id, settings=payload.settings if payload else None)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return db.get_deal(deal_id)
 
 
 @app.post("/deals/{deal_id}/analyze-stream")
-def analyze_deal_stream(deal_id: str) -> StreamingResponse:
+def analyze_deal_stream(deal_id: str, payload: AnalysisRequest | None = None) -> StreamingResponse:
     ensure_deal(deal_id)
+    settings = payload.settings if payload else get_app_settings()
 
     def stream():
         done = object()
@@ -226,7 +242,7 @@ def analyze_deal_stream(deal_id: str) -> StreamingResponse:
         def run() -> None:
             try:
                 emit("run_start", "agent", {"label": "Starting diligence agent"})
-                run_diligence(deal_id, on_progress=emit)
+                run_diligence(deal_id, on_progress=emit, settings=settings)
                 deal = db.get_deal(deal_id)
                 emit(
                     "run_complete",

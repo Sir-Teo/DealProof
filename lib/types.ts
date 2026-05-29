@@ -28,6 +28,14 @@ export type VerificationStandard =
 export type ReviewPriority = "critical" | "high" | "medium" | "low";
 export type EvidenceRole = "primary_support" | "corroborating_support" | "contradiction" | "context" | "gap";
 export type SourceAuthority = "founder" | "internal_operating" | "customer" | "third_party" | "public_filing" | "press" | "derived";
+export type DeepSeekModelName = "deepseek-v4-flash" | "deepseek-v4-pro";
+
+export type AppSettings = {
+  maxClaims: number;
+  maxClaimsPerMaterial: number;
+  deepseekModel: DeepSeekModelName;
+  webResearchEnabled: boolean;
+};
 
 export type DealClaim = {
   id: string;
