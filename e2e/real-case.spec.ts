@@ -10,7 +10,6 @@ const realCaseFiles = [
 ].map((name) => path.join(fixtureDir, name));
 
 test("runs a real-world public-material diligence case", async ({ page }, testInfo) => {
-  test.skip(true, "Requires a configured DeepSeek API key; no deterministic no-key fallback is supported.");
   test.skip(testInfo.project.name !== "chromium", "Real-case E2E runs on desktop Chromium only.");
 
   await page.goto("/");
@@ -22,10 +21,10 @@ test("runs a real-world public-material diligence case", async ({ page }, testIn
   await page.getByRole("button", { name: /^Add$/ }).click();
   await expect((await createResponse).ok()).toBe(true);
   await expect((await materialsResponse).ok()).toBe(true);
-  await expect(page.getByText(/real_case_claim_packet\.txt/)).toBeVisible();
+  await expect(page.locator(".materialRow").filter({ hasText: /real_case_claim_packet\.txt/ }).first()).toBeVisible();
 
   const analyzeResponse = page.waitForResponse((response) => response.url().includes("/analyze-stream") && response.request().method() === "POST");
-  await page.getByRole("button", { name: "Run agent", exact: true }).click();
+  await page.locator(".materialsReady .primaryButton").click();
   await expect((await analyzeResponse).ok()).toBe(true);
   await expect(page.getByText("Analysis complete", { exact: true }).first()).toBeVisible({ timeout: 90_000 });
 
