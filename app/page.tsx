@@ -30,7 +30,7 @@ import type { AppSettings, ChatTurn, ClaimStatus, DealAnalysis, DealClaim, Dilig
 const emptyCounts = { supported: 0, weak: 0, contradicted: 0, missing: 0 };
 const DEAL_ID_KEY = "dealproofDealId";
 const DEFAULT_SETTINGS: AppSettings = {
-  maxClaims: 6,
+  maxClaims: 5,
   maxClaimsPerMaterial: 6,
   deepseekModel: "deepseek-v4-flash",
   webResearchEnabled: true

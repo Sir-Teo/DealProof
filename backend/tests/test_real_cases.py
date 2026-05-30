@@ -129,7 +129,7 @@ def test_five_real_case_quality_gate(monkeypatch, case_id):
     strengths = "\n".join(memo["keyStrengths"])
 
     assert len(claims) >= expected.get("minClaims", 1)
-    assert len(claims) <= 6
+    assert len(claims) <= 5
     assert len({claim["text"] for claim in claims}) == len(claims)
     assert len(evidence) >= len(claims)
     assert all(item["citation"] for item in evidence)
@@ -165,7 +165,7 @@ def test_real_case_agent_output_has_supported_weak_and_contradicted_claims(monke
     statuses = {claim["status"] for claim in payload["claims"]}
     evidence_stances = {item["stance"] for item in payload["evidence"]}
 
-    assert len(claim_texts) >= 6
+    assert len(claim_texts) >= 5
     assert len(claim_texts) == len(set(claim_texts))
     assert {"supported", "weak", "contradicted"}.issubset(statuses)
     assert {"supports", "partially_supports", "contradicts"}.issubset(evidence_stances)
@@ -211,7 +211,7 @@ def test_large_real_case_data_room_output_quality(monkeypatch):
     citations = {item["citation"].split(", chunk")[0] for item in payload["evidence"]}
 
     assert len(payload["materials"]) >= 14
-    assert len(claims) == 6
+    assert len(claims) == 5
     assert len({claim["text"] for claim in claims}) == len(claims)
     assert {"supported", "weak"}.issubset(statuses)
     assert "DMs Revenue Flow can reach $2.56M ARR by month 24." in claim_text

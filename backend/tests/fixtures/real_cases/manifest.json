@@ -11,7 +11,7 @@
         "real_case_claim_packet.txt"
       ],
       "expected": {
-        "minClaims": 6,
+        "minClaims": 5,
         "requiresStatuses": ["supported", "weak", "contradicted"],
         "chatQuestion": "Can we trust the ROI and no-competitor claims?"
       }
@@ -53,7 +53,7 @@
       ],
       "expected": {
         "minMaterials": 14,
-        "minClaims": 6,
+        "minClaims": 5,
         "requiresStatuses": ["supported", "weak", "contradicted"],
         "chatQuestions": [
           "Which public materials support the ARR and ROI claims?",

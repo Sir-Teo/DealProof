@@ -1079,13 +1079,14 @@ def candidate_claim_sentences(material: SourceMaterial, limit: int = 6) -> list[
         if is_low_value_sentence(piece):
             continue
         lower = piece.lower()
-        keyword_hits = sum(1 for keyword in CLAIM_KEYWORDS if keyword in lower)
+        explicit_claim = bool(re.search(r"(^|\s)claim:\s", lower))
+        keyword_hits = sum(1 for keyword in CLAIM_KEYWORDS if contains_term(lower, keyword))
         number_hits = len(re.findall(r"\$?\d[\d,.]*(?:%|x|k|m|b)?", piece, flags=re.IGNORECASE))
-        if keyword_hits == 0 and number_hits == 0:
+        if keyword_hits == 0 and number_hits == 0 and not explicit_claim:
             continue
         if lower.startswith(("table of contents", "copyright", "forward-looking statements")):
             continue
-        scored.append((number_hits + keyword_hits, number_hits, piece))
+        scored.append((number_hits + keyword_hits + (2 if explicit_claim else 0), number_hits, piece))
     return [piece for _, __, piece in sorted(scored, key=lambda item: (item[0], item[1], len(item[2])), reverse=True)[:limit]]
 
 
@@ -1111,33 +1112,42 @@ def infer_claim_category(text: str, company: str = "") -> str:
     lower = text.lower()
     if company:
         lower = lower.replace(company.lower(), "company")
-    if any(term in lower for term in ["roi", "save", "savings", "hours", "efficiency"]):
+    if contains_any_term(lower, ["roi", "save", "savings", "hours", "efficiency"]):
         return "customer_roi"
-    if any(term in lower for term in ["competitor", "competition", "alternative", "vs", "versus"]):
+    if contains_any_term(lower, ["competitor", "competitors", "competition", "alternative", "alternatives", "vs", "versus"]):
         return "competition"
-    if any(term in lower for term in ["market", "tam", "sam", "billion opportunity", "forecast"]):
+    if contains_any_term(lower, ["market", "tam", "sam", "billion opportunity", "forecast"]):
         return "market"
-    if any(term in lower for term in ["arr", "mrr", "revenue", "gross margin", "burn", "cash", "financial"]):
+    if contains_any_term(lower, ["arr", "mrr", "revenue", "gross margin", "burn", "cash", "financial", "financials"]):
         return "financials"
-    if any(term in lower for term in ["growth", "grew", "signed", "active customers", "pilot", "pilots"]):
+    if contains_any_term(lower, ["growth", "grew", "signed", "active customers", "pilot", "pilots"]):
         return "growth"
-    if any(term in lower for term in ["nrr", "retention", "churn", "renewal"]):
+    if contains_any_term(lower, ["nrr", "retention", "churn", "renewal"]):
         return "retention"
-    if any(term in lower for term in ["price", "pricing", "acv", "contract value"]):
+    if contains_any_term(lower, ["price", "pricing", "acv", "contract value"]):
         return "pricing"
-    if any(term in lower for term in ["soc 2", "hipaa", "compliance", "regulatory", "security"]):
+    if contains_any_term(lower, ["soc 2", "hipaa", "compliance", "regulatory", "security"]):
         return "compliance"
-    if any(term in lower for term in ["raise", "funding", "valuation", "runway", "series"]):
+    if contains_any_term(lower, ["raise", "funding", "valuation", "runway", "series"]):
         return "fundraising"
-    if any(term in lower for term in ["lawsuit", "patent", "ip", "legal"]):
+    if contains_any_term(lower, ["lawsuit", "patent", "ip", "legal"]):
         return "legal"
-    if any(term in lower for term in ["founder", "team", "engineer", "cto", "ceo"]):
+    if contains_any_term(lower, ["founder", "team", "engineer", "cto", "ceo"]):
         return "team"
-    if any(term in lower for term in ["pipeline", "sales", "channel", "partner"]):
+    if contains_any_term(lower, ["pipeline", "sales", "channel", "partner", "partners"]):
         return "go_to_market"
-    if any(term in lower for term in ["manufacturing", "supply", "implementation", "operations"]):
+    if contains_any_term(lower, ["manufacturing", "supply", "implementation", "operations"]):
         return "operations"
     return "product"
+
+
+def contains_any_term(text: str, terms: list[str] | set[str]) -> bool:
+    return any(contains_term(text, term) for term in terms)
+
+
+def contains_term(text: str, term: str) -> bool:
+    escaped = re.escape(term).replace(r"\ ", r"\s+")
+    return re.search(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])", text, flags=re.IGNORECASE) is not None
 
 
 def claim_kind_for_category(category: str) -> str:
@@ -1358,7 +1368,7 @@ def claim_metric_sort_rank(claim: DealClaim) -> int:
 
 def select_diverse_claims(claims: list[DealClaim], limit: int) -> list[DealClaim]:
     category_caps = {
-        "financials": 3,
+        "financials": 2 if limit <= 5 else 3,
         "growth": 1,
         "customer_roi": 1,
         "competition": 1,
