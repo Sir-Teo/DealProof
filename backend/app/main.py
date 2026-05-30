@@ -10,7 +10,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 from queue import Queue
 from threading import Thread
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
@@ -97,8 +97,8 @@ def update_settings(payload: AppSettings) -> AppSettings:
 
 
 @app.get("/deals")
-def list_deals() -> list[dict]:
-    return db.list_deals_summary()
+def list_deals(limit: int | None = Query(default=None, ge=1)) -> list[dict]:
+    return db.list_deals_summary(limit=limit)
 
 
 @app.post("/deals")

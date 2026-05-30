@@ -164,18 +164,24 @@ def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition:
         conn.execute(f"alter table {table} add column {column} {definition}")
 
 
-def list_deals_summary() -> list[dict]:
+def list_deals_summary(limit: int | None = None) -> list[dict]:
+    limit_clause = ""
+    params: tuple[Any, ...] = ()
+    if limit is not None:
+        limit_clause = "limit ?"
+        params = (limit,)
     with connect() as conn:
         rows = conn.execute(
-            """
+            f"""
             select d.id, d.company, d.stage, d.status, d.generated_at,
                    m.payload as memo_payload,
                    (select count(*) from materials where deal_id = d.id) as material_count
             from deals d
             left join memos m on m.deal_id = d.id
-            order by d.created_at desc
-            limit 50
-            """
+            order by d.created_at desc, d.rowid desc
+            {limit_clause}
+            """,
+            params,
         ).fetchall()
     result = []
     for row in rows:

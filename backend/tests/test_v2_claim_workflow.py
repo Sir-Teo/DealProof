@@ -8,6 +8,7 @@ from app.graph import (
     deterministic_diligence_report,
     memo_from_report,
     normalize_claims,
+    profile_deal,
     rank_claims,
     source_quality_note,
 )
@@ -111,6 +112,35 @@ def test_evidence_standard_controls_supported_status_and_rationale():
     supported = apply_rule_based_status(claim, customer_evidence)
     assert supported.status == "supported"
     assert "customer reference verification standard" in supported.riskRationale
+
+
+def test_profile_step_falls_back_when_llm_profile_generation_fails(monkeypatch):
+    class FailingProfileLlm:
+        enabled = True
+
+        def complete_json_with_raw(self, *args, **kwargs):
+            raise ValueError("profile response was not valid JSON")
+
+    monkeypatch.setattr("app.graph.get_llm_client", lambda _state: FailingProfileLlm())
+    material = SourceMaterial(
+        id="mat-profile",
+        deal_id="deal-profile",
+        name="legal_ai_deck.txt",
+        kind="deck",
+        source_type="file",
+        text="Legal AI workflow software sold as enterprise seat subscriptions to law firms.",
+    )
+
+    result = profile_deal({
+        "deal_id": "deal-profile",
+        "company": "ProfileCo",
+        "stage": "Seed",
+        "materials": [material],
+    })
+
+    assert result["profile"].sector == "Legal AI"
+    assert result["profile"].businessModel == "Enterprise SaaS"
+    assert "Profile generation failed" in result["llm_outputs"]["profile_deal"]
 
 
 def test_diligence_report_persists_and_keeps_weak_claims_out_of_verified_section():

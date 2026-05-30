@@ -334,7 +334,16 @@ def profile_deal(state: DiligenceState) -> DiligenceState:
         generated, raw_output = llm.complete_json_with_raw(system, user, DealProfileGeneration, on_chunk=stream_llm_chunk(state, "profile_deal"))
         return {**state, "profile": normalize_profile(generated.profile, state), **with_llm_output(state, "profile_deal", raw_output)}
     except Exception as exc:
-        raise RuntimeError("LLM profile step failed.") from exc
+        profile = deterministic_profile(state)
+        fallback_note = (
+            f"Profile generation failed ({exc.__class__.__name__}: {str(exc)[:500]}). "
+            "Continuing with an inferred profile from supplied materials.\n\n"
+            f"{profile.model_dump_json()}"
+        )
+        emit = stream_llm_chunk(state, "profile_deal")
+        if emit:
+            emit(f"\n\n[fallback]\n{fallback_note}")
+        return {**state, "profile": profile, **with_llm_output(state, "profile_deal", fallback_note)}
 
 
 def deterministic_profile(state: DiligenceState) -> DealProfile:

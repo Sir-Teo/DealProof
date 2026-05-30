@@ -21,6 +21,52 @@ def test_demo_deal_can_be_created_and_loaded():
         assert len(loaded.json()["materials"]) >= 3
 
 
+def test_deal_history_returns_all_saved_deals_by_default():
+    for index in range(55):
+        db.create_deal(f"deal-history-{index:02d}", f"HistoryCo {index:02d}")
+
+    with TestClient(app) as client:
+        full_history = client.get("/deals")
+        limited_history = client.get("/deals?limit=3")
+
+    assert full_history.status_code == 200
+    history = full_history.json()
+    assert len(history) == 55
+    assert {item["id"] for item in history} == {f"deal-history-{index:02d}" for index in range(55)}
+    assert history[0]["id"] == "deal-history-54"
+
+    assert limited_history.status_code == 200
+    assert [item["id"] for item in limited_history.json()] == [
+        "deal-history-54",
+        "deal-history-53",
+        "deal-history-52",
+    ]
+
+
+def test_loaded_deal_includes_full_chat_history():
+    deal_id = "deal-full-chat-history"
+    db.create_deal(deal_id, "ChatHistoryCo")
+    for index in range(8):
+        db.save_chat(
+            f"chat-history-{index:02d}",
+            deal_id,
+            f"Question {index}",
+            {
+                "answer": f"Answer {index}",
+                "citations": [f"Source {index}"],
+                "confidence": "medium",
+            },
+        )
+
+    with TestClient(app) as client:
+        loaded = client.get(f"/deals/{deal_id}")
+
+    assert loaded.status_code == 200
+    chat_history = loaded.json()["chatHistory"]
+    assert len(chat_history) == 8
+    assert [turn["question"] for turn in chat_history] == [f"Question {index}" for index in range(8)]
+
+
 def test_settings_can_be_saved_and_loaded():
     with TestClient(app) as client:
         updated = client.patch(
