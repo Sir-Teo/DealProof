@@ -6,13 +6,14 @@ from app import db
 from app.main import app
 from app.graph import (
     deterministic_diligence_report,
+    extract_claims,
     memo_from_report,
     normalize_claims,
     profile_deal,
     rank_claims,
     source_quality_note,
 )
-from app.models import DealClaim, EvidenceItem, QualityReview, SourceMaterial
+from app.models import AppSettings, DealClaim, EvidenceItem, QualityReview, SourceMaterial
 from app.scoring import apply_rule_based_status
 
 
@@ -141,6 +142,37 @@ def test_profile_step_falls_back_when_llm_profile_generation_fails(monkeypatch):
     assert result["profile"].sector == "Legal AI"
     assert result["profile"].businessModel == "Enterprise SaaS"
     assert "Profile generation failed" in result["llm_outputs"]["profile_deal"]
+
+
+def test_claim_extraction_falls_back_when_llm_claim_generation_fails(monkeypatch):
+    class FailingClaimsLlm:
+        enabled = True
+
+        def complete_json_with_raw(self, *args, **kwargs):
+            raise ValueError("claim response was not valid JSON")
+
+    monkeypatch.setattr("app.graph.get_llm_client", lambda _state: FailingClaimsLlm())
+    material = SourceMaterial(
+        id="mat-claims",
+        deal_id="deal-claims",
+        name="financial_model.txt",
+        kind="financials",
+        source_type="file",
+        text="ARR reached $2.56M by month 24. Gross margin reached 75% in Q4.",
+    )
+
+    result = extract_claims({
+        "deal_id": "deal-claims",
+        "company": "ClaimCo",
+        "stage": "Seed",
+        "materials": [material],
+        "source_quality": [source_quality_note(material)],
+        "settings": AppSettings(maxClaims=6, maxClaimsPerMaterial=6, deepseekModel="deepseek-v4-flash", webResearchEnabled=False),
+    })
+
+    assert result["claims"]
+    assert result["claims"][0].sourceMaterial == "financial_model.txt"
+    assert "Claim extraction failed for financial_model.txt" in result["llm_outputs"]["extract_claims"]
 
 
 def test_diligence_report_persists_and_keeps_weak_claims_out_of_verified_section():

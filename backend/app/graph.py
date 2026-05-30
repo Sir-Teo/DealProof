@@ -425,9 +425,21 @@ def extract_claims(state: DiligenceState) -> DiligenceState:
             "\"reviewPriority\":\"critical|high|medium|low\",\"isTargetCompanyClaim\":true}]}\n\n"
             f"Material:\n### {material.name}\nKind: {material.kind}\n{material.text[:6_000]}"
         )
-        extracted, raw_output = llm.complete_json_with_raw(system, user, ClaimExtraction, on_chunk=stream_llm_chunk(state, "extract_claims"))
-        raw_outputs.append(raw_output)
-        claims.extend(extracted.claims[:max_claims_per_material(state)])
+        try:
+            extracted, raw_output = llm.complete_json_with_raw(system, user, ClaimExtraction, on_chunk=stream_llm_chunk(state, "extract_claims"))
+            raw_outputs.append(raw_output)
+            claims.extend(extracted.claims[:max_claims_per_material(state)])
+        except Exception as exc:
+            fallback_claims = deterministic_extract_claims({**state, "materials": [material]})
+            fallback_note = (
+                f"Claim extraction failed for {material.name} ({exc.__class__.__name__}: {str(exc)[:500]}). "
+                f"Continuing with {len(fallback_claims)} deterministic claims from this material."
+            )
+            emit = stream_llm_chunk(state, "extract_claims")
+            if emit:
+                emit(f"\n\n[fallback]\n{fallback_note}")
+            raw_outputs.append(fallback_note)
+            claims.extend(fallback_claims[:max_claims_per_material(state)])
     state = {**state, **with_llm_output(state, "extract_claims", "\n\n".join(raw_outputs))}
     if not claims:
         raise ValueError("No diligence claims were extracted from the supplied materials.")

@@ -121,6 +121,22 @@ function claim(id: string, text: string, status: string, category: string, impor
 }
 
 async function setupAnalyzedMocks(page: Page, streamBody?: string) {
+  let historyRequests = 0;
+  await page.route("**/deals", (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    historyRequests += 1;
+    return route.fulfill({
+      json: historyRequests === 1 ? [] : [{
+        id: DEAL_ID,
+        company: MOCK_DEAL_SEEDED.company,
+        stage: MOCK_DEAL_SEEDED.stage,
+        status: MOCK_DEAL_SEEDED.status,
+        generatedAt: MOCK_DEAL_SEEDED.generatedAt,
+        grade: null,
+        materialCount: MOCK_DEAL_SEEDED.materials.length
+      }]
+    });
+  });
   await page.route("**/deals/demo", (route) => route.fulfill({ json: MOCK_DEAL_SEEDED }));
   await page.route(`**/deals/${DEAL_ID}/analyze-stream`, (route) =>
     route.fulfill({
@@ -196,6 +212,18 @@ test("post-analysis panels show memo, claims, and evidence", async ({ page }) =>
   await expect(evidence.locator(".evidenceItem").first()).toBeVisible();
   await expect(evidence.locator(".quoteBlock").first()).toBeVisible();
   await expect(evidence.getByRole("link", { name: /Open source/i })).toBeVisible();
+});
+
+test("sidebar history shows grade badge for newly analyzed deal", async ({ page }) => {
+  await setupAnalyzedMocks(page);
+  await page.goto("/");
+  await runMockDemo(page);
+
+  await expect(page.locator(".messageTitle").filter({ hasText: /Analysis complete/i })).toBeVisible({ timeout: 5_000 });
+  await page.getByRole("button", { name: "Toggle deal list" }).click();
+
+  const dealRow = page.locator(".dealListItem").filter({ hasText: "CaviClear AI" }).first();
+  await expect(dealRow.locator(".gradeChip--sm")).toHaveText("YELLOW");
 });
 
 test("agent stream renders web-search research details", async ({ page }) => {

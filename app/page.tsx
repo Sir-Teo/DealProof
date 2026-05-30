@@ -155,7 +155,7 @@ export default function Home() {
     if (savedId) {
       api<DealAnalysis>(`/deals/${savedId}`)
         .then((d) => {
-          setDeal(d);
+          persistDeal(d);
           setAgentEvents([]);
           if (d.materials.length > 0 && !d.claims.length) {
             setQuestion(`Run full diligence analysis on ${d.company}`);
@@ -209,13 +209,24 @@ export default function Home() {
   async function loadDealList() {
     try {
       const list = await api<DealSummary[]>("/deals");
-      setDealList(list);
+      setDealList((current) => mergeDealSummaries(list, current));
     } catch { /* sidebar is non-critical */ }
   }
 
   function persistDeal(d: DealAnalysis) {
     localStorage.setItem(DEAL_ID_KEY, d.id);
     setDeal(d);
+    syncDealSummary(d);
+  }
+
+  function syncDealSummary(d: DealAnalysis) {
+    const summary = summarizeDeal(d);
+    setDealList((current) => {
+      if (current.some((item) => item.id === summary.id)) {
+        return current.map((item) => item.id === summary.id ? { ...item, ...summary } : item);
+      }
+      return [summary, ...current];
+    });
   }
 
   function newDeal() {
@@ -242,6 +253,7 @@ export default function Home() {
       const d = await api<DealAnalysis>(`/deals/${id}`);
       localStorage.setItem(DEAL_ID_KEY, id);
       setDeal(d);
+      syncDealSummary(d);
       setAgentEvents([]);
       setFeedNotes([]);
       setPendingQuestion(null);
@@ -298,6 +310,7 @@ export default function Home() {
         }),
       });
       setDeal(updated);
+      syncDealSummary(updated);
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
     }
@@ -324,7 +337,8 @@ export default function Home() {
     });
     if (streamError) throw new Error(streamError);
     const analyzed = await api<DealAnalysis>(`/deals/${targetDeal.id}`);
-    setDeal(analyzed);
+    persistDeal(analyzed);
+    void loadDealList();
     return analyzed;
   }
 
@@ -413,6 +427,7 @@ export default function Home() {
         updated = await api<DealAnalysis>(`/deals/${targetDeal.id}/materials`, { method: "POST", body: extra });
       }
       setDeal(updated);
+      syncDealSummary(updated);
       setFiles(null);
       setUrls([""]);
       setAttachOpen(false);
@@ -729,6 +744,26 @@ export default function Home() {
       </main>
     </div>
   );
+}
+
+function summarizeDeal(deal: DealAnalysis): DealSummary {
+  return {
+    id: deal.id,
+    company: deal.company || "Untitled",
+    stage: deal.stage,
+    status: deal.status,
+    generatedAt: deal.generatedAt,
+    grade: deal.score?.grade ?? deal.memo?.overallGrade ?? null,
+    materialCount: deal.materials.length
+  };
+}
+
+function mergeDealSummaries(next: DealSummary[], current: DealSummary[]) {
+  const currentById = new Map(current.map((item) => [item.id, item]));
+  return next.map((item) => {
+    const existing = currentById.get(item.id);
+    return existing && !item.grade && existing.grade ? { ...item, grade: existing.grade } : item;
+  });
 }
 
 function ChatBubble({ role, title, body }: Omit<FeedNote, "id">) {
