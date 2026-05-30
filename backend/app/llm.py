@@ -11,6 +11,7 @@ from pydantic import BaseModel, ValidationError
 from .config import DEFAULT_DEEPSEEK_MODEL
 
 T = TypeVar("T", bound=BaseModel)
+DEFAULT_DEEPSEEK_MAX_TOKENS = 8192
 
 
 class DeepSeekClient:
@@ -18,6 +19,7 @@ class DeepSeekClient:
         self.api_key = os.getenv("DEEPSEEK_API_KEY")
         self.model = model or DEFAULT_DEEPSEEK_MODEL
         self.base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        self.max_tokens = env_int("DEEPSEEK_MAX_TOKENS", DEFAULT_DEEPSEEK_MAX_TOKENS)
 
     @property
     def enabled(self) -> bool:
@@ -30,6 +32,7 @@ class DeepSeekClient:
             json={
                 "model": self.model,
                 "temperature": 0.15,
+                "max_tokens": self.max_tokens,
                 "response_format": {"type": "json_object"},
                 "messages": [
                     {"role": "system", "content": system},
@@ -39,7 +42,9 @@ class DeepSeekClient:
             timeout=60,
         )
         response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        choice = response.json()["choices"][0]
+        raise_for_bad_finish_reason(choice.get("finish_reason"))
+        return require_non_empty_content(choice.get("message", {}).get("content") or "")
 
     def _complete_stream(self, system: str, user: str, on_chunk: Callable[[str], None]) -> str:
         chunks: list[str] = []
@@ -50,6 +55,7 @@ class DeepSeekClient:
             json={
                 "model": self.model,
                 "temperature": 0.15,
+                "max_tokens": self.max_tokens,
                 "response_format": {"type": "json_object"},
                 "stream": True,
                 "messages": [
@@ -60,6 +66,7 @@ class DeepSeekClient:
             timeout=httpx.Timeout(60, read=120),
         ) as response:
             response.raise_for_status()
+            finish_reason: str | None = None
             for line in response.iter_lines():
                 if not line.startswith("data:"):
                     continue
@@ -67,12 +74,18 @@ class DeepSeekClient:
                 if data == "[DONE]":
                     break
                 payload = json.loads(data)
-                delta = payload["choices"][0].get("delta", {}).get("content") or ""
+                choices = payload.get("choices") or []
+                if not choices:
+                    continue
+                choice = choices[0]
+                finish_reason = choice.get("finish_reason") or finish_reason
+                delta = choice.get("delta", {}).get("content") or ""
                 if not delta:
                     continue
                 chunks.append(delta)
                 on_chunk(delta)
-        return "".join(chunks)
+        raise_for_bad_finish_reason(finish_reason)
+        return require_non_empty_content("".join(chunks))
 
     def complete_json(self, system: str, user: str, schema: type[T]) -> T:
         parsed, _ = self.complete_json_with_raw(system, user, schema)
@@ -88,6 +101,7 @@ class DeepSeekClient:
         if not self.enabled:
             raise RuntimeError("DEEPSEEK_API_KEY is not set")
         content = self._complete_stream(system, user, on_chunk) if on_chunk else self._complete(system, user)
+        content = require_non_empty_content(content)
         try:
             return schema.model_validate_json(extract_json(content)), content
         except (ValidationError, json.JSONDecodeError) as exc:
@@ -99,11 +113,36 @@ class DeepSeekClient:
             if on_chunk:
                 on_chunk("\n\n[repair]\n")
             repaired = self._complete_stream(system, repair_prompt, on_chunk) if on_chunk else self._complete(system, repair_prompt)
+            repaired = require_non_empty_content(repaired)
             return schema.model_validate_json(extract_json(repaired)), repaired
 
 
 def get_llm_client() -> DeepSeekClient:
     return DeepSeekClient()
+
+
+def env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+def raise_for_bad_finish_reason(finish_reason: str | None) -> None:
+    if finish_reason in {None, "stop"}:
+        return
+    if finish_reason == "length":
+        raise RuntimeError(
+            "DeepSeek JSON response was truncated (finish_reason=length). "
+            "Increase DEEPSEEK_MAX_TOKENS or reduce the prompt size."
+        )
+    raise RuntimeError(f"DeepSeek did not complete the JSON response (finish_reason={finish_reason}).")
+
+
+def require_non_empty_content(content: str) -> str:
+    if not content.strip():
+        raise RuntimeError("DeepSeek returned empty content for a JSON response.")
+    return content
 
 
 def extract_json(content: str) -> str:
