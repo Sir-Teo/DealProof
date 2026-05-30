@@ -232,6 +232,7 @@ def test_diligence_report_persists_and_keeps_weak_claims_out_of_verified_section
     assert loaded.report.keyVerifiedClaims[0].claimId == supported.id
     assert all(item.claimId != weak.id for item in loaded.report.keyVerifiedClaims)
     assert loaded.report.diligencePlan == [weak.resolutionRequest]
+    assert loaded.report.icRecommendation.startswith("Continue diligence")
 
 
 def test_report_generation_fallback_records_llm_failure(monkeypatch):

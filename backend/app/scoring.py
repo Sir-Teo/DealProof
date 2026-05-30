@@ -144,7 +144,7 @@ def apply_rule_based_status(claim: DealClaim, evidence: list[EvidenceItem]) -> D
     confidence = "high" if quality_score >= 82 else "medium" if quality_score >= 55 else "low"
     verification_need = verification_need_for_claim(claim, evidence, status)
     status_reason = status_reason_for_claim(claim, evidence, status)
-    resolution_request = claim.resolutionRequest or resolution_request_for_claim(claim, status, verification_need)
+    resolution_request = "" if status == "supported" else claim.resolutionRequest or resolution_request_for_claim(claim, status, verification_need)
     has_public_web = any(item.sourceType == "public_web" for item in evidence)
     has_internal_doc = any(item.sourceIndependence == "internal" for item in evidence)
     rationale = {
@@ -281,7 +281,8 @@ def derive_readiness_status(claims: list[DealClaim], evidence: list[EvidenceItem
         if effective_disposition(claim) != "verified"
         and claim.status == "supported"
         and evidence_by_claim.get(claim.id)
-        and not any(item.sourceIndependence == "third_party" for item in evidence_by_claim[claim.id])
+        and all(item.sourceIndependence == "founder_supplied" for item in evidence_by_claim[claim.id])
+        and not verification_standard_satisfied(claim, evidence_by_claim[claim.id])
     ]
     needs_evidence = [
         claim for claim in considered

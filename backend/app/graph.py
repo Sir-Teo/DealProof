@@ -1438,8 +1438,8 @@ def deterministic_diligence_report(state: DiligenceState) -> DiligenceReport:
         diligence_plan = ["Confirm no newer contradictory source has emerged before relying on the supported claims at IC."]
     red_flags = report_red_flags(claims, review)
     decision = (
-        f"{state['company']} is {review.readinessStatus.replace('_', ' ')} with a {score.grade} IC readiness grade "
-        f"({score.overall}/100). {review.topGatingIssue or score.drivers[0]}"
+        f"{state['company']} is {review.readinessStatus.replace('_', ' ')} with an IC evidence score of "
+        f"{score.overall}/100 ({score.grade}). {review.topGatingIssue or score.drivers[0]}"
     )
     thesis = (
         "The investable case should rely only on quote-backed supported claims; unresolved claims remain diligence gating items."
@@ -1485,6 +1485,10 @@ def report_red_flags(claims: list[DealClaim], review: QualityReview) -> list[str
 def recommendation_for_report(grade: str, review: QualityReview) -> str:
     if review.readinessStatus == "blocked":
         return f"Do not take to IC until the blocker is resolved: {review.topGatingIssue}"
+    if review.readinessStatus == "screen_out":
+        return f"Screen out or pause until source-level evidence resolves the top issue: {review.topGatingIssue or 'insufficient support.'}"
+    if review.readinessStatus == "needs_diligence":
+        return f"Continue diligence, but require the listed evidence requests before IC reliance. Top issue: {review.topGatingIssue or 'none.'}"
     if grade == "red":
         return f"Screen out or pause until source-level evidence resolves the top issue: {review.topGatingIssue or 'insufficient support.'}"
     if grade == "yellow":

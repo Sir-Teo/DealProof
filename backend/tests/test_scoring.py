@@ -15,7 +15,7 @@ def claim() -> DealClaim:
 
 def test_supported_status_from_evidence():
     updated = apply_rule_based_status(
-        claim(),
+        claim().model_copy(update={"resolutionRequest": "Old request that should be cleared."}),
         [
             EvidenceItem(
                 id="ev-01",
@@ -32,6 +32,7 @@ def test_supported_status_from_evidence():
     )
 
     assert updated.status == "supported"
+    assert updated.resolutionRequest == ""
     assert updated.confidence in {"medium", "high"}
     assert updated.qualityScore > 0
 
@@ -188,6 +189,38 @@ def test_founder_only_or_no_third_party_support_does_not_over_score():
     assert score.grade != "green"
     assert score.overall <= 84
     assert "No third-party validation is attached; score is capped below green." in score.drivers
+
+
+def test_internal_document_supported_claim_does_not_create_readiness_request():
+    supported = claim().model_copy(
+        update={
+            "status": "supported",
+            "qualityScore": 88,
+            "verificationStandard": "internal_document",
+            "resolutionRequest": "",
+        }
+    )
+    evidence = [
+        EvidenceItem(
+            id="ev-01",
+            claimId=supported.id,
+            title="Financial model",
+            sourceType="uploaded",
+            citation="financial_model.csv",
+            snippet="ARR doubled in Q1.",
+            stance="supports",
+            reliability="high",
+            sourceIndependence="internal",
+            sourceAuthority="internal_operating",
+            quoteSpan="ARR doubled in Q1.",
+        )
+    ]
+
+    readiness, top_issue, requests = derive_readiness_status([supported], evidence)
+
+    assert readiness == "ic_ready"
+    assert top_issue == "No unresolved IC blockers."
+    assert requests == []
 
 
 def test_review_dispositions_drive_readiness_and_ignored_claims_are_excluded():
