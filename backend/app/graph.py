@@ -56,6 +56,7 @@ class DiligenceState(TypedDict, total=False):
 
 
 ProgressCallback = Callable[[str, str, dict[str, int | str] | None], None]
+LLM_STREAM_MIN_CHARS = max(1, int(os.getenv("DEALPROOF_LLM_STREAM_MIN_CHARS", "240")))
 
 
 def get_llm_client(state: DiligenceState | None = None) -> DeepSeekClient:
@@ -284,12 +285,24 @@ def stream_llm_chunk(state: DiligenceState, step_id: str):
     on_progress = state.get("on_progress")
     if not on_progress:
         return None
+    buffer: list[str] = []
+    buffered_chars = 0
 
     def emit(chunk: str) -> None:
+        nonlocal buffered_chars
+        if not chunk:
+            return
+        buffer.append(chunk)
+        buffered_chars += len(chunk)
+        if buffered_chars < LLM_STREAM_MIN_CHARS:
+            return
+        raw_output = "".join(buffer)
+        buffer.clear()
+        buffered_chars = 0
         on_progress(
             "tool_delta",
             step_id,
-            {"label": "Streaming LLM response", "toolName": step_id, "rawOutput": chunk},
+            {"label": "Streaming LLM response", "toolName": step_id, "rawOutput": raw_output},
         )
 
     return emit

@@ -96,6 +96,9 @@ type AgentRunState = {
 };
 type FeedNote = { id: string; role: "user" | "agent"; title: string; body?: string };
 type ClaimFilter = "needs_review" | "blockers" | "weak_missing" | "third_party_missing" | "verified" | "all";
+const AGENT_EVENT_LIMIT = 500;
+const AGENT_DELTA_LIMIT = 80;
+const AGENT_RAW_OUTPUT_LIMIT = 12000;
 
 const statusIcon: Record<ClaimStatus, typeof CheckCircle2> = {
   supported: CheckCircle2,
@@ -367,7 +370,7 @@ export default function Home() {
         setAgentRun((current) => current?.dealId === runDealId ? {
           ...current,
           status: event.status === "error" ? "error" : event.event === "run_complete" ? "done" : current.status,
-          events: [...current.events, event]
+          events: appendAgentEvent(current.events, event)
         } : current);
       });
       if (streamError) throw new Error(streamError);
@@ -389,10 +392,10 @@ export default function Home() {
           ...current,
           status: "error",
           error: message,
-          events: hasRunError ? current.events : [
-            ...current.events,
+          events: hasRunError ? current.events : appendAgentEvent(
+            current.events,
             { event: "run_error", step: "agent", label: message, status: "error" }
-          ]
+          )
         };
       });
       throw exc;
@@ -976,8 +979,10 @@ function groupAgentTools(events: AgentEvent[]) {
   for (const event of events) {
     if (event.event !== "tool_start" && event.event !== "tool_delta" && event.event !== "tool_complete") continue;
     const existing = tools.get(event.step);
-    const rawOutput = event.event === "tool_delta" ? `${existing?.rawOutput ?? ""}${event.rawOutput ?? ""}` : event.rawOutput ?? existing?.rawOutput;
-    const deltas = event.event === "tool_delta" ? [...(existing?.deltas ?? []), event] : existing?.deltas ?? [];
+    const rawOutput = event.event === "tool_delta"
+      ? capRawOutput(`${existing?.rawOutput ?? ""}${event.rawOutput ?? ""}`)
+      : event.rawOutput ? capRawOutput(event.rawOutput) : existing?.rawOutput;
+    const deltas = event.event === "tool_delta" ? [...(existing?.deltas ?? []), event].slice(-AGENT_DELTA_LIMIT) : existing?.deltas ?? [];
     tools.set(event.step, {
       step: event.step,
       label: event.label,
@@ -991,6 +996,29 @@ function groupAgentTools(events: AgentEvent[]) {
     });
   }
   return Array.from(tools.values());
+}
+
+function appendAgentEvent(events: AgentEvent[], event: AgentEvent) {
+  const nextEvent = event.rawOutput ? { ...event, rawOutput: capRawOutput(event.rawOutput) } : event;
+  const previous = events.at(-1);
+  if (
+    nextEvent.event === "tool_delta" &&
+    previous?.event === "tool_delta" &&
+    previous.step === nextEvent.step &&
+    !previous.webEvent &&
+    !nextEvent.webEvent
+  ) {
+    const merged = {
+      ...nextEvent,
+      rawOutput: capRawOutput(`${previous.rawOutput ?? ""}${nextEvent.rawOutput ?? ""}`)
+    };
+    return [...events.slice(0, -1), merged].slice(-AGENT_EVENT_LIMIT);
+  }
+  return [...events, nextEvent].slice(-AGENT_EVENT_LIMIT);
+}
+
+function capRawOutput(value: string) {
+  return value.length > AGENT_RAW_OUTPUT_LIMIT ? `...${value.slice(-AGENT_RAW_OUTPUT_LIMIT)}` : value;
 }
 
 function ToolCallRow({ tool }: { tool: AgentToolRun }) {
