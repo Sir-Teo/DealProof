@@ -87,6 +87,13 @@ type AgentToolRun = {
   deltas: AgentEvent[];
   statsEvent: AgentEvent;
 };
+type AgentRunState = {
+  dealId: string;
+  company: string;
+  status: AgentEventStatus;
+  events: AgentEvent[];
+  error?: string | null;
+};
 type FeedNote = { id: string; role: "user" | "agent"; title: string; body?: string };
 type ClaimFilter = "needs_review" | "blockers" | "weak_missing" | "third_party_missing" | "verified" | "all";
 
@@ -105,7 +112,7 @@ export default function Home() {
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
+  const [agentRun, setAgentRun] = useState<AgentRunState | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
   const [feedNotes, setFeedNotes] = useState<FeedNote[]>([]);
   const [dealList, setDealList] = useState<DealSummary[]>([]);
@@ -117,6 +124,7 @@ export default function Home() {
   const feedWrapRef = useRef<HTMLElement>(null);
   const feedBottomRef = useRef<HTMLDivElement>(null);
   const wasAnalyzingRef = useRef(false);
+  const selectedDealIdRef = useRef<string | null>(null);
 
   const claims = useMemo(() => deal?.claims ?? [], [deal?.claims]);
   const scoring = useMemo<ScoreSummary>(
@@ -131,8 +139,16 @@ export default function Home() {
   const exportUrl = deal ? `${API_BASE_URL}/deals/${deal.id}/export-memo` : "#";
   const diligenceExportUrl = deal ? `${API_BASE_URL}/deals/${deal.id}/export-diligence-requests` : "#";
   const suggestedQuestions = useMemo(() => buildSuggestedQuestions(claims), [claims]);
-  const isAnalyzing = busy === "analyze" || busy === "demo";
-  const canRunAgent = Boolean(deal?.materials.length) && !isAnalyzing;
+  const viewedAgentRun = agentRun?.dealId === deal?.id ? agentRun : null;
+  const agentEvents = viewedAgentRun?.events ?? [];
+  const agentIsRunning = agentRun?.status === "running";
+  const isAnalyzing = viewedAgentRun?.status === "running";
+  const canRunAgent = Boolean(deal?.materials.length) && !agentIsRunning && !busy;
+  const composerDisabled = !deal || Boolean(busy) || isAnalyzing;
+
+  useEffect(() => {
+    selectedDealIdRef.current = deal?.id ?? null;
+  }, [deal?.id]);
 
   useEffect(() => {
     if (isAnalyzing) {
@@ -148,7 +164,7 @@ export default function Home() {
     if (busy === "chat" || pendingQuestion || feedNotes.length > 0 || (deal?.chatHistory?.length ?? 0) > 0) {
       feedBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [feedNotes.length, deal?.chatHistory?.length, isAnalyzing, busy, pendingQuestion]);
+  }, [feedNotes.length, deal?.chatHistory?.length, isAnalyzing, busy, pendingQuestion, agentEvents.length]);
 
   useEffect(() => {
     const savedId = localStorage.getItem(DEAL_ID_KEY);
@@ -156,7 +172,6 @@ export default function Home() {
       api<DealAnalysis>(`/deals/${savedId}`)
         .then((d) => {
           persistDeal(d);
-          setAgentEvents([]);
           if (d.materials.length > 0 && !d.claims.length) {
             setQuestion(`Run full diligence analysis on ${d.company}`);
           }
@@ -214,6 +229,7 @@ export default function Home() {
   }
 
   function persistDeal(d: DealAnalysis) {
+    selectedDealIdRef.current = d.id;
     localStorage.setItem(DEAL_ID_KEY, d.id);
     setDeal(d);
     syncDealSummary(d);
@@ -230,9 +246,9 @@ export default function Home() {
   }
 
   function newDeal() {
+    selectedDealIdRef.current = null;
     localStorage.removeItem(DEAL_ID_KEY);
     setDeal(null);
-    setAgentEvents([]);
     setFeedNotes([]);
     setPendingQuestion(null);
     setQuestion("");
@@ -252,9 +268,9 @@ export default function Home() {
     try {
       const d = await api<DealAnalysis>(`/deals/${id}`);
       localStorage.setItem(DEAL_ID_KEY, id);
+      selectedDealIdRef.current = id;
       setDeal(d);
       syncDealSummary(d);
-      setAgentEvents([]);
       setFeedNotes([]);
       setPendingQuestion(null);
       setQuestion("");
@@ -321,25 +337,66 @@ export default function Home() {
   }
 
   async function runAnalysisForDeal(targetDeal: DealAnalysis) {
-    const response = await fetch(`${API_BASE_URL}/deals/${targetDeal.id}/analyze-stream`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ settings })
-    });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      throw new Error(payload?.detail ?? `Request failed: ${response.status}`);
+    if (agentRun?.status === "running") {
+      throw new Error("An agent run is already in progress.");
     }
-    let streamError: string | null = null;
-    await readAgentStream(response, (event) => {
-      if (event.event === "run_error") streamError = event.label;
-      setAgentEvents((events) => [...events, event]);
+
+    const runDealId = targetDeal.id;
+    setAgentRun({
+      dealId: runDealId,
+      company: targetDeal.company || "Untitled",
+      status: "running",
+      events: []
     });
-    if (streamError) throw new Error(streamError);
-    const analyzed = await api<DealAnalysis>(`/deals/${targetDeal.id}`);
-    persistDeal(analyzed);
-    void loadDealList();
-    return analyzed;
+    setDeal((current) => current?.id === runDealId ? { ...current, status: "running", error: null } : current);
+    setDealList((current) => current.map((item) => item.id === runDealId ? { ...item, status: "running" } : item));
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/deals/${runDealId}/analyze-stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings })
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? `Request failed: ${response.status}`);
+      }
+      let streamError: string | null = null;
+      await readAgentStream(response, (event) => {
+        if (event.event === "run_error") streamError = event.label;
+        setAgentRun((current) => current?.dealId === runDealId ? {
+          ...current,
+          status: event.status === "error" ? "error" : event.event === "run_complete" ? "done" : current.status,
+          events: [...current.events, event]
+        } : current);
+      });
+      if (streamError) throw new Error(streamError);
+      const analyzed = await api<DealAnalysis>(`/deals/${runDealId}`);
+      if (selectedDealIdRef.current === runDealId) {
+        persistDeal(analyzed);
+      } else {
+        syncDealSummary(analyzed);
+      }
+      void loadDealList();
+      setAgentRun((current) => current?.dealId === runDealId ? { ...current, status: "done" } : current);
+      return analyzed;
+    } catch (exc) {
+      const message = String(exc instanceof Error ? exc.message : exc);
+      setAgentRun((current) => {
+        if (current?.dealId !== runDealId) return current;
+        const hasRunError = current.events.some((event) => event.event === "run_error");
+        return {
+          ...current,
+          status: "error",
+          error: message,
+          events: hasRunError ? current.events : [
+            ...current.events,
+            { event: "run_error", step: "agent", label: message, status: "error" }
+          ]
+        };
+      });
+      throw exc;
+    }
   }
 
   async function ensureDeal() {
@@ -350,7 +407,6 @@ export default function Home() {
       body: JSON.stringify({ company: DEFAULT_DEAL.fallbackCompany, tagline: DEFAULT_DEAL.tagline, stage: DEFAULT_DEAL.stage })
     });
     persistDeal(created);
-    setAgentEvents([]);
     setPendingQuestion(null);
     void loadDealList();
     return created;
@@ -362,7 +418,6 @@ export default function Home() {
     try {
       const created = await api<DealAnalysis>(route, { method: "POST" });
       persistDeal(created);
-      setAgentEvents([]);
       setFeedNotes([]);
       void loadDealList();
       setPendingQuestion(null);
@@ -378,7 +433,6 @@ export default function Home() {
   async function runDemoEndToEnd() {
     setBusy("demo");
     setError(null);
-    setAgentEvents([]);
     setFeedNotes([]);
     setPendingQuestion(null);
     setQuestion("");
@@ -387,6 +441,7 @@ export default function Home() {
       const created = await api<DealAnalysis>("/deals/demo", { method: "POST" });
       persistDeal(created);
       void loadDealList();
+      setBusy(null);
       await runAnalysisForDeal(created);
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
@@ -440,18 +495,18 @@ export default function Home() {
 
   async function analyzeDeal() {
     if (!deal) return;
-    setBusy("analyze");
+    const targetDeal = deal;
     setError(null);
     setPendingQuestion(null);
-    setAgentEvents([]);
     try {
-      await runAnalysisForDeal(deal);
+      await runAnalysisForDeal(targetDeal);
     } catch (exc) {
       setError(String(exc instanceof Error ? exc.message : exc));
-      const refreshed = await api<DealAnalysis>(`/deals/${deal.id}`).catch(() => null);
-      if (refreshed) setDeal(refreshed);
-    } finally {
-      setBusy(null);
+      const refreshed = await api<DealAnalysis>(`/deals/${targetDeal.id}`).catch(() => null);
+      if (refreshed) {
+        if (selectedDealIdRef.current === targetDeal.id) setDeal(refreshed);
+        syncDealSummary(refreshed);
+      }
     }
   }
 
@@ -503,7 +558,11 @@ export default function Home() {
                   onClick={() => void switchDeal(item.id)}
                 >
                   <span className="dealListCompany">{item.company}</span>
-                  {item.grade && <span className={clsx("gradeChip gradeChip--sm", `card--${item.grade}`)}>{item.grade.toUpperCase()}</span>}
+                  {agentRun?.status === "running" && agentRun.dealId === item.id ? (
+                    <Loader2 className="spin dealListSpinner" size={12} />
+                  ) : item.grade && (
+                    <span className={clsx("gradeChip gradeChip--sm", `card--${item.grade}`)}>{item.grade.toUpperCase()}</span>
+                  )}
                 </button>
               </li>
             ))}
@@ -601,7 +660,7 @@ export default function Home() {
             <ChatBubble key={note.id} role={note.role} title={note.title} body={note.body} />
           ))}
 
-          {(isAnalyzing || agentEvents.length > 0) && <AgentActivity events={agentEvents} running={isAnalyzing} />}
+          {viewedAgentRun && (isAnalyzing || agentEvents.length > 0) && <AgentActivity events={agentEvents} running={isAnalyzing} />}
 
           {deal && deal.materials.length > 0 && !deal.claims.length && !isAnalyzing && (
             <MaterialsReady deal={deal} onRun={() => void analyzeDeal()} canRun={canRunAgent} />
@@ -643,7 +702,7 @@ export default function Home() {
           {suggestedQuestions.length > 0 && (
             <div className="sampleQuestions">
               {suggestedQuestions.map((item) => (
-                <button key={item} type="button" onClick={() => void askQuestion(item)} disabled={!deal?.claims.length || Boolean(busy)}>
+                <button key={item} type="button" onClick={() => void askQuestion(item)} disabled={!deal?.claims.length || Boolean(busy) || isAnalyzing}>
                   {item}
                 </button>
               ))}
@@ -712,12 +771,12 @@ export default function Home() {
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
                 placeholder={deal?.claims.length ? "Ask a follow-up question..." : UI_COPY.questionPlaceholder}
-                disabled={!deal || Boolean(busy)}
+                disabled={composerDisabled}
               />
               <button
                 className={clsx("iconButton", "iconButton--send")}
                 type="submit"
-                disabled={!deal || Boolean(busy)}
+                disabled={composerDisabled}
                 title="Send"
               >
                 {busy === "chat" ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
@@ -733,7 +792,8 @@ export default function Home() {
               </button>
             </div>
             <div className="composerHint">
-              <button className="hintLink" type="button" onClick={() => void runDemoEndToEnd()} disabled={Boolean(busy)}>
+              <BackgroundAgentRun run={agentRun} currentDealId={deal?.id ?? null} onOpen={(dealId) => void switchDeal(dealId)} />
+              <button className="hintLink" type="button" onClick={() => void runDemoEndToEnd()} disabled={Boolean(busy) || agentIsRunning}>
                 {busy === "demo" ? <Loader2 className="spin" size={11} /> : null}
                 Try demo
               </button>
@@ -788,6 +848,28 @@ function Avatar({ status }: { status: AgentEventStatus | "user" }) {
     <div className={clsx("avatar", status)}>
       {status === "running" ? <Loader2 className="spin" size={14} /> : status === "error" ? <XCircle size={14} /> : status === "user" ? null : <Bot size={14} />}
     </div>
+  );
+}
+
+function BackgroundAgentRun({ run, currentDealId, onOpen }: {
+  run: AgentRunState | null;
+  currentDealId: string | null;
+  onOpen: (dealId: string) => void;
+}) {
+  if (run?.status !== "running") return null;
+  const current = run.dealId === currentDealId;
+  return (
+    <button
+      className={clsx("backgroundRunPill", current && "backgroundRunPill--current")}
+      type="button"
+      onClick={() => {
+        if (!current) onOpen(run.dealId);
+      }}
+      title={current ? "Agent is analyzing this deck" : `Open ${run.company}`}
+    >
+      <Loader2 className="spin" size={11} />
+      <span>{current ? "Analyzing this deck" : `Analyzing ${run.company}`}</span>
+    </button>
   );
 }
 

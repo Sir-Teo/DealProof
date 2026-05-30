@@ -97,6 +97,25 @@ const MOCK_DEAL_ANALYZED = {
   status: "completed"
 };
 
+const PAST_DEAL_ID = "past-deal-01";
+const MOCK_PAST_DEAL_ANALYZED = {
+  ...MOCK_DEAL_ANALYZED,
+  id: PAST_DEAL_ID,
+  company: "Past Deck Co",
+  tagline: "Completed diligence from a prior deck",
+  generatedAt: "2026-05-20T12:00:00Z",
+  memo: {
+    ...MOCK_DEAL_ANALYZED.memo,
+    company: "Past Deck Co",
+    executiveSummary: "Past Deck Co has already completed diligence."
+  },
+  profile: {
+    ...MOCK_DEAL_ANALYZED.profile,
+    sector: "Infrastructure"
+  },
+  chatHistory: []
+};
+
 function claim(id: string, text: string, status: string, category: string, importance: string) {
   return {
     id,
@@ -224,6 +243,67 @@ test("sidebar history shows grade badge for newly analyzed deal", async ({ page 
 
   const dealRow = page.locator(".dealListItem").filter({ hasText: "CaviClear AI" }).first();
   await expect(dealRow.locator(".gradeChip--sm")).toHaveText("YELLOW");
+});
+
+test("background agent keeps running while a past deck stays visible", async ({ page }) => {
+  let releaseAnalyze: () => void = () => {};
+  const analyzeGate = new Promise<void>((resolve) => {
+    releaseAnalyze = resolve;
+  });
+  let historyRequests = 0;
+
+  await page.route("**/deals", (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    historyRequests += 1;
+    return route.fulfill({
+      json: historyRequests === 1 ? [] : [
+        {
+          id: PAST_DEAL_ID,
+          company: MOCK_PAST_DEAL_ANALYZED.company,
+          stage: MOCK_PAST_DEAL_ANALYZED.stage,
+          status: MOCK_PAST_DEAL_ANALYZED.status,
+          generatedAt: MOCK_PAST_DEAL_ANALYZED.generatedAt,
+          grade: MOCK_PAST_DEAL_ANALYZED.score.grade,
+          materialCount: MOCK_PAST_DEAL_ANALYZED.materials.length
+        },
+        {
+          id: DEAL_ID,
+          company: MOCK_DEAL_SEEDED.company,
+          stage: MOCK_DEAL_SEEDED.stage,
+          status: "running",
+          generatedAt: null,
+          grade: null,
+          materialCount: MOCK_DEAL_SEEDED.materials.length
+        }
+      ]
+    });
+  });
+  await page.route("**/deals/demo", (route) => route.fulfill({ json: MOCK_DEAL_SEEDED }));
+  await page.route(`**/deals/${PAST_DEAL_ID}`, (route) => route.fulfill({ json: MOCK_PAST_DEAL_ANALYZED }));
+  await page.route(`**/deals/${DEAL_ID}`, (route) => route.fulfill({ json: MOCK_DEAL_ANALYZED }));
+  await page.route(`**/deals/${DEAL_ID}/analyze-stream`, async (route) => {
+    await analyzeGate;
+    return route.fulfill({
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+      body: `data: ${JSON.stringify({ event: "run_complete", step: "agent", label: "Analysis complete" })}\n\n`
+    });
+  });
+
+  await page.goto("/");
+  await runMockDemo(page);
+  await expect(page.getByText("Analyzing this deck")).toBeVisible();
+
+  await page.getByRole("button", { name: "Toggle deal list" }).click();
+  await page.locator(".dealListItem").filter({ hasText: "Past Deck Co" }).click();
+
+  await expect(page.locator(".agentOutput")).toBeVisible();
+  await expect(page.getByText("Past Deck Co has already completed diligence.")).toBeVisible();
+  await expect(page.getByText("Analyzing CaviClear AI")).toBeVisible();
+
+  releaseAnalyze();
+  await expect(page.getByText("Past Deck Co has already completed diligence.")).toBeVisible();
+  await expect(page.getByText("Analyzing CaviClear AI")).toHaveCount(0);
 });
 
 test("agent stream renders web-search research details", async ({ page }) => {

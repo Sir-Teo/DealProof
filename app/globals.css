@@ -1369,9 +1369,12 @@ summary:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 18px;
+  flex-wrap: wrap;
 }
 
-.hintLink {
+.hintLink,
+.backgroundRunPill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1383,7 +1386,24 @@ summary:focus-visible {
   padding: 0;
 }
 
-.hintLink:hover:not(:disabled) {
+.backgroundRunPill {
+  max-width: min(360px, 100%);
+  color: var(--blue);
+}
+
+.backgroundRunPill span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backgroundRunPill--current {
+  cursor: default;
+}
+
+.hintLink:hover:not(:disabled),
+.backgroundRunPill:hover {
   color: var(--ink);
 }
 
@@ -1747,6 +1767,11 @@ summary:focus-visible {
   padding: 1px 5px;
   border-radius: 4px;
   font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.dealListSpinner {
+  color: var(--blue);
   flex: 0 0 auto;
 }
 
