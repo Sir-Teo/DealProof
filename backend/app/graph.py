@@ -720,17 +720,26 @@ def generate_report(state: DiligenceState) -> DiligenceState:
             generated, raw_output = llm.complete_json_with_raw(system, user, ReportGeneration, on_chunk=stream_llm_chunk(state, "generate_report"))
             report = qa_diligence_report(generated.report, state)
             return {**state, "report": report, **with_llm_output(state, "generate_report", raw_output)}
-        except Exception:
-            pass
+        except Exception as exc:
+            fallback_note = (
+                f"Report generation failed ({exc.__class__.__name__}: {str(exc)[:500]}). "
+                "Continuing with the deterministic structured report."
+            )
+            emit = stream_llm_chunk(state, "generate_report")
+            if emit:
+                emit(f"\n\n[fallback]\n{fallback_note}")
+            return {**state, "report": report, **with_llm_output(state, "generate_report", fallback_note)}
     return {**state, "report": report}
 
 
 def generate_memo(state: DiligenceState) -> DiligenceState:
-    if state.get("report"):
-        memo = memo_from_report(state["report"], state)
-        return {**state, "memo": memo}
-
+    report = state.get("report")
+    fallback_memo = memo_from_report(report, state) if report else None
+    if fallback_memo and deterministic_analysis_enabled():
+        return {**state, "memo": fallback_memo}
     llm = get_llm_client(state)
+    if fallback_memo and not llm.enabled:
+        return {**state, "memo": fallback_memo}
     if not llm.enabled:
         raise RuntimeError("DEEPSEEK_API_KEY is not configured. Add it to backend/.env.")
     reviewable_claims = active_claims(state["claims"])
@@ -774,11 +783,13 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
         "The nextDiligenceRequests list must contain one specific follow-up request per high-priority unresolved claim "
         "listed below, referencing the actual claim text. Do not use generic placeholder requests."
     )
+    report_context = f"Structured report context:\n{report.model_dump_json()}\n\n" if report else ""
     user = (
         f"Company: {state['company']}\nProfile: {profile.model_dump_json()}\nOverall grade from scoring rules: {grade}\n"
         f"IC readiness: {ic_readiness_label} ({score_summary.overall}/100). "
         f"Key issues: {'; '.join(score_summary.drivers[:2])}\n"
         f"Quality review: {quality_context}\n\n"
+        f"{report_context}"
         "Use reviewer disposition as authoritative: ignored and needs_evidence claims must not be presented as strengths. "
         "Verified claims may be presented as trusted only if their evidence context supports that framing.\n\n"
         + (f"High-priority unresolved claims (use these verbatim in nextDiligenceRequests):\n{unresolved_block}\n\n" if unresolved_block else "")
@@ -788,7 +799,19 @@ def generate_memo(state: DiligenceState) -> DiligenceState:
         "\"executiveSummary\":\"...\",\"thesisAssessment\":\"...\",\"evidenceMap\":[...],\"keyRisks\":[...],"
         "\"nextDiligenceRequests\":[...],\"decisionDrivers\":[...]}}"
     )
-    generated, raw_output = llm.complete_json_with_raw(system, user, MemoGeneration, on_chunk=stream_llm_chunk(state, "generate_memo"))
+    try:
+        generated, raw_output = llm.complete_json_with_raw(system, user, MemoGeneration, on_chunk=stream_llm_chunk(state, "generate_memo"))
+    except Exception as exc:
+        if fallback_memo:
+            fallback_note = (
+                f"Memo generation failed ({exc.__class__.__name__}: {str(exc)[:500]}). "
+                "Continuing with the report-derived deterministic memo."
+            )
+            emit = stream_llm_chunk(state, "generate_memo")
+            if emit:
+                emit(f"\n\n[fallback]\n{fallback_note}")
+            return {**state, "memo": fallback_memo, **with_llm_output(state, "generate_memo", fallback_note)}
+        raise
     memo = generated.memo.model_copy(update={"overallGrade": grade})
 
     # Fix 4: append reconciliation note when grade is green/yellow but contradictions exist

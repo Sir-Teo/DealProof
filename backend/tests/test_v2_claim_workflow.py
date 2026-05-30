@@ -7,13 +7,15 @@ from app.main import app
 from app.graph import (
     deterministic_diligence_report,
     extract_claims,
+    generate_memo,
+    generate_report,
     memo_from_report,
     normalize_claims,
     profile_deal,
     rank_claims,
     source_quality_note,
 )
-from app.models import AppSettings, DealClaim, EvidenceItem, QualityReview, SourceMaterial
+from app.models import AppSettings, DealClaim, EvidenceItem, MemoGeneration, QualityReview, RiskMemo, SourceMaterial
 from app.scoring import apply_rule_based_status
 
 
@@ -230,6 +232,79 @@ def test_diligence_report_persists_and_keeps_weak_claims_out_of_verified_section
     assert loaded.report.keyVerifiedClaims[0].claimId == supported.id
     assert all(item.claimId != weak.id for item in loaded.report.keyVerifiedClaims)
     assert loaded.report.diligencePlan == [weak.resolutionRequest]
+
+
+def test_report_generation_fallback_records_llm_failure(monkeypatch):
+    class FailingReportLlm:
+        enabled = True
+
+        def complete_json_with_raw(self, *args, **kwargs):
+            raise ValueError("report response was not valid JSON")
+
+    monkeypatch.setattr("app.graph.get_llm_client", lambda _state: FailingReportLlm())
+    supported = base_claim(status="supported", qualityScore=92, statusReason="Supported by financial model.")
+    review = QualityReview(memoReadinessScore=80, readinessStatus="ic_ready", topGatingIssue="No unresolved IC blockers.")
+
+    result = generate_report({
+        "company": "DMs Revenue Flow",
+        "claims": [supported],
+        "evidence": [],
+        "quality_review": review,
+        "materials": [],
+    })
+
+    assert result["report"].company == "DMs Revenue Flow"
+    assert "Report generation failed" in result["llm_outputs"]["generate_report"]
+
+
+def test_memo_generation_uses_live_llm_when_report_exists(monkeypatch):
+    calls = []
+
+    class MemoLlm:
+        enabled = True
+
+        def complete_json_with_raw(self, system, user, schema, **kwargs):
+            calls.append(user)
+            return (
+                MemoGeneration(
+                    memo=RiskMemo(
+                        company="DMs Revenue Flow",
+                        overallGrade="red",
+                        investmentQuestion="Can the deal clear IC?",
+                        keyStrengths=["LLM strength"],
+                        materialRisks=["LLM risk"],
+                        followUpQuestions=["LLM follow-up"],
+                        icRecommendation="LLM recommendation.",
+                        executiveSummary="LLM memo summary.",
+                    )
+                ),
+                '{"memo":{"executiveSummary":"LLM memo summary."}}',
+            )
+
+    monkeypatch.setattr("app.graph.get_llm_client", lambda _state: MemoLlm())
+    supported = base_claim(status="supported", qualityScore=92, statusReason="Supported by financial model.")
+    review = QualityReview(memoReadinessScore=80, readinessStatus="ic_ready", topGatingIssue="No unresolved IC blockers.")
+    report = deterministic_diligence_report({
+        "company": "DMs Revenue Flow",
+        "claims": [supported],
+        "evidence": [],
+        "quality_review": review,
+        "materials": [],
+    })
+
+    result = generate_memo({
+        "company": "DMs Revenue Flow",
+        "claims": [supported],
+        "evidence": [],
+        "quality_review": review,
+        "report": report,
+    })
+
+    assert calls
+    assert "Structured report context" in calls[0]
+    assert result["memo"].executiveSummary == "LLM memo summary."
+    assert result["memo"].overallGrade == "green"
+    assert result["llm_outputs"]["generate_memo"]
 
 
 def test_demo_packet_can_run_with_deterministic_v2_fixture_without_live_llm(monkeypatch):
