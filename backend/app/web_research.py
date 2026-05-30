@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 
 from .models import DealClaim, DealProfile, EvidenceItem, MaterialChunk
 from .parsers import UrlFetchError, validate_fetch_url
-from .retrieval import evidence_stance_for_chunk, keywords, quote_span_for_claim, relevance_score
+from .retrieval import evidence_stance_for_chunk, keywords, normalized_numbers, quote_span_for_claim, relevance_score
 
 WEB_SEARCH_ENABLED = os.getenv("DEALPROOF_WEB_SEARCH_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
 WEB_SEARCH_TIMEOUT_SECONDS = float(os.getenv("DEALPROOF_WEB_SEARCH_TIMEOUT_SECONDS", "8"))
@@ -56,7 +56,7 @@ def collect_public_web_evidence(
         {"label": f"Researching {len(selected_claims)} priority claims in parallel", "claims": len(selected_claims)},
     )
     evidence: list[EvidenceItem] = []
-    seen_urls: set[str] = set()
+    seen_result_keys: set[tuple[str, str]] = set()
     seen_lock = Lock()
 
     def research_claim(claim: DealClaim) -> list[EvidenceItem]:
@@ -75,10 +75,11 @@ def collect_public_web_evidence(
                 normalized = normalize_url(result.url)
                 if not normalized:
                     continue
+                result_key = (claim.id, normalized)
                 with seen_lock:
-                    if normalized in seen_urls:
+                    if result_key in seen_result_keys:
                         continue
-                    seen_urls.add(normalized)
+                    seen_result_keys.add(result_key)
                 emit_web_progress(
                     on_progress,
                     "web_fetch",
@@ -337,16 +338,53 @@ def web_stance_for_claim(company: str, claim: DealClaim, chunk: MaterialChunk) -
     if claim.category == "competition" and denies_competition(claim.text):
         if names_competitor(company, chunk.text) or competitor_list_page(chunk.text):
             return "contradicts"
-    if local_stance == "supports" and company_or_metric_matches(company, claim, chunk.text):
+    if local_stance == "supports" and public_web_support_matches(company, claim, chunk.text):
         return "supports"
     return "partially_supports"
 
 
-def company_or_metric_matches(company: str, claim: DealClaim, text: str) -> bool:
-    lower = text.lower()
+def public_web_support_matches(company: str, claim: DealClaim, text: str) -> bool:
+    company_match = company_matches_text(company, text)
+    claim_numbers = normalized_numbers(claim.text)
+    text_numbers = normalized_numbers(text)
+    claim_terms = claim_context_terms(company, claim.text)
+    text_terms = keywords(text)
+    term_overlap = len(claim_terms & text_terms)
+
+    if claim_numbers:
+        if not claim_numbers.issubset(text_numbers):
+            return False
+        if company_match or claim.category == "market":
+            return True
+        required = min(5, max(2, len(claim_terms) // 2))
+        return term_overlap >= required
+
+    if not company_match and claim.category != "market":
+        return False
+
+    if not claim_terms:
+        return company_match
+    required = required_context_term_matches(len(claim_terms))
+    return term_overlap >= required
+
+
+def company_matches_text(company: str, text: str) -> bool:
     company_tokens = {token for token in re.findall(r"[a-zA-Z0-9]+", company.lower()) if len(token) > 2}
-    number_match = bool(re.findall(r"\d", claim.text)) and bool(set(re.findall(r"\d[\d,.]*%?", claim.text)) & set(re.findall(r"\d[\d,.]*%?", text)))
-    return bool(company_tokens & set(re.findall(r"[a-zA-Z0-9]+", lower))) or number_match
+    if not company_tokens:
+        return False
+    text_tokens = set(re.findall(r"[a-zA-Z0-9]+", text.lower()))
+    return bool(company_tokens & text_tokens)
+
+
+def claim_context_terms(company: str, text: str) -> set[str]:
+    company_tokens = {token for token in re.findall(r"[a-zA-Z0-9]+", company.lower()) if len(token) > 2}
+    return keywords(text) - company_tokens
+
+
+def required_context_term_matches(term_count: int) -> int:
+    if term_count <= 3:
+        return term_count
+    return min(7, max(4, (term_count + 1) // 2))
 
 
 def denies_competition(text: str) -> bool:
