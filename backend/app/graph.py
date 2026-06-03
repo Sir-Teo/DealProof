@@ -4,6 +4,7 @@ import re
 import uuid
 import os
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, Future
 from datetime import datetime, timezone
 from typing import Callable, TypedDict
 
@@ -96,8 +97,7 @@ GRAPH_STEPS: list[GraphStep] = [
     ("normalize_claims", "Normalize claims", "Splitting, de-duplicating, and decontextualizing claim text"),
     ("rank_claims", "Rank materiality", "Prioritizing claims by IC materiality and verification standard"),
     ("retrieve_evidence", "Retrieve evidence", "Searching supplied materials for support and contradictions"),
-    ("assess_evidence", "Assess evidence", "Reviewing retrieved evidence stances and source authority"),
-    ("search_public_web", "Search public web", "Gathering quote-backed third-party sources from the public internet"),
+    ("assess_evidence", "Assess evidence", "Reviewing evidence and gathering public web sources"),
     ("score_claims", "Score claim support", "Applying support and risk scoring rules"),
     ("review_quality", "Review output quality", "Checking confidence, citations, and memo readiness"),
     ("generate_report", "Draft IC report", "Writing the structured IC diligence report"),
@@ -118,7 +118,6 @@ def build_graph():
     graph.add_node("rank_claims", rank_claims)
     graph.add_node("retrieve_evidence", retrieve_evidence)
     graph.add_node("assess_evidence", assess_evidence)
-    graph.add_node("search_public_web", search_public_web)
     graph.add_node("score_claims", score_claim_statuses)
     graph.add_node("review_quality", review_quality)
     graph.add_node("generate_report", generate_report)
@@ -134,8 +133,7 @@ def build_graph():
     graph.add_edge("normalize_claims", "rank_claims")
     graph.add_edge("rank_claims", "retrieve_evidence")
     graph.add_edge("retrieve_evidence", "assess_evidence")
-    graph.add_edge("assess_evidence", "search_public_web")
-    graph.add_edge("search_public_web", "score_claims")
+    graph.add_edge("assess_evidence", "score_claims")
     graph.add_edge("score_claims", "review_quality")
     graph.add_edge("review_quality", "generate_report")
     graph.add_edge("generate_report", "generate_memo")
@@ -237,8 +235,7 @@ def tool_input_summary(state: DiligenceState, step_id: str) -> str:
         "normalize_claims": f"claims={len(state.get('claims', []))}",
         "rank_claims": f"claims={len(state.get('claims', []))}",
         "retrieve_evidence": f"claims={len(state.get('claims', []))}; chunks={len(state.get('chunks', []))}",
-        "assess_evidence": f"claims={len(state.get('claims', []))}; evidence={len(state.get('evidence', []))}",
-        "search_public_web": f"company={state['company']}; claims={len(state.get('claims', []))}; local_evidence={len(state.get('evidence', []))}",
+        "assess_evidence": f"claims={len(state.get('claims', []))}; evidence={len(state.get('evidence', []))}; web_search=parallel",
         "score_claims": f"claims={len(state.get('claims', []))}; evidence={len(state.get('evidence', []))}",
         "review_quality": f"claims={len(state.get('claims', []))}; evidence={len(state.get('evidence', []))}",
         "generate_report": f"company={state['company']}; claims={len(state.get('claims', []))}",
@@ -259,8 +256,7 @@ def tool_output_summary(state: DiligenceState, step_id: str) -> str:
         "normalize_claims": f"Normalized {len(state.get('claims', []))} target-company claims.",
         "rank_claims": f"Ranked {len(state.get('claims', []))} claims by materiality.",
         "retrieve_evidence": f"Retrieved {len(state.get('evidence', []))} evidence items.",
-        "assess_evidence": f"Assessed {len(state.get('evidence', []))} evidence items.",
-        "search_public_web": f"Attached {len([item for item in state.get('evidence', []) if item.sourceType == 'public_web'])} public web evidence items.",
+        "assess_evidence": f"Assessed {len(state.get('evidence', []))} evidence items ({len([i for i in state.get('evidence', []) if i.sourceType == 'public_web'])} from public web).",
         "score_claims": f"Scored {len(state.get('claims', []))} claims.",
         "review_quality": f"Memo readiness {state.get('quality_review').memoReadinessScore if state.get('quality_review') else 0}%.",
         "generate_report": "Generated structured IC report.",
@@ -424,10 +420,11 @@ def extract_claims(state: DiligenceState) -> DiligenceState:
         "Strip any such prefix before writing the claim text. "
         "Populate claimKind, extractedFact, sourceLocator, materialityReason, verificationStandard, reviewPriority, and isTargetCompanyClaim."
     )
-    raw_outputs: list[str] = []
-    claims: list[DealClaim] = []
-    for material in state["materials"]:
-        source_note = next((note for note in state.get("source_quality", []) if note.materialId == material.id), None)
+    per_material_limit = max_claims_per_material(state)
+    source_quality = state.get("source_quality", [])
+
+    def extract_for_material(material: SourceMaterial) -> tuple[list[DealClaim], str]:
+        source_note = next((note for note in source_quality if note.materialId == material.id), None)
         user = (
             f"Company: {state['company']}\nProfile: {profile.model_dump_json()}\n"
             f"Source inventory note: {source_note.model_dump_json() if source_note else '{}'}\n\n"
@@ -439,21 +436,34 @@ def extract_claims(state: DiligenceState) -> DiligenceState:
             f"Material:\n### {material.name}\nKind: {material.kind}\n{material.text[:6_000]}"
         )
         try:
-            extracted, raw_output = llm.complete_json_with_raw(system, user, ClaimExtraction, on_chunk=stream_llm_chunk(state, "extract_claims"))
-            raw_outputs.append(raw_output)
-            claims.extend(extracted.claims[:max_claims_per_material(state)])
+            # No on_chunk — avoid concurrent writes to the shared progress stream.
+            extracted, raw_output = llm.complete_json_with_raw(system, user, ClaimExtraction)
+            return extracted.claims[:per_material_limit], raw_output
         except Exception as exc:
             fallback_claims = deterministic_extract_claims({**state, "materials": [material]})
             fallback_note = (
                 f"Claim extraction failed for {material.name} ({exc.__class__.__name__}: {str(exc)[:500]}). "
                 f"Continuing with {len(fallback_claims)} deterministic claims from this material."
             )
-            emit = stream_llm_chunk(state, "extract_claims")
-            if emit:
-                emit(f"\n\n[fallback]\n{fallback_note}")
-            raw_outputs.append(fallback_note)
-            claims.extend(fallback_claims[:max_claims_per_material(state)])
-    state = {**state, **with_llm_output(state, "extract_claims", "\n\n".join(raw_outputs))}
+            return fallback_claims[:per_material_limit], fallback_note
+
+    materials = state["materials"]
+    with ThreadPoolExecutor(max_workers=min(len(materials), 4)) as pool:
+        # map preserves order — results align with materials
+        results = list(pool.map(extract_for_material, materials))
+
+    claims: list[DealClaim] = []
+    raw_outputs: list[str] = []
+    for mat_claims, raw_output in results:
+        claims.extend(mat_claims)
+        raw_outputs.append(raw_output)
+
+    combined_output = "\n\n".join(raw_outputs)
+    emit = stream_llm_chunk(state, "extract_claims")
+    if emit:
+        emit(combined_output)
+
+    state = {**state, **with_llm_output(state, "extract_claims", combined_output)}
     if not claims:
         raise ValueError("No diligence claims were extracted from the supplied materials.")
     return {**state, "claims": claims}
@@ -492,58 +502,89 @@ def retrieve_evidence(state: DiligenceState) -> DiligenceState:
 
 
 def assess_evidence(state: DiligenceState) -> DiligenceState:
+    """Assess local evidence stances (LLM) and gather public web evidence in parallel."""
+
+    # --- kick off web search in background immediately ---
+    def _run_web_search() -> list[EvidenceItem]:
+        settings = run_settings(state)
+        try:
+            return collect_public_web_evidence(
+                state["company"],
+                state.get("profile", DealProfile()),
+                state["claims"],
+                on_progress=web_progress_emitter(state),
+                enabled=settings.webResearchEnabled,
+                max_claims=settings.maxClaims,
+            )
+        except Exception:
+            emit = web_progress_emitter(state)
+            if emit:
+                emit("web_error", {"label": "Public web search failed; continuing with supplied materials"})
+            return []
+
+    web_executor = ThreadPoolExecutor(max_workers=1)
+    web_future: Future = web_executor.submit(_run_web_search)
+
+    # --- LLM evidence assessment runs in the foreground (streaming intact) ---
     llm = get_llm_client(state)
     evidence = [enrich_evidence_item(item) for item in state.get("evidence", [])]
-    if deterministic_analysis_enabled() or not llm.enabled:
-        return {**state, "evidence": evidence}
+    raw_output = ""
 
-    reviewable = [
-        item for item in evidence
-        if item.sourceType != "derived" and item.quoteSpan and item.stance in {"supports", "partially_supports", "contradicts"}
-    ][:36]
-    if not reviewable:
-        return {**state, "evidence": evidence}
-    claims_by_id = {claim.id: claim for claim in state["claims"]}
-    system = (
-        "You are reviewing evidence for investor diligence claims. Return JSON only. "
-        "For each evidence item, keep or correct stance, assign evidenceRole, quoteConfidence, and assessorRationale. "
-        "A support verdict requires entity, metric/date/value, and verification standard to match the claim. "
-        "Contradictions outrank support."
-    )
-    user = (
-        "Return shape: {\"reviews\":[{\"claimId\":\"claim-01\",\"evidenceId\":\"ev-...\","
-        "\"stance\":\"supports|partially_supports|contradicts|not_found\",\"evidenceRole\":\"primary_support|corroborating_support|contradiction|context|gap\","
-        "\"quoteConfidence\":\"high|medium|low\",\"assessorRationale\":\"...\"}]}\n\n"
-        + "\n".join(
-            f"Claim: {claims_by_id[item.claimId].model_dump_json()}\nEvidence: {item.model_dump_json()}"
-            for item in reviewable
-            if item.claimId in claims_by_id
-        )
-    )
-    try:
-        reviews, raw_output = llm.complete_json_with_raw(system, user, EvidenceReviews, on_chunk=stream_llm_chunk(state, "assess_evidence"))
-    except Exception:
-        return {**state, "evidence": evidence}
-    reviews_by_id = {review.evidenceId: review for review in reviews.reviews}
-    updated: list[EvidenceItem] = []
-    for item in evidence:
-        review = reviews_by_id.get(item.id)
-        if review:
-            updated.append(
-                item.model_copy(
-                    update={
-                        "stance": review.stance,
-                        "evidenceRole": review.evidenceRole,
-                        "quoteConfidence": review.quoteConfidence,
-                        "assessorRationale": review.assessorRationale,
-                    }
+    if not (deterministic_analysis_enabled() or not llm.enabled):
+        reviewable = [
+            item for item in evidence
+            if item.sourceType != "derived" and item.quoteSpan and item.stance in {"supports", "partially_supports", "contradicts"}
+        ][:36]
+        if reviewable:
+            claims_by_id = {claim.id: claim for claim in state["claims"]}
+            system = (
+                "You are reviewing evidence for investor diligence claims. Return JSON only. "
+                "For each evidence item, keep or correct stance, assign evidenceRole, quoteConfidence, and assessorRationale. "
+                "A support verdict requires entity, metric/date/value, and verification standard to match the claim. "
+                "Contradictions outrank support."
+            )
+            user = (
+                "Return shape: {\"reviews\":[{\"claimId\":\"claim-01\",\"evidenceId\":\"ev-...\","
+                "\"stance\":\"supports|partially_supports|contradicts|not_found\",\"evidenceRole\":\"primary_support|corroborating_support|contradiction|context|gap\","
+                "\"quoteConfidence\":\"high|medium|low\",\"assessorRationale\":\"...\"}]}\n\n"
+                + "\n".join(
+                    f"Claim: {claims_by_id[item.claimId].model_dump_json()}\nEvidence: {item.model_dump_json()}"
+                    for item in reviewable
+                    if item.claimId in claims_by_id
                 )
             )
-        else:
-            updated.append(item)
-    evidence_by_claim = {claim.id: [item for item in updated if item.claimId == claim.id] for claim in state["claims"]}
+            try:
+                reviews, raw_output = llm.complete_json_with_raw(system, user, EvidenceReviews, on_chunk=stream_llm_chunk(state, "assess_evidence"))
+                reviews_by_id = {review.evidenceId: review for review in reviews.reviews}
+                updated: list[EvidenceItem] = []
+                for item in evidence:
+                    review = reviews_by_id.get(item.id)
+                    if review:
+                        updated.append(item.model_copy(update={
+                            "stance": review.stance,
+                            "evidenceRole": review.evidenceRole,
+                            "quoteConfidence": review.quoteConfidence,
+                            "assessorRationale": review.assessorRationale,
+                        }))
+                    else:
+                        updated.append(item)
+                evidence = updated
+            except Exception:
+                pass  # keep enriched evidence as-is
+
+    # --- collect web results (background thread is done or nearly done by now) ---
+    web_evidence = web_future.result()
+    web_executor.shutdown(wait=False)
+
+    # --- merge local + web evidence, same logic as the old search_public_web step ---
+    all_evidence = replace_not_found_with_real_evidence([*evidence, *web_evidence])
+    evidence_by_claim = {claim.id: [item for item in all_evidence if item.claimId == claim.id] for claim in state["claims"]}
     claims = [apply_rule_based_status(claim, evidence_by_claim.get(claim.id, [])) for claim in state["claims"]]
-    return {**state, "claims": claims, "evidence": updated, **with_llm_output(state, "assess_evidence", raw_output)}
+
+    result: DiligenceState = {**state, "claims": claims, "evidence": all_evidence}
+    if raw_output:
+        result = {**result, **with_llm_output(state, "assess_evidence", raw_output)}
+    return result
 
 
 def enrich_evidence_item(item: EvidenceItem) -> EvidenceItem:

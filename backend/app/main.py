@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 from queue import Queue
 from threading import Thread
 
