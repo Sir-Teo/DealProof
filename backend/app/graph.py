@@ -637,7 +637,7 @@ def search_public_web(state: DiligenceState) -> DiligenceState:
     return {**state, "claims": updated_claims, "evidence": combined_evidence}
 
 
-def web_progress_emitter(state: DiligenceState):
+def web_progress_emitter(state: DiligenceState, step_id: str = "assess_evidence"):
     on_progress = state.get("on_progress")
     if not on_progress:
         return None
@@ -647,7 +647,7 @@ def web_progress_emitter(state: DiligenceState):
         raw = web_progress_raw_line(event, payload)
         on_progress(
             "tool_delta",
-            "search_public_web",
+            step_id,
             {
                 "label": label,
                 "toolName": "search_public_web",
