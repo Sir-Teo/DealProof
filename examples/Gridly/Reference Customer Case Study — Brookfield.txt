@@ -1,0 +1,91 @@
+GRIDLY CUSTOMER CASE STUDY
+Customer: Brookfield Property Partners
+Sites: 22 office and retail properties across California and New York
+Deployment period: Pilot (3 sites) March 2023; full rollout through Q3 2024
+Prepared: December 2024
+
+---
+
+CUSTOMER BACKGROUND
+
+Brookfield Property Partners manages approximately 130 million square feet of commercial real estate globally. The North America commercial portfolio (office + retail) is approximately 68 million square feet. Brookfield's U.S. portfolio faces significant electricity cost pressure in California and New York, two of the highest demand-charge states in the country.
+
+Prior to Gridly, Brookfield's energy management strategy was a combination of LED retrofits, HVAC scheduling optimization, and utility demand response enrollment through Enel X. Average electricity cost across the Gridly-enrolled portfolio: $1.47/sq ft/year. Average demand charges as a percentage of electricity bill: 48%.
+
+---
+
+PILOT RESULTS (3 SITES, Q2–Q3 2023)
+
+Site 1: 210,000 sq ft Class A office, Century City, CA
+- Pre-Gridly monthly demand charge: $31,400
+- Post-Gridly monthly demand charge: $0 (fully eliminated)
+- Gridly monthly service fee: $24,800
+- Net monthly savings: $6,600
+- Annualized savings: $79,200
+
+Site 2: 185,000 sq ft mixed-use retail, San Francisco, CA
+- Pre-Gridly monthly demand charge: $24,100
+- Post-Gridly monthly demand charge: $1,200 (partial reduction due to irregular HVAC load profile)
+- Gridly monthly service fee: $18,400
+- Net monthly savings: $4,500
+- Annualized savings: $54,000
+
+Site 3: 320,000 sq ft office tower, Midtown Manhattan, NY
+- Pre-Gridly monthly demand charge: $44,600
+- Post-Gridly monthly demand charge: $800
+- Gridly monthly service fee: $34,700
+- Net monthly savings: $9,100
+- Annualized savings: $109,200
+
+Pilot aggregate results:
+Total annualized savings to Brookfield: $242,400
+Average demand charge reduction: 94.3%
+Average electricity cost reduction (total bill): 31.8%
+Battery system uptime across 3 sites: 99.1%
+
+---
+
+EXPANSION DECISION
+
+Following the pilot, Brookfield's U.S. head of asset management and CFO jointly approved expansion to 19 additional sites. Decision criteria cited in internal approval memo (shared with permission):
+1. Positive cash flow from day one (no capex required)
+2. Pilot performance exceeded underwritten savings by 14%
+3. Demand response revenue (shared with Brookfield as contract kicker above guaranteed fee) added unexpected upside
+4. ESG reporting benefit: Gridly deployment reduces scope 2 emissions for buildings by enabling greater solar charging
+
+Expansion rollout timeline: Q4 2023 through Q3 2024. All 22 sites fully operational as of September 2024.
+
+---
+
+FULL PORTFOLIO RESULTS (22 SITES, Q4 2024 DATA)
+
+Total annualized service fees paid to Gridly: $3.86M
+Total demand charges eliminated: $5.71M (pre-Gridly run rate)
+Net annualized savings to Brookfield: $1.85M
+Average demand charge reduction across portfolio: 96.1%
+Total demand response revenue generated (Q3–Q4 2024, annualized): $387,000 (split 70/30 Gridly/Brookfield per contract)
+Brookfield's demand response share: $116,100/year
+
+Battery fleet performance:
+- Fleet uptime: 98.9%
+- Average battery state of health (deployed sites, various ages): 93.7%
+- Hardware incidents requiring on-site visit: 3 in 12 months (all resolved within 4 hours)
+
+ESG impact:
+- CO2 equivalent avoided (by enabling solar charging and reducing peak grid draw): 1,840 metric tons/year across portfolio
+- Incorporated into Brookfield's 2024 Sustainability Report under Scope 2 emission reductions
+
+---
+
+BROOKFIELD REPRESENTATIVE QUOTE
+
+"Gridly's model solved a problem we'd been looking at for years. We knew demand charge optimization was high-value, but every technology solution we'd evaluated required capital we didn't want to commit at the asset level. Gridly's battery-as-a-service structure let our CFO approve it immediately — positive cash flow from month one, no capex, and it shows up as an operating expense reduction. The pilot outperformed our model, and the expansion has continued to outperform. We're evaluating Gridly for our Canadian and UK portfolios now."
+— VP, Asset Management, Brookfield Property Partners North America
+
+---
+
+NOTES ON DATA VERIFICATION
+
+Electricity bill data verified against Brookfield's utility accounts (PG&E, ConEd, SCE) by Gridly operations team. Demand charge reduction figures represent metered data, not projections. Battery uptime figures from Gridly's fleet monitoring platform, cross-referenced against site commissioning reports. Brookfield has authorized this case study for use in NeuraForm's marketing and investor materials.
+
+Note: Reference to "NeuraForm" in the preceding paragraph is an error in the original document — this case study was prepared by Gridly and the customer authorized use in Gridly's investor materials.

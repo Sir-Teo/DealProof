@@ -1,0 +1,120 @@
+GRIDLY — BEHIND-THE-METER BATTERY STORAGE FOR COMMERCIAL REAL ESTATE
+Series B Pitch Deck · January 2025
+
+---
+
+Slide 2 — The Problem
+
+Commercial buildings are responsible for 36% of U.S. electricity consumption. Most of them pay peak-demand electricity rates that are 3–5x off-peak rates. A typical Class A office building in California, Texas, or New York spends $800,000–$2.4M per year on electricity, with 40–60% of that bill attributable to demand charges — fees utilities levy based on the 15-minute peak consumption window each month.
+
+Battery storage systems can eliminate demand charges by discharging during peak windows, turning a capital expense into a predictable operating cost reduction. The technology works. The problem is economic: behind-the-meter battery systems cost $1,200–$1,800/kWh installed, and commercial building owners have 5–10% NOI margins with no appetite for large upfront capital commitments.
+
+Gridly solves this with a battery-as-a-service model: we install, own, and operate the battery. The building pays a monthly fee below their current demand charge expense. Positive cash flow from day one for the building owner, no capex.
+
+---
+
+Slide 4 — The Model
+
+Gridly installs 200–800 kWh lithium iron phosphate (LFP) battery systems in commercial buildings (office, retail, light industrial, multifamily). Gridly owns the hardware. We charge a monthly service fee equal to 80% of the building's trailing 6-month average demand charge. The building saves 20% of demand charges immediately, and more as our dispatch algorithm optimizes over time.
+
+Revenue streams:
+1. Monthly service fees (primary, recurring): average $14,200/building/month ($170K/building/year)
+2. Demand response revenue: grid operators (PJM, CAISO, ERCOT) pay Gridly for using our fleet to balance grid load. Incremental revenue of $8,000–$22,000/building/year depending on market.
+3. Solar integration premium: buildings that add rooftop solar route through our battery, increasing solar utilization and adding $3,000–$6,000/year per site.
+
+Unit economics per site:
+- Hardware cost: $185,000 installed (250 kWh system, typical commercial installation)
+- Installation + commissioning: $28,000
+- Total CapEx per site: $213,000
+- Annual service fee revenue: $170,400 (average)
+- Annual demand response revenue: $14,000 (average)
+- O&M per site per year: $9,200
+- Site-level cash payback: 4.9 years
+- Site-level IRR: 18.2%
+
+Fleet-level economics:
+- 312 sites deployed as of December 2024
+- Fleet ARR: $53.2M (service fees + demand response)
+- Gross margin: 61% at fleet level
+
+---
+
+Slide 6 — Traction
+
+Sites deployed: 312 (as of December 2024)
+Fleet capacity: 89 MW / 178 MWh
+ARR: $53.2M
+YoY ARR growth: 94%
+Contracted pipeline (signed, not deployed): 87 sites, $14.8M ARR
+Weighted sales pipeline: $62M ARR (next 18 months)
+Average site uptime: 98.7%
+Average demand charge reduction delivered to customers: 34%
+Customer churn: Zero hardware removals in 3 years of operation
+NPS: 71
+
+Reference customers: Brookfield Property Partners (22 sites, expanded from pilot 8), Prologis (14 sites, logistics parks), CommonWealth REIT (41 sites, office portfolio).
+
+---
+
+Slide 8 — Market
+
+Total behind-the-meter commercial storage market, U.S.: $4.2B installed in 2024, growing to $18.7B by 2030 (Wood Mackenzie, November 2024).
+Addressable commercial buildings (>100,000 sq ft, high demand-charge utility territory): 680,000 buildings.
+NeuraForm's SAM at current pricing: $115B in annual demand charges across target segment.
+
+Key drivers:
+- IRA Section 48E investment tax credit (30%–50% ITC for standalone storage, effective 2025) meaningfully improves NeuraForm's asset returns and accelerates deployment economics
+- California, New York, Texas, Illinois have active demand response programs with increasing payment rates
+- ESG mandates from institutional building owners creating procurement pressure for energy solutions
+- Insurance premium increases for buildings without backup power creating second use case
+
+---
+
+Slide 10 — Competitive Landscape
+
+Stem (NASDAQ: STEM): Public company, $1.3B market cap. Software-only, partners with hardware vendors. Struggling with profitability; announced layoffs in Q3 2024. Their model requires customer capex — our model does not. We see them in about 15% of deals.
+
+Enchanted Rock: Microgrid-focused, natural gas backup generation. Different use case (backup power, not demand charge reduction). Not a direct competitor.
+
+Omnidian: Operations and maintenance for solar+storage. Services company, not a BaaS provider. Complementary, not competitive.
+
+In-house solutions (DIY): Large REITs sometimes procure their own batteries through Tesla Powerpack or BYD. Challenge: they then own O&M, dispatch software, and grid interconnection complexity. We see this in about 10% of large enterprise deals; win rate is low because the economics favor our model unless the REIT has dedicated energy staff.
+
+Tesla Energy: Powerpack deployed at commercial scale, but Tesla is not offering BaaS — they sell hardware. Gridly partners with Tesla hardware on some sites.
+
+We have no direct BaaS-model commercial storage competitor at scale in the U.S. The closest analog is Swell Energy (acquired by Osaka Gas in 2021) which focused on residential; the commercial market is less competitive.
+
+---
+
+Slide 12 — Team
+
+Marcus Webb, CEO — former Managing Director at Blackstone Real Estate; structured $2.1B in infrastructure finance deals. Built the BaaS model from scratch after watching portfolio building owners reject solar+storage due to capex constraints.
+
+Dr. Leila Ahmadi, CTO — PhD Electrical Engineering, MIT Energy Initiative; former grid operations lead at National Grid. Designed Gridly's dispatch algorithm.
+
+James Okafor, CFO — former CFO at Sunnova Energy (NYSE: NOVA); structured $600M in solar ABS before joining Gridly. Leading our asset-backed financing facility.
+
+Team: 89 employees. 24 engineers (software + hardware), 18 field operations, 14 sales, 12 finance, 21 G&A/other.
+
+Capital structure: $14M Seed (2021), $38M Series A (2023, led by Breakthrough Energy Ventures), $180M asset-backed credit facility (Deutsche Bank, 2024).
+
+---
+
+Slide 14 — Financials & The Ask
+
+ARR: $53.2M (December 2024)
+Revenue (2024, GAAP): $44.1M
+Gross margin (fleet): 61%
+Adjusted EBITDA (2024): -$8.3M (investing in deployment team and G&A for Series B readiness)
+Cash on hand: $22M equity cash + $180M credit facility ($94M drawn)
+Deployment pace: 18 sites/month current, targeting 35/month post-Series B
+
+Raising: $80M Series B equity
+Lead: TPG Rise Climate
+Use of proceeds:
+- 60% working capital for site deployment (bridges hardware procurement to credit facility draw)
+- 25% software and optimization (fleet intelligence platform, new market entry tools)
+- 15% geographic expansion (entering Mid-Atlantic and Southeast markets)
+
+Series B milestone: 750 sites, $120M ARR by Q4 2026.
+IRA tax credit monetization: We have engaged a tax equity partner (JP Morgan Tax Equity) to monetize the 48E ITC on our 2025 deployments, estimated $12–18M in additional liquidity.

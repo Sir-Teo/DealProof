@@ -1,0 +1,44 @@
+FLEETMIND — SERIES B INVESTOR DUE DILIGENCE CALL
+Participants: Daniel Osei (CEO), Yuki Tanaka (CTO), Carla Mendez (CRO)
+Investor: Lead partner at Series B fund
+Date: October 22, 2024
+
+---
+
+Investor: Daniel, the deck shows QoQ ARR growth declining for three consecutive quarters — 22.4%, 21.3%, 18.7%. That's the first thing I want to address directly.
+
+Daniel: I appreciate you going there first. Yes, the QoQ growth rate has decelerated. Our explanation is pipeline-driven, not demand-driven. We closed Q4 2023 with a strong push that pulled deals forward from Q1 2024, creating a base effect. Beyond that, our enterprise AE capacity is the real constraint. We have 6 enterprise AEs and each can close 5–7 deals per year at our current sales cycle. We are running out of sales capacity, not leads. Our inbound pipeline is the healthiest it's been — we have $28M in weighted pipeline right now versus $18M at the same point last year. The issue is throughput. We hired 2 AEs in Q3; onboarding takes 90 days to ramp. Series B is specifically designed to address this.
+
+Investor: Is there any possibility the deceleration reflects market saturation or pricing pressure rather than just sales capacity?
+
+Carla: I can give you the competitive pipeline data. Win rate this year: 54% overall, versus 51% last year. Average ACV on closed deals: $402K, versus $378K last year. Neither metric indicates market softening. Where we're seeing pressure is in deal velocity — large enterprise deals are taking 4–6 months longer to close than 18 months ago. IT budget cycles got longer post-2023 interest rate environment. We're not losing deals on price or product; we're waiting longer for procurement approvals.
+
+Investor: 8.8 months of runway at current burn. That's tight going into a Series B process.
+
+Daniel: It is tight and I want to be honest about it. We are operating with urgency. The General Catalyst term sheet was signed October 3rd. We have 90 days to close the round, which puts us at late December/early January. We have two other term sheets at lower valuations as fallback options. If the round took significantly longer than expected — say, 5+ months — we would need to reduce burn. We have $8M in expense we can cut without touching engineering or customer success. We don't intend to exercise that option, but it exists.
+
+Investor: Yuki, the 79% predictive maintenance accuracy for high-criticality components — what's the false positive rate?
+
+Yuki: The false positive rate is 23% — for every 10 alerts we generate, about 7–8 are true positive (actual failure within 14 days) and 2–3 are false positive (no failure occurs). We're transparent with customers about this. The economic argument still works: a false-positive maintenance visit costs $200–$400 in labor and parts for an unnecessary inspection. A missed brake failure costs $12,000–$45,000 in breakdown, tow, repair, and lost vehicle days. The expected value of acting on every alert — even with a 23% false positive rate — is strongly positive. Our customers understand this and they track it in their own dashboards.
+
+For context, 79% true positive accuracy is industry-leading. Traditional maintenance scheduling (mileage-based) has an effective "accuracy" of roughly 40–50% in the sense that half of scheduled maintenance either happens before a failure (wasted) or after (too late). We're materially better.
+
+Investor: Walk me through the Samsara competitive situation. They have 20x your ARR and they're in 45% of your deals. Why is your win rate only 38% against them?
+
+Carla: Samsara has four advantages: brand recognition in fleet (they defined the telematics-as-a-service category), installed hardware in many fleets (switching cost from their camera systems), a full sales team that can offer aggressive discounts, and integrations with more legacy systems than we have. We win when the evaluation criteria are route optimization quality and predictive maintenance. We lose when the customer is renewing or expanding an existing Samsara deployment — there's real switching cost there.
+
+Our 38% win rate against Samsara is actually our worst competitive matchup, and it's the one we care about most. We've hired two former Samsara enterprise AEs in the last 6 months, including one from their strategic accounts team. They know every Samsara renewal date in their former territories. We're going to go compete hard at contract renewal points.
+
+Investor: Daniel, Maersk is 7.8% of your ARR with 3,200 vehicles. If they churn?
+
+Daniel: If Maersk churned today, we'd lose approximately $2.4M in ARR — about 7.6%. It would be painful but not existential at our scale. More importantly, I don't believe Maersk is a churn risk. They've expanded from their initial pilot (800 vehicles in one division) to three divisions in 18 months. We have a dedicated customer success team of two people embedded in their operations. Their renewal is in April 2025. We're in early renewal conversations and they've verbally indicated they want to expand to 4,500 vehicles. That said, I want to be accurate: nothing is signed for the expansion yet.
+
+Investor: What does the EV fleet module actually do that's different?
+
+Yuki: Three things that don't exist in standard telematics. First, charge state-aware routing: we incorporate real-time battery state of charge into the route optimizer, so vehicles are assigned routes their battery can complete, factoring in degradation curves specific to that vehicle's battery age. Second, charge scheduling: we optimize charging schedules across the depot to minimize demand charges (similar to what Gridly does for buildings), coordinating with utility time-of-use rates. Third, EV-specific predictive maintenance: battery degradation modeling, thermal management anomaly detection, and motor/inverter health monitoring. Combustion engine models trained on ICE data don't transfer to EVs — we built the EV models from scratch on data from our 11 EV customer deployments.
+
+Investor: The target is $75M ARR by Q4 2025. That's 139% growth in about 14 months. What are the key assumptions?
+
+Daniel: The model assumes: hiring 8 enterprise AEs by end of Q1 2025 (critical path), each ramping to full productivity by Q3 2025. Average ACV growing from $402K to $440K as we push more enterprise tier deals. Churn staying at 3.2% or below. Three large enterprise deals currently in late-stage negotiation, totaling $7.8M ARR — those need to close by Q1. International expansion contributing $4M ARR by Q4. And NRR continuing at 127% — seat expansion within existing customers.
+
+The model is back-weighted — more than 60% of the target ARR growth is projected in H2 2025. That's a risk. If the AE ramp takes longer or the three late-stage deals slip to Q2, we'll miss the annual target and hit it in Q1 2026 instead.

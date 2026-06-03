@@ -1,0 +1,85 @@
+NEURAFORM — MARKET AND COMPETITIVE LANDSCAPE
+Internal Analysis · January 2025
+
+---
+
+MARKET SIZING
+
+Clinical Documentation Market:
+U.S. physicians spend an estimated 4.5 hours/day on documentation (AMA Physician Survey, 2024). At 850,000 active U.S. physicians and a blended physician cost of $120/hour, documentation consumes approximately $186B of physician time annually. This is not the serviceable market — NeuraForm addresses the portion solvable by software.
+
+Software market for clinical documentation: $4.1B (Klas Research estimate, 2024).
+Medical coding software market: $2.8B (MarketsandMarkets, 2024).
+Prior authorization management software: $1.4B (Grand View Research, 2024).
+Combined TAM for NeuraForm's product scope: $8.3B U.S., $14.2B global.
+
+SAM (health systems with 200+ beds, Epic or Cerner EHR): $11B.
+NeuraForm target segment (Years 1–3): Academic medical centers and regional systems with 200–1,500 beds, initial specialty focus on internal medicine, oncology, orthopedics. Estimated segment size: $2.4B.
+
+Regulatory catalyst: CMS Final Rule on Prior Authorization (published January 2024, effective January 2026) requires all Medicare Advantage plans and commercial insurers to implement electronic PA workflows meeting HL7 FHIR standards. This is an estimated $340M compliance-driven spend event in 2025–2026 across health system IT budgets.
+
+---
+
+COMPETITIVE LANDSCAPE
+
+NUANCE DAX (MICROSOFT)
+Strengths: Largest installed base in ambient documentation. Deep Microsoft integration (Teams, Azure). Brand recognition.
+Weaknesses: Voice-only, no coding integration, no PA automation. Product roadmap has been slow since Microsoft acquisition. Pricing at $15–20K/physician/year with no demonstrated ROI on denial rate or PA turnaround.
+Market position: Defending legacy voice dictation base. Not adding new health system logos at meaningful rate.
+NeuraForm win rate against Nuance: 4 for 4 in direct competitive situations.
+
+ABRIDGE
+Strengths: Best-in-class physician UX. Strong clinical NLP. $150M Series C raised February 2025 (lead investor: Spark Capital). 14 health system customers as of January 2025, including UPMC and Stanford Health Care.
+Weaknesses: No PA automation module. No integrated coding engine. Physician-buyer orientation means limited CFO engagement.
+Market position: Fast-growing, well-funded, focused on physician experience. Will likely expand into coding and PA, but no timeline announced.
+NeuraForm win rate against Abridge: 3 for 6. We lose when physician satisfaction is the primary evaluation criterion (3 losses). We win when CFO or revenue cycle is the buyer (3 wins).
+
+EPIC (AI COMPANION)
+Strengths: Installed at 68% of large U.S. health systems. Zero additional integration friction.
+Weaknesses: AI Companion is in beta with limited rollout. Does not include PA automation. Clinical NLP quality reported as "adequate" but not best-in-class by independent evaluators (Klas, November 2024). Epic's incentive structure limits aggressive PA automation development.
+Market position: Major long-term threat due to distribution. Near-term, not winning competitive deals against specialist vendors.
+NeuraForm assessment: Epic will likely acquire or deeply partner with a documentation AI vendor in 2025–2026. We are building toward being acqui-hire or partnership target while simultaneously competing.
+
+SUKI
+Strengths: Low price point ($300/month). Easy to deploy.
+Weaknesses: Not enterprise-grade. No FHIR integration with Epic at health system scale. SOC 2 Type II pending as of last check.
+Market position: Small practice and individual physician market. Not competing in NeuraForm's ICP.
+
+NABLA
+Strengths: Strong European market position. Good product reviews.
+Weaknesses: No meaningful U.S. presence. HIPAA compliance uncertain. No Epic integration certified.
+Market position: Not a current competitive threat in U.S. enterprise market.
+
+---
+
+KEY RISKS AND MITIGANTS
+
+Risk: Epic acquires a competitor and bundles ambient documentation into base Epic license.
+Assessment: High likelihood in 18–36 months. Mitigation: Build defensibility in PA automation (least likely Epic feature to acquire due to payer relationship complexity) and clinical outcomes data (our denial reduction and PA turnaround data creates switching cost).
+
+Risk: FDA reclassifies ambient documentation tools as Class II medical devices.
+Assessment: Moderate likelihood (30–40%) based on FDA discussion paper. Mitigation: NeuraForm already has 510(k) process experience; competitors without FDA engagement would face larger burden. Estimated 12–18 month delay for new market entrants to achieve clearance.
+
+Risk: Payer consolidation reduces form fragmentation, reducing PA automation moat.
+Assessment: Low likelihood in the near term; CMS mandate actually increases payer complexity requirements. Payer consolidation has been slow and politically contested.
+
+Risk: Abridge expands into coding and PA, eroding NeuraForm's differentiation.
+Assessment: Likely within 18 months, but 18-month product development lead is meaningful given NeuraForm's payer form library depth.
+
+---
+
+WIN/LOSS ANALYSIS (LAST 12 MONTHS)
+
+Total competitive evaluations: 14
+Wins: 9 (64% win rate)
+Losses: 5
+
+Loss reasons:
+- Physician satisfaction evaluation (Abridge beat us): 3
+- Pricing (customer chose Nuance at discount): 1
+- Integration timeline concerns (implementation backlog): 1
+
+Win reasons:
+- PA automation differentiation: 6 of 9 wins cited PA automation as primary factor
+- Coding denial reduction data: 5 of 9 wins cited coding ROI
+- CFO/revenue cycle buyer: 8 of 9 wins had CFO as economic buyer or co-buyer

@@ -1,0 +1,116 @@
+NEURAFORM — AI-NATIVE DOCUMENT INTELLIGENCE FOR HEALTHCARE
+Series A Pitch Deck · March 2025
+
+---
+
+Slide 2 — The Problem
+
+Healthcare documentation is a $8.3B annual burden on the U.S. system. Physicians spend an average of 4.5 hours per day on paperwork — nearly as much time as they spend with patients. Clinical notes, prior authorizations, referral letters, discharge summaries, and insurance appeals are drafted manually, checked manually, and submitted manually. This is not a technology problem that has gone unaddressed — it is a workflow problem that existing tools have failed to solve.
+
+EHR systems (Epic, Cerner, Oracle Health) have text-generation features but they produce generic, legally exposed drafts that physicians routinely rewrite. Medical scribes cost $30,000–$60,000 per physician per year and introduce transcription error. Voice dictation has been available for 20 years and has not eliminated documentation burden because the downstream structuring, coding, and submission steps remain manual.
+
+NeuraForm automates the full documentation lifecycle — not just the dictation layer.
+
+---
+
+Slide 4 — The Product
+
+NeuraForm is a clinical documentation platform that integrates directly with Epic and Cerner via certified FHIR APIs. It records the patient encounter (ambient listening mode), generates a structured clinical note, auto-populates the ICD-10 and CPT codes, pre-fills prior authorization forms, and routes for physician sign-off in a single workflow.
+
+Core capabilities:
+1. Ambient Clinical Documentation — real-time AI note generation during encounters, trained on 12M de-identified clinical notes
+2. Prior Authorization Automation — 94% of payer forms completed without physician input; decision in <4 hours vs. industry average 3.1 days
+3. Coding Accuracy Engine — 97.3% first-pass coding accuracy vs. 83% industry average, reducing claim denials
+4. Referral Intelligence — auto-generates referral letters with relevant history, flags missing workup items before routing
+
+NeuraForm is FDA-registered as a Class II medical device (510(k) clearance pending for diagnostic suggestion module). All processing is HIPAA-compliant. Data is stored in SOC 2 Type II certified infrastructure.
+
+---
+
+Slide 6 — Traction
+
+Signed contracts: 6 health systems (3 academic medical centers, 3 regional hospitals)
+Live users: 214 physicians across 4 specialties (internal medicine, oncology, orthopedics, pediatrics)
+ARR: $3.8M as of Q1 2025; $5.1M ARR contracted, not yet live
+Net Revenue Retention: 138% on cohorts live > 6 months
+Prior auth approval rate improvement: 31 percentage points above customer baseline (documented in Riverside Health case study)
+Physician satisfaction score: 4.6/5.0 average across deployed sites
+Claim denial rate reduction: 22% average across active customers
+
+Riverside Health System, our flagship customer, reduced documentation time per encounter by 61% across 47 physicians within 90 days of deployment. They expanded from one department to five in month 4.
+
+---
+
+Slide 8 — Market
+
+Total addressable market: $42B (clinical documentation, medical coding, prior authorization, U.S.)
+Serviceable addressable market: $11B (mid-to-large health systems, >200 beds, Epic/Cerner EHR)
+NeuraForm target segment Year 1–3: $2.4B (AMCs and regional systems, 200–1,500 beds)
+
+Market dynamics driving urgency:
+- CMS prior authorization rule (effective January 2026) mandates electronic PA for all Medicare Advantage plans — creates immediate compliance demand
+- Physician burnout crisis driving health system investment in automation; 63% of health system CFOs list clinical documentation as top technology investment for 2025 (HFMA survey)
+- EHR vendors are not moving fast enough; Epic AI Companion launched in beta but lacks PA automation and coding integration
+
+---
+
+Slide 10 — Business Model
+
+Enterprise SaaS, annual contracts.
+Pricing tiers:
+- Per-physician seat: $14,000–$18,000 per year depending on specialty and module mix
+- Enterprise licensing floor: $400K per health system (covers up to 40 seats)
+- Coding module add-on: $3,500 per physician per year
+- PA automation add-on: $4,500 per physician per year
+
+Gross margin: 71% on software; blended 68% including onboarding services (which are declining as a proportion as we productize implementation)
+Average contract value: $634,000
+Average sales cycle: 6.2 months (health system procurement is slow; we are tracking to close faster with new GPO partnerships)
+Payback period: 14 months
+
+---
+
+Slide 12 — Competitive Landscape
+
+Nuance DAX / Microsoft: Voice dictation only. No PA automation, no coding integration. $15–20K/physician/year. Incumbent at many sites but losing share to ambient competitors. Epic partnership announced but product not integrated as of our analysis.
+
+Abridge: Strong product, $150M Series C raised February 2025. Pure ambient documentation, no PA or coding. We see them in 20% of our competitive deals. They win on physician experience; we win on breadth of automation and ROI to the CFO.
+
+Suki: Consumer-priced ($300/month) and positioning at small practices. Not a competitor in enterprise health systems.
+
+Nabla: EU-based, limited U.S. presence, no FHIR integration with Epic.
+
+Our differentiation: We are the only vendor with live prior authorization automation integrated into the clinical workflow. That is the highest-value pain point for CFOs and the feature that converts deals fastest.
+
+---
+
+Slide 14 — Team
+
+Priya Nair, CEO — former VP Product at Epic (8 years); led EHR integration for Epic's first AI features. Left to build NeuraForm with the belief that the right solution requires independence from EHR vendor incentives.
+
+Dr. Arjun Mehta, Chief Medical Officer — practicing internist at UCSF (0.2 FTE); former medical director at Verily Life Sciences. Brings clinical credibility and health system network.
+
+Sofia Ribeiro, CTO — former Staff Engineer at Google Health; led FHIR data pipeline serving 40M patients. Built NeuraForm's ambient model from the ground up.
+
+Team: 38 employees. 17 engineers, 6 clinical implementation specialists, 5 sales/CS, 4 medical advisors (unpaid), 6 G&A.
+
+Advisors: Former CIO of Mayo Clinic; former FDA Deputy Director (medical devices).
+
+---
+
+Slide 16 — Financials & The Ask
+
+Q1 2025 ARR: $3.8M
+Q4 2024 ARR: $2.1M (81% QoQ growth)
+Burn rate: $1.2M/month
+Cash on hand: $4.3M (3.6 months runway)
+
+Raising: $22M Series A
+Lead: Andreessen Horowitz (a16z Bio), term sheet signed
+Use of proceeds:
+- 50% product & engineering (PA automation expansion, Epic App Orchard certification)
+- 25% sales & marketing (3 enterprise AEs, GPO partnership activation)
+- 15% clinical implementation (scale onboarding from 6.2 months to <4 months)
+- 10% G&A and compliance
+
+Target milestone at Series A close: $12M ARR by Q4 2025, 450 deployed physicians.

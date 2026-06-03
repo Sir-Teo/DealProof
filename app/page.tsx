@@ -100,6 +100,52 @@ const AGENT_EVENT_LIMIT = 500;
 const AGENT_DELTA_LIMIT = 80;
 const AGENT_RAW_OUTPUT_LIMIT = 12000;
 
+const ACCEPTED_EXTENSIONS = [".pdf", ".txt", ".csv", ".docx", ".xlsx", ".xls", ".pptx", ".ppt"];
+
+function isAcceptedFile(name: string): boolean {
+  return ACCEPTED_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
+}
+
+function toFileList(items: File[]): FileList {
+  const dt = new DataTransfer();
+  items.forEach((file) => dt.items.add(file));
+  return dt.files;
+}
+
+async function collectEntry(entry: FileSystemEntry): Promise<File[]> {
+  if (entry.isFile) {
+    const file = await new Promise<File>((resolve, reject) =>
+      (entry as FileSystemFileEntry).file(resolve, reject)
+    );
+    return [file];
+  }
+  if (entry.isDirectory) {
+    const reader = (entry as FileSystemDirectoryEntry).createReader();
+    const readBatch = () =>
+      new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
+    const files: File[] = [];
+    let batch = await readBatch();
+    while (batch.length) {
+      for (const child of batch) files.push(...(await collectEntry(child)));
+      batch = await readBatch();
+    }
+    return files;
+  }
+  return [];
+}
+
+// Supports dropping either loose files or whole folders (traversed recursively).
+async function collectDroppedFiles(dataTransfer: DataTransfer): Promise<File[]> {
+  const entries = Array.from(dataTransfer.items)
+    .map((item) => item.webkitGetAsEntry?.())
+    .filter((entry): entry is FileSystemEntry => Boolean(entry));
+  if (entries.length) {
+    const nested = await Promise.all(entries.map(collectEntry));
+    return nested.flat().filter((file) => isAcceptedFile(file.name));
+  }
+  return Array.from(dataTransfer.files).filter((file) => isAcceptedFile(file.name));
+}
+
 const statusIcon: Record<ClaimStatus, typeof CheckCircle2> = {
   supported: CheckCircle2,
   weak: AlertTriangle,
@@ -650,10 +696,6 @@ export default function Home() {
                     {busy === "demo" ? <Loader2 className="spin" size={13} /> : <ShieldCheck size={13} />}
                     {UI_COPY.seedDemo2Button}
                   </button>
-                  <button className="secondaryButton" type="button" onClick={() => setAttachOpen(true)}>
-                    <Upload size={13} />
-                    {UI_COPY.uploadButton}
-                  </button>
                 </div>
               </div>
             </article>
@@ -725,13 +767,22 @@ export default function Home() {
             {attachOpen && (
               <div className="attachDrawer">
                 <div className="attachRow">
-                  <label className="secondaryButton fileButton">
+                  <label
+                    className="secondaryButton fileButton"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      void collectDroppedFiles(event.dataTransfer).then((dropped) => {
+                        if (dropped.length) setFiles(toFileList(dropped));
+                      });
+                    }}
+                  >
                     <Upload size={13} />
                     {files?.length ? `${files.length} file${files.length > 1 ? "s" : ""} selected` : UI_COPY.uploadButton}
                     <input
                       type="file"
                       multiple
-                      accept=".pdf,.txt,.csv,.docx,.xlsx,.xls,.pptx,.ppt"
+                      accept={ACCEPTED_EXTENSIONS.join(",")}
                       onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(event.target.files)}
                     />
                   </label>

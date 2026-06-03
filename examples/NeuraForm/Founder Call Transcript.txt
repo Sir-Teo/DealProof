@@ -1,0 +1,46 @@
+NEURAFORM — INVESTOR DUE DILIGENCE CALL
+Participants: Priya Nair (CEO), Dr. Arjun Mehta (CMO), Sofia Ribeiro (CTO)
+Investor: Partner at healthcare-focused growth fund
+Date: February 18, 2025
+
+---
+
+Investor: Priya, let's start with the 510(k). Where does that stand and what happens to the business if it's delayed?
+
+Priya: We filed the 510(k) for our diagnostic suggestion module in November 2024. FDA target review time for Class II devices in this category is 90–180 days, so we're looking at Q2 or Q3 2025 for clearance. To be direct about the risk: our current live product — ambient documentation, coding, and PA automation — does not require 510(k) clearance. Those are administrative tools, not diagnostic. The diagnostic suggestion module, which flags potential missed diagnoses during note review, is the feature that triggered the device classification. If clearance is delayed, we push the diagnostic feature; we do not pause the core business. That feature represents maybe 10% of current customer value and 0% of current ACV.
+
+Investor: Walk me through the Riverside Health case study in more detail. How confident are you in those numbers?
+
+Priya: Very confident — Riverside is willing to be a public reference and the data was pulled from their EHR reporting, not from us. 47 physicians, Q3 2024 deployment. Pre-deployment average documentation time per encounter: 22 minutes. Post-deployment at 90 days: 8.7 minutes. That's a 60.5% reduction — we're rounding to 61% in the deck. Physician satisfaction went from 3.1/5.0 on their internal survey to 4.7/5.0 post-deployment. They expanded from internal medicine to oncology, orthopedics, pediatrics, and emergency in months 4 and 5.
+
+Investor: And the 22% claim denial rate reduction — is that Riverside-specific or an average?
+
+Priya: That's an average across our four health systems that have been live long enough to have denial rate data. The range is 14% to 31%. Riverside is at the high end at 28%. The variability comes from their starting baseline — systems with historically poor coding accuracy benefit more from our engine than systems that already had good coding staff.
+
+Investor: NRR of 138% — how much of that is seat expansion versus price increases?
+
+Priya: All expansion, no price increases. We don't do price increases on existing contracts; that would be a health system relationship killer. NRR is driven entirely by seat expansion and module add-ons. The typical pattern: land in one department, prove ROI, CFO gets involved in month 3–4, expand to full hospital. We've seen that pattern in four of our six customers.
+
+Investor: What's your competitive position against Abridge after their $150M round?
+
+Priya: Abridge is a strong competitor and that round tells you the market is real. Their strength is physician UX — their ambient documentation is genuinely excellent. Where we differentiate is on PA automation and coding. CFOs are buying on denial rate reduction and PA turnaround time, not on physician NPS. We've won three competitive deals against Abridge in the last six months. In each case, we won because the economic buyer (CFO or COO) prioritized the administrative ROI over the physician experience score. Abridge's product is a physician productivity tool; ours is a revenue cycle tool that physicians also love. Different buyer, different budget.
+
+Investor: Sofia, what is the technical moat? Couldn't Abridge or Epic just add PA automation?
+
+Sofia: The core moat is payer form mapping at scale. We have live integrations with 847 unique payer form templates across 34 major insurers. Building that took 18 months and 6 clinical implementation engineers whose job was literally to map every field on every form for every payer in our customer footprint. Epic could build this — they have the resources — but they haven't because their business model doesn't benefit from reducing payer friction. Epic earns revenue from health systems, not from claim outcomes. There's no incentive for them to build aggressive PA automation that might antagonize payers who are also important ecosystem partners for them. The same logic applies to Abridge — they're building physician tools, not payer-ops tools.
+
+Investor: What's your FDA regulatory risk exposure more broadly? If FDA reclassifies ambient documentation tools?
+
+Priya: That's a real question. FDA issued a discussion paper in 2024 on AI/ML in clinical workflows and has signaled possible reclassification of some documentation AI from general wellness to medical devices. If ambient documentation were reclassified, every competitor would face the same burden simultaneously. We believe our 510(k) process experience and medical officer involvement actually positions us well relative to competitors who have zero FDA engagement. But I won't pretend there's no regulatory risk — this is genuinely uncertain terrain.
+
+Investor: Burn is $1.2M a month with $4.3M in the bank. That's 3.6 months of runway. Why are you so tight?
+
+Priya: We accelerated hiring in Q4 2024 in anticipation of the a16z term sheet, which took longer to close than expected. We burned $2.1M in Q4 against a plan of $1.4M. That was a judgment call — we hired the clinical implementation team we needed to execute our Q1 deployments rather than wait for the cash. We have $1.9M in Q1 receivables that are 45 days overdue from two health systems. Health systems pay slowly — average payment cycle is 60–90 days. We are not at risk of missing payroll, but the timing is tight and I want to be transparent about it.
+
+Investor: Any customer concentration risk?
+
+Priya: Yes, and it's material. Riverside is 34% of current ARR. If Riverside churned — which I believe is extremely unlikely given our case study data and their expansion — it would be a serious problem at this stage. Our Series A proceeds are specifically allocated to reducing that concentration. By end of 2025 we expect Riverside to be less than 15% of ARR as new customers come online.
+
+Investor: What's the path to profitability?
+
+Priya: At $18M ARR we're contribution-margin positive on the core product. We expect to reach that level in mid-2026 assuming this round closes. Operating breakeven at ~$35M ARR with the cost structure we're building. We're not optimizing for near-term profitability — we're in a window where the CMS mandate and physician burnout crisis create a 24-month land-grab opportunity that we will regret not pursuing aggressively.

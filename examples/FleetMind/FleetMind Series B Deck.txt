@@ -1,0 +1,133 @@
+FLEETMIND — AUTONOMOUS FLEET INTELLIGENCE FOR LAST-MILE LOGISTICS
+Series B Pitch Deck · November 2024
+
+---
+
+Slide 2 — The Problem
+
+Last-mile delivery is the most expensive segment of the logistics chain, representing 41–53% of total delivery cost (McKinsey, 2023). A 100-vehicle delivery fleet operating in a metro market generates approximately $2.3M in annual operating cost from three controllable sources: fuel/energy (28%), labor (54%), and vehicle downtime (18%). Route optimization, driver performance management, and predictive maintenance have existed as software categories for 15 years, but adoption remains fragmented and the tools don't talk to each other.
+
+The result: the average commercial fleet operates at 67% route efficiency (actual miles driven vs. optimal route), experiences 2.3 vehicle breakdowns per 100 vehicles per month, and pays $14,000–$22,000 per driver per year in avoidable overtime.
+
+Why has this been hard to solve? Three reasons:
+1. Data silos: telematics vendors, ERP systems, HR platforms, and maintenance systems don't integrate.
+2. Driver resistance: previous "surveillance" tools created labor relations problems that caused operators to disable features.
+3. Complexity: optimizing across routes, driver schedules, vehicle health, and customer time windows simultaneously requires compute and algorithms that were not viable at a reasonable price until 2021–2022.
+
+FleetMind solves all three.
+
+---
+
+Slide 4 — The Product
+
+FleetMind is an AI-native fleet operations platform that integrates all data streams (telematics via OBD-II, ERP via API, HR/scheduling via API, maintenance records) and provides real-time optimization across four domains:
+
+1. Dynamic Route Optimization: AI-driven routing that updates in real-time based on traffic, weather, customer availability windows, and vehicle capacity. Reduces average miles driven per stop by 18% vs. static routing.
+
+2. Driver Performance & Coaching: Continuous monitoring of driving behavior (speed, braking, acceleration, idle time) with in-cab coaching alerts. Critically, FleetMind's coaching is privacy-by-design: event data is not shared with dispatchers unless the driver consents or safety thresholds are exceeded. This design decision has been critical to union acceptance.
+
+3. Predictive Maintenance: ML models trained on 3.2M vehicle-months of telematics data predict component failure 8–14 days in advance with 79% accuracy for high-criticality components (brakes, transmission, cooling system). Average unplanned downtime reduction: 61%.
+
+4. Fleet Intelligence Dashboard: Operational visibility across the fleet with anomaly detection, automated reporting, and integration with insurance carrier data for premium optimization.
+
+FleetMind is hardware-agnostic (supports any OBD-II device) and integrates with SAP, Oracle TMS, McLeod, and 14 other fleet management systems via standard APIs.
+
+---
+
+Slide 6 — Traction
+
+Vehicles under management: 41,200 as of October 2024
+Customers: 78 fleet operators (minimum 50 vehicles; average fleet size 528 vehicles)
+ARR: $31.4M
+YoY ARR growth: 71%
+Net Revenue Retention: 127%
+Gross margin: 74%
+Average contract value: $402,000
+Customer churn rate: 3.2% (by ARR)
+Average fuel/energy savings delivered: 14.2% (tracked by customer)
+Average overtime reduction: 19.4%
+Unplanned maintenance downtime reduction: 61% (10+ months live)
+Driver adoption rate (active use of in-cab coaching): 78% of enrolled drivers
+
+Notable customers: Maersk Spot Logistics North America (3,200 vehicles), Sysco Food Distribution (1,800 vehicles), Republic Services (waste collection, 2,400 vehicles), US Foods (1,100 vehicles).
+
+---
+
+Slide 8 — Market
+
+Fleet telematics and optimization software TAM: $8.1B globally, $3.4B U.S. (Frost & Sullivan, 2024)
+FleetMind addressable segment (fleets 50+ vehicles, North America): $1.9B
+AI-enabled fleet intelligence segment (less penetrated): $420M currently, projected $2.4B by 2028
+
+Fleet electrification tailwind: EV commercial fleet adoption is accelerating (IRA EV tax credits, state ZEV mandates). EV fleets have fundamentally different optimization requirements — charge state management, range anxiety, charging scheduling. FleetMind has built EV-specific modules and has 11 customers with mixed EV/ICE fleets.
+
+---
+
+Slide 10 — Business Model
+
+SaaS, per-vehicle per-month pricing:
+- Base platform: $42/vehicle/month (route optimization, basic dashboard)
+- Professional (adds predictive maintenance + driver coaching): $68/vehicle/month
+- Enterprise (adds insurance integration, EV modules, API access): $89/vehicle/month
+- Average revenue per vehicle per month across fleet: $63.40
+
+Annual contracts, 2-year minimum on enterprise. Hardware-agnostic (customer sources OBD-II device or we supply at $85/device, no margin).
+
+Unit economics:
+- CAC (blended enterprise/professional): $148,000
+- LTV (at 74% gross margin, 3.2% churn): $1.94M
+- LTV/CAC: 13.1x
+- Payback period: 16 months
+
+---
+
+Slide 12 — Competitive Landscape
+
+Samsara (NASDAQ: IOT): Market leader in fleet telematics, $2.4B ARR. Hardware-driven model (Samsara camera systems). Not as strong on AI optimization or predictive maintenance. Losing enterprise deals where AI fleet intelligence is the priority. We see Samsara in 45% of competitive deals; win rate 38% against them.
+
+Motive (formerly KeepTruckin): $1B+ ARR, trucking-focused. Strong on ELD compliance (regulatory). Weaker on optimization and predictive analytics. Win rate: 61% against Motive.
+
+Geotab: Strong in Europe and Canada. Less competitive in U.S. enterprise market. Win rate: 70% against Geotab.
+
+Platform Science: Telematics OS for trucking, strong integration marketplace. Partner, not direct competitor in most cases.
+
+Lytx: Video-based driver safety. Strong in insurance use cases. Not competing on optimization. Complementary.
+
+---
+
+Slide 14 — Team
+
+Daniel Osei, CEO — former VP Operations at FedEx Ground; ran a 12,000-vehicle district. Intimately understands the buyer and the operational problem. Left FedEx to build the tool he wished he'd had.
+
+Yuki Tanaka, CTO — former ML Engineering Lead at Uber Freight; built demand prediction and driver dispatch optimization systems. Architected FleetMind's prediction engine.
+
+Carla Mendez, Chief Revenue Officer — former VP Sales at Samsara (grew from $200M to $1B ARR). Brings competitive intel and enterprise sales playbook from the market leader.
+
+Team: 124 employees. 42 engineering, 28 sales and CS, 18 operations, 14 data science, 22 G&A.
+
+---
+
+Slide 16 — Financials & The Ask
+
+ARR: $31.4M (October 2024)
+Revenue (2024 projected): $27.8M
+Gross margin: 74%
+Burn rate: $2.1M/month
+Cash on hand: $18.4M
+Runway: 8.8 months at current burn
+
+Q3 2024 ARR growth vs. Q2 2024: 18.7%
+Q2 2024 ARR growth vs. Q1 2024: 21.3%
+Q1 2024 ARR growth vs. Q4 2023: 22.4%
+
+Note: QoQ growth rate has been declining for three consecutive quarters. We attribute this to sales team capacity constraints — we've been unable to hire enterprise AEs fast enough. Series B proceeds will fund immediate hiring.
+
+Raising: $55M Series B
+Lead: General Catalyst (term sheet signed October 2024)
+Use of proceeds:
+- 45% sales and marketing (8 enterprise AEs, 4 CSMs, demand gen)
+- 30% product (EV fleet module expansion, API marketplace)
+- 15% international expansion (UK and Canada)
+- 10% G&A
+
+Target: $75M ARR by Q4 2025, 90,000 vehicles under management.

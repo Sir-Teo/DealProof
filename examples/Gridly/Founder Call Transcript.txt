@@ -1,0 +1,44 @@
+GRIDLY — SERIES B INVESTOR DUE DILIGENCE CALL
+Participants: Marcus Webb (CEO), Dr. Leila Ahmadi (CTO), James Okafor (CFO)
+Investor: Growth equity partner
+Date: January 9, 2025
+
+---
+
+Investor: Marcus, you have a $180M credit facility from Deutsche Bank — explain the structure and how it interacts with the equity raise.
+
+Marcus: The credit facility is asset-backed against deployed battery systems. Each site that passes commissioning gets drawn against at approximately $165,000 per site — that's roughly 77% of the installed cost. The facility has a 10-year amortization on each draw. Interest rate is SOFR + 290 basis points, currently about 7.5% all-in. We use the equity capital to bridge the gap between hardware procurement and when we can draw on the facility after commissioning, which takes about 45–60 days per site. The facility currently has $94M drawn against 312 sites. The Series B equity is not replacing the credit facility — it's funding the deployment acceleration that generates the assets we can then lever.
+
+Investor: What happens to the unit economics if interest rates stay elevated?
+
+James: We underwrote the facility at 7% when we closed it in March 2024. We're at 7.5% today. A 100 basis point increase compresses site-level IRR from 18.2% to approximately 16.4%. Still well above our hurdle. The IRA investment tax credit effectively covers two years of interest cost on the facility, so the rate sensitivity is meaningfully buffered by the ITC benefit. We're also in conversations with Deutsche Bank about a fixed-rate tranche for a portion of the facility.
+
+Investor: Leila, the dispatch algorithm is the secret sauce — how defensible is it?
+
+Leila: The algorithm has three layers. The first is demand charge prediction — we model 15-minute demand windows using building-specific load profiles, weather data, occupancy calendars, and utility tariff structures. After 12 months on a site, our prediction error is under 3%, which is critical for setting discharge timing correctly. The second layer is grid signal response — we integrate CAISO, PJM, and ERCOT real-time price and demand response signals to identify when to participate in demand response events. The third layer is battery state-of-health management — we optimize charge cycles to extend battery life beyond the manufacturer's warranty cycle. Our fleet average state-of-health at 24 months is 94.2%, versus the manufacturer's warranted 80% at the same point.
+
+That 94.2% figure is important. It means we're getting more economic life out of the assets than our financial model assumes, and our replacement capex assumptions are conservative. The algorithm took 18 months to build and requires continuous retraining on fleet data. A new entrant couldn't replicate it without our training dataset.
+
+Investor: You mentioned zero hardware removals in three years. Define that — has any customer churned?
+
+Marcus: Three clarifications. First, zero hardware removals means no site where we've deployed a battery has asked us to remove it. Second, we did have two customers who sold their properties — both buyers inherited the Gridly contract because it's tied to the building, not the building owner. That's an intentional contract structure. Third, we had one site where we paused billing for four months due to a utility metering dispute. That dispute is resolved; billing resumed. If you're asking whether any customer has told us they want us to leave, the answer is no.
+
+Investor: The 34% demand charge reduction you're citing — is that after accounting for the service fee you charge?
+
+Marcus: That 34% is the reduction in total electricity cost including the service fee. Let me break it down concretely. Average customer pre-Gridly: $180,000/year in demand charges. Post-Gridly: they pay us $144,000/year in service fees and their utility demand charges are effectively zero or near-zero. Net savings: $36,000/year, which is 20% immediately. As the algorithm optimizes over time, we often deliver additional savings by also shaving some consumption charges. The 34% figure is our average after 12+ months of optimization — it combines the immediate demand charge elimination with the consumption savings that accrue over time.
+
+Investor: Talk about the IRA sensitivity. If the ITC is reduced or repealed politically?
+
+Marcus: We've modeled three scenarios. No ITC: our site-level IRR drops from 18.2% to 14.1% — still viable, we deployed sites before the IRA existed at acceptable returns. ITC at 30% (baseline IRA with no bonus): IRR is 16.8%. ITC at 40–50% (with domestic content or energy community bonuses): 18.2%+. Our business model was not invented because of the IRA. The BaaS model works on pure demand charge economics. The IRA improves our returns and accelerates deployment but we are not IRA-dependent for viability.
+
+Investor: What's the actual credit quality of your customer base? REITs, retail, multifamily — give me a sense of default risk.
+
+James: Our top three customers by site count are Brookfield (22 sites, S&P BBB+ rated), Prologis (14 sites, S&P BBB+ rated), and CommonWealth REIT (41 sites, investment grade). Together they're 25% of our deployed sites and 31% of ARR. The next tier is regional REITs and property management companies — most are investment-grade or near. We have 14 sites with smaller, non-rated commercial landlords. Average occupancy on our portfolio of buildings: 88%, which is above market for office. Battery removal from a building is a material event because it requires reconnecting utility metering — there's real switching friction that protects against payment default.
+
+Investor: 61% gross margin — how does that compare to what you underwrite at deployment?
+
+James: We underwrote sites at 58% gross margin in our original model. We've outperformed because demand response revenue has exceeded projections in California by about 40% — CAISO payment rates have increased as more intermittent renewables create more grid volatility. And our O&M costs have come in below plan because the batteries are lasting longer and failing less than we assumed. The 61% is the trailing 12-month fleet average. Newer sites are being deployed at higher expected margins because we've optimized installation costs — down from $213K per site a year ago to $197K per site today through our preferred hardware procurement and installation subcontractor network.
+
+Investor: What's your take on Tesla getting into the BaaS model?
+
+Marcus: I think about this a lot. Tesla Energy sells hardware, and their margin is in hardware. If they moved to BaaS, they'd be competing with their own hardware customers — the commercial building owners who buy Powerpack direct. I don't think that's a business model shift they'd make quickly. More likely risk is a private equity firm acquiring a hardware company and building a BaaS model around it. That would take 18–24 months to get to meaningful scale. We need to use this window to get to 750+ sites and create a data moat that a new entrant can't easily replicate.
